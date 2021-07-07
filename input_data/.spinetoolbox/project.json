@@ -1,0 +1,86 @@
+{
+    "project": {
+        "version": 6,
+        "name": "input_data",
+        "description": "",
+        "specifications": {
+            "Importer": [
+                {
+                    "type": "path",
+                    "relative": true,
+                    "path": ".spinetoolbox/specifications/Importer/data_importer.json"
+                }
+            ]
+        },
+        "connections": [
+            {
+                "from": [
+                    "data_connection",
+                    "right"
+                ],
+                "to": [
+                    "data_importer 1",
+                    "left"
+                ]
+            },
+            {
+                "from": [
+                    "data_importer 1",
+                    "right"
+                ],
+                "to": [
+                    "input_data",
+                    "left"
+                ]
+            }
+        ]
+    },
+    "items": {
+        "data_connection": {
+            "type": "Data Connection",
+            "description": "",
+            "x": -390.3655454923604,
+            "y": -116.27909865729885,
+            "references": [
+                {
+                    "type": "path",
+                    "relative": true,
+                    "path": "input_data.xlsx"
+                }
+            ]
+        },
+        "data_importer 1": {
+            "type": "Importer",
+            "description": "",
+            "x": -166.71121600005543,
+            "y": -115.08830111052478,
+            "specification": "data_importer",
+            "cancel_on_error": true,
+            "file_selection": [
+                [
+                    "input_data.xlsx",
+                    true
+                ]
+            ]
+        },
+        "input_data": {
+            "type": "Data Store",
+            "description": "",
+            "x": 55.74222255443868,
+            "y": -115.55804913733097,
+            "url": {
+                "dialect": "sqlite",
+                "username": "",
+                "password": "",
+                "host": "",
+                "port": "",
+                "database": {
+                    "type": "path",
+                    "relative": true,
+                    "path": "input_data.sqlite"
+                }
+            },
+            "cancel_on_error": false
+        }
+    }
+}
