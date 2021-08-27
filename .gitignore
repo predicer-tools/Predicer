@@ -1,13 +1,7 @@
 .idea/
+.vscode/
 log/
 logs/
 *.log
-Reference/
-Temp/
-output/
-items/
-*.sqlite
-*.gdx
-project.json
 *.pyc
 *.bak
