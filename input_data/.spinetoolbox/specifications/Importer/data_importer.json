@@ -44,7 +44,8 @@
                             },
                             {
                                 "map_type": "IndexName",
-                                "position": "hidden"
+                                "position": "hidden",
+                                "value": "index_stamp"
                             },
                             {
                                 "map_type": "ParameterValueIndex",
@@ -96,7 +97,8 @@
                             },
                             {
                                 "map_type": "IndexName",
-                                "position": "hidden"
+                                "position": "hidden",
+                                "value": "index_stamp"
                             },
                             {
                                 "map_type": "ParameterValueIndex",
