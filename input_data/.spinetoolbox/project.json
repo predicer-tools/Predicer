@@ -39,8 +39,8 @@
         "data_connection": {
             "type": "Data Connection",
             "description": "",
-            "x": -390.3655454923604,
-            "y": -116.27909865729885,
+            "x": -219.80388402339952,
+            "y": 1.404601226612968,
             "references": [
                 {
                     "type": "path",
@@ -52,8 +52,8 @@
         "data_importer 1": {
             "type": "Importer",
             "description": "",
-            "x": -166.71121600005543,
-            "y": -115.08830111052478,
+            "x": 3.8504454689054626,
+            "y": 2.595398773387032,
             "specification": "data_importer",
             "cancel_on_error": true,
             "file_selection": [
@@ -66,8 +66,8 @@
         "input_data": {
             "type": "Data Store",
             "description": "",
-            "x": 55.74222255443868,
-            "y": -115.55804913733097,
+            "x": 227.31263017598974,
+            "y": 2.1256507465808454,
             "url": {
                 "dialect": "sqlite",
                 "username": "",
