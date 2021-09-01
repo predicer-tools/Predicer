@@ -27,7 +27,7 @@
                             {
                                 "map_type": "ParameterDefinition",
                                 "position": "hidden",
-                                "value": "price"
+                                "value": "flow"
                             },
                             {
                                 "map_type": "Alternative",
@@ -40,12 +40,11 @@
                             {
                                 "map_type": "ParameterValueType",
                                 "position": "hidden",
-                                "value": "map"
+                                "value": "time_series"
                             },
                             {
                                 "map_type": "IndexName",
-                                "position": "hidden",
-                                "value": "index_stamp"
+                                "position": "hidden"
                             },
                             {
                                 "map_type": "ParameterValueIndex",
@@ -93,12 +92,11 @@
                             {
                                 "map_type": "ParameterValueType",
                                 "position": "hidden",
-                                "value": "map"
+                                "value": "time_series"
                             },
                             {
                                 "map_type": "IndexName",
-                                "position": "hidden",
-                                "value": "index_stamp"
+                                "position": "hidden"
                             },
                             {
                                 "map_type": "ParameterValueIndex",
@@ -593,31 +591,32 @@
             "flow": {
                 "0": "string",
                 "1": "string",
-                "2": "float",
-                "3": "float",
-                "4": "float",
-                "5": "float",
-                "6": "float",
-                "7": "float",
-                "8": "float",
-                "9": "float",
-                "10": "float",
-                "11": "float",
-                "12": "float",
-                "13": "float",
-                "14": "float"
+                "2": "string",
+                "3": "string",
+                "4": "string",
+                "5": "string",
+                "6": "string",
+                "7": "string",
+                "8": "string",
+                "9": "string",
+                "10": "string",
+                "11": "string",
+                "12": "string",
+                "13": "string",
+                "14": "string"
             },
             "prices": {
                 "0": "string",
-                "1": "float",
-                "2": "float",
-                "3": "float",
-                "4": "float",
-                "5": "float",
-                "6": "float",
-                "7": "float",
-                "8": "float",
-                "9": "float"
+                "1": "string",
+                "2": "string",
+                "3": "string",
+                "4": "string",
+                "5": "string",
+                "6": "string",
+                "7": "string",
+                "8": "string",
+                "9": "string",
+                "10": "string"
             },
             "node_def": {
                 "0": "string",
@@ -640,7 +639,7 @@
         },
         "table_row_types": {
             "prices": {
-                "0": "string"
+                "0": "datetime"
             },
             "transfer": {
                 "0": "string"
@@ -649,7 +648,7 @@
                 "0": "string"
             },
             "flow": {
-                "0": "string"
+                "0": "datetime"
             },
             "unit_def": {
                 "0": "string"
