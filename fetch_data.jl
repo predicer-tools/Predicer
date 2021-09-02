@@ -1,78 +1,86 @@
 using SpineInterface
+using JuMP
+using Cbc
+using Plots
 
 path = "sqlite:///$(@__DIR__)/input_data/input_data.sqlite"
 
 using_spinedb(path)
 # now we have a direct handle access entities of the sqlite db from the path
 
-# the following callable subfield terms are from: ? node
-node.name
-node.objects
-node.parameter_values
+# set up a JuMP model
+model = JuMP.Model()
+set_optimizer(model, Cbc.Optimizer)
+set_optimizer_attributes(model, "LogLevel" => 1, "PrimalTolerance" => 1e-7)
 
-# some useful tips
-first(node.parameter_values)
 
-# objects
-Code_Country()
-Code_Country()[1]
-Code_Country()[1:3]
-countries = Code_Country()[1:3]
-Code_Country(:DE)
-Code_Country(Symbol("DE"))
-setdiff(Code_Country(), Code_Country(:DE))
+dates = map(x -> x[1], collect(price(commodity=commodity(:elec))))
+n_dates = length(dates)
 
-# relationships
-# ? Construction_Massive
-# object_class_names to distinguish between names from same objective type, e.g. unit__node__node
-Construction_Massive()
+# Unit states, integer
+@variable(model, unit_states[dates, node(), unit()], Bin, container=DenseAxisArray)
 
-Construction_U()
-Construction_U() == Construction_U.relationships
-Construction_U.object_class_names
-first(Construction_U.relationships)
-first(Construction_U.relationships).Code_Construction
+# units power/production
+@variable(model, unit_powers[dates, node(), unit()], container=DenseAxisArray)
 
-# objective class as a filter
-cc = first(Code_Construction())
-Construction_U(Code_Construction = cc)
+# Set unit powers to either 0, or between min and max
+for n in node()
+    for date in dates, uname in unit()
+        if uname in unit_output_node(node=n)
+            @constraint(model, unit_powers[date, n, uname] .<= unit_states[date, n, uname] .* capacity(unit=uname) .* max_load(unit=uname))
+            @constraint(model, unit_powers[date, n, uname] .>= unit_states[date, n, uname] .* capacity(unit=uname) .* min_load(unit=uname))
+        else
+            @constraint(model, unit_powers[date, n, uname] .== 0)
+        end
+    end
+end
 
-cc = Code_Construction()[1:10]
-Construction_U(Code_Construction = cc)
-first(Construction_U(Code_Construction = cc))
-first(Construction_U(Code_Construction = cc; _compact = false))
+# Dummy power in case demand cannot be met by production units
+@variable(model, dummy_power[dates, node()])
+for date in dates, n in node()
+    @constraint(model, dummy_power[date, n] >= 0)
+end
 
-Construction_U.parameter_values
-Construction_U.parameter_defaults
-# a pair
-first(Construction_U.parameter_values)
-# the key
-first(Construction_U.parameter_values)[1]
-# the values
-first(Construction_U.parameter_values)[2]
+# General constraints
+# Production should meet demand for nodes with balance..
+for n in node()
+    flow_val = flow(node=n)
+    balance_val = balance(node=n)
+    if typeof(flow_val) != Nothing && balance_val != 0
+        flow_val = map(x -> x[2], collect(flow_val))
+        for d in 1:n_dates
+            @constraint(model, sum(unit_powers[dates[d], n, :]) + dummy_power[dates[d], n] .== -1 .* flow_val[d])
+        end
+    end
+end
 
-Construction_U.parameter_defaults
-# we can see U as a parameter value
+# Resource limitations
+for n in node()
+   for d in 1:n_dates, uname in unit()
+       resource_type = source(unit=uname)
+       if typeof(resource_type) != Nothing
+           resource_eff = eff(unit=uname) # May need to implement?
+           local resource_flow = flow(node=node(resource_type))
+           resource_flow = map(x -> x[2], collect(resource_flow))
+           @constraint(model, unit_powers[dates[d], n, uname] .<= resource_flow[d].* resource_eff)
+       end
+   end
+end
 
-# access parameter_values
-U.classes
-# fields need provide from the above
-Construction_U.object_class_names
-# basically, U(Code_Construction = object, Code_Country = , ...)
-# objects are the input parameters, see above for how to obtain objectives
+#VOM_cost = VOM_cost .* unit states?
+@expression(model, vom_costs[d in 1:n_dates, n in node(), uname in unit()], unit_states[dates[d], n, uname] .* VOM_cost(unit=uname))
 
-# array of objects
-[Code_Country(name) for name in [:CY, :DE, :GB]]
+# fuel_cost = power ./ eff .* fuel price
+@expression(model, fuel_costs[d in 1:n_dates, n in node(), uname in unit()], unit_powers[dates[d], n, uname] ./ eff(unit = uname) .* map(x -> x[2], collect(price(commodity=commodity_node(node=n)[1])))[d])
 
-con_u = first(Construction_U.relationships)
-U(;con_u...)
+# Dummy power cost
+@expression(model, dummy_cost[d in 1:n_dates, n in node()], dummy_power[dates[d], n] .* 1000000)
 
-# use filter function, refer to: ? filter
-filter(x -> x.name in [:CY, :DE, :GB], Code_Country())
-filter(x -> !in(x.name, [:CY, :DE, :GB]), Code_Country())
+# sell profit
+@expression(model, sell_profit[d in 1:n_dates, n in node(), uname in unit()], unit_powers[dates[d], n, uname] .* map(x -> x[2], collect(price(commodity=commodity_node(node=unit_output_node(unit=uname))[1])))[d])
 
-# write data into a spinedb
-# generic, import_data, see ?import_data
-# about data structure, see types.jl
-oc = ObjectClass(:a, [])
+#Objective function
+@objective(model, Min, sum(vom_costs) + sum(fuel_costs) + sum(dummy_cost) - sum(sell_profit))
 
+# optimize the model
+optimize!(model)
