@@ -59,7 +59,7 @@ for n in node()
    for d in 1:n_dates, uname in unit()
        resource_type = source(unit=uname)
        if typeof(resource_type) != Nothing
-           resource_eff = eff(unit=uname) # May need to implement?
+           resource_eff = eff(unit=uname)
            local resource_flow = flow(node=node(resource_type))
            resource_flow = map(x -> x[2], collect(resource_flow))
            @constraint(model, unit_powers[dates[d], n, uname] .<= resource_flow[d].* resource_eff)
