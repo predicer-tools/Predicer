@@ -1,0 +1,12 @@
+# Temporary and log files
+*.log
+*.bak?
+*.sqlite-journal
+
+# Item output files
+items/*/output
+
+# Other files created by execution
+.export-manifest.json
+filter_config.json
+
