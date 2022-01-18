@@ -7,7 +7,7 @@ function main()
     sheetnames_timeseries = ["cf", "inflow", "market_prices", "price","eff_ts"]
     # Assuming this file is under \predicer\model
     #wd = split(string(@__DIR__), "src")[1]
-    input_data_path = "..\\input_data\\input_data_V3.xlsx"
+    input_data_path = ".\\input_data\\input_data_V3.xlsx"
     
 
     system_data = Dict()
