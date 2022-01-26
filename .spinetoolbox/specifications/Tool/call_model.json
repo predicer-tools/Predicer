@@ -1,0 +1,16 @@
+{
+    "name": "call_model",
+    "tooltype": "julia",
+    "includes": [
+        "activate_environment.jl"
+    ],
+    "description": "",
+    "inputfiles": [],
+    "inputfiles_opt": [],
+    "outputfiles": [],
+    "cmdline_args": [
+        "C:\\\\Users\\\\dsdennis\\\\HOPE\\\\Predicer\\\\model\\\\src\\\\model_using_spineDS.jl"
+    ],
+    "execute_in_work": false,
+    "includes_main_path": "../../../model"
+}

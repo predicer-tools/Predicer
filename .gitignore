@@ -5,3 +5,4 @@ logs/
 *.log
 *.pyc
 *.bak
+Manifest.toml
