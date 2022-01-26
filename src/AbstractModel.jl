@@ -40,7 +40,7 @@ function run_model()
     op_effs = imported_data[6]
 
 
-    println("Importing data...")
+    println("Importing more data...")
     
     # Add all constraints, (expressions? and variables?) into a large dictionary for easier access, and being able to use the anonymous notation
     # while still being conveniently accessible. 
@@ -455,9 +455,122 @@ function run_model()
     @constraint(model, res_eq_up[(i, tup) in enumerate(res_eq_tuple)], e_res_bal_up[i] == 0)
     @constraint(model, res_eq_dn[(i, tup) in enumerate(res_eq_tuple)], e_res_bal_dn[i] == 0)
 
+    # Final reserve product:
+    res_final_tuple = []
+    for m in keys(markets)
+        if markets[m].type == "reserve"
+            for s in scenarios
+                for t in temporals
+                    push!(res_final_tuple, (m, s, t))
+                end
+            end
+        end
+    end
+
+    @variable(model, v_res_final[tup in res_final_tuple] >= 0)
+    
+    model_contents["c"]["reserve_final_eq"] = Dict()
+    #reserve_market_profits = []
+    for tup in res_final_tuple
+        r_tup = filter(x -> x[1] == tup[1] && x[4] == tup[2] && x[5] == tup[3], res_tuple)
+        model_contents["c"]["reserve_final_eq"][tup] = @constraint(model, sum(v_res[r_tup]) .* (tup[1] == "fcr_n" ? 0.5 : 1.0) .== v_res_final[tup])
+        #price = filter(x->x[1] == tup[3],filter(x->x.scenario == tup[2], markets[tup[1]].price)[1].series)[1][2]
+        #push!(reserve_market_profits, @expression(model, v_res_final[tup] .* price * scen_p[tup[2]]))
+    end
 
     # Cost calculations:
     # --------------------------------------------------------------------------------
+    cost_tup = Dict()
+    cost_vec = Dict()
+    market_tup = Dict()
+    market_vec = Dict()
+
+    commodity_costs = Dict()
+    market_costs = Dict()
+
+    for s in scenarios
+        cost_tup[s] = []
+        cost_vec[s] = []
+        market_tup[s] = []
+        market_vec[s] = []
+        for n in keys(nodes)
+            #Commodity costs:
+            if nodes[n].is_commodity
+                push!(cost_tup[s], filter(x -> x[2] == n && x[4] == s, process_tuple)...)
+                push!(cost_vec[s], map(x -> x[2], filter(x->x.scenario == s,nodes[n].cost)[1].series)...)
+            end
+            # Spot-Market costs and profits
+            if nodes[n].is_market
+                push!(market_tup[s], filter(x -> x[2] == n && x[4] == s, process_tuple)...)
+                push!(market_tup[s], filter(x -> x[3] == n && x[4] == s, process_tuple)...)
+                price = map(x -> x[2], filter(x->x.scenario == s,markets[n].price)[1].series)
+                push!(market_vec[s], price...)
+                push!(market_vec[s], -price...)
+            end
+        end
+        if !isempty(cost_tup[s])
+            commodity_costs[s] = @expression(model,cost_vec[s].*v_flow[cost_tup[s]])
+        end
+        if !isempty(market_tup[s])
+            market_costs[s] = @expression(model,market_vec[s].*v_flow[market_tup[s]])
+        end
+    end
+
+    # VOM costs:
+    vom_tup = Dict()
+    vom_vec = Dict()
+    vom_costs = Dict()
+    for s in scenarios
+        vom_tup[s] = []
+        vom_vec[s] = []
+    end
+
+    for tup in unique(map(x->(x[1],x[2],x[3]),process_tuple))
+        vom = filter(x->x.source == tup[2] && x.sink == tup[3], processes[tup[1]].topos)[1].VOM_cost
+        if !(vom == 0)
+            for s in scenarios
+                push!(vom_tup[s],filter(x->x[1:3] == tup && x[4] == s, process_tuple)...)
+                push!(vom_vec[s],vom*ones(length(temporals))...)
+            end
+        end
+    end
+
+    for s in scenarios
+        if !isempty(vom_tup[s])
+            vom_costs[s] = @expression(model,vom_vec[s].*v_flow[vom_tup[s]])
+        end 
+    end
+
+    # Start costs:
+    start_costs = Dict()
+    for s in scenarios
+        start_tuple = filter(x->x[2]==s,proc_online_tuple)
+        start_costs[s] = []
+        if !isempty(start_tuple)
+            for tup in start_tuple
+                push!(start_costs[s],@expression(model,processes[tup[1]].start_cost*v_start[tup]))
+            end
+        end
+    end
+    
+    # Reserve profits:
+    reserve_costs = Dict()
+    for s in scenarios
+        reserve_costs[s] = []
+    end
+
+    for tup in res_final_tuple
+        price = filter(x->x[1] == tup[3],filter(x->x.scenario == tup[2], markets[tup[1]].price)[1].series)[1][2]
+        push!(reserve_costs[tup[2]],-price*v_res_final[tup])
+    end
+    
+    total_costs = Dict()
+    for s in scenarios
+        total_costs[s] = sum(commodity_costs[s])+sum(market_costs[s])+sum(vom_costs[s])+sum(reserve_costs[s])+sum(start_costs[s])
+    end
+    
+
+    #=
     cost_tup = []
     cost_vec = []
     market_tup = []
@@ -488,6 +601,7 @@ function run_model()
     if !isempty(market_tup)
         @expression(model, market_costs, v_flow[market_tup] .* market_vec)
     end
+    
 
     # VOM costs:
     vom_tup = []
@@ -505,35 +619,12 @@ function run_model()
     if !isempty(vom_tup)
         @expression(model,vom_costs, vom_vec.*v_flow[vom_tup])
     end
-
-    # Start costs:
-    @expression(model,start_cost_expr[tup in proc_online_tuple], processes[tup[1]].start_cost*v_start[tup])
-
-    # Final reserve product
-    res_final_tuple = []
-    for m in keys(markets)
-        if markets[m].type == "reserve"
-            for s in scenarios
-                for t in temporals
-                    push!(res_final_tuple, (m, s, t))
-                end
-            end
-        end
-    end
-
-    @variable(model, v_res_final[tup in res_final_tuple] >= 0)
     
-    # Reserve market profits:
-    model_contents["c"]["reserve_final_eq"] = Dict()
-    reserve_market_profits = []
-    for tup in res_final_tuple
-        r_tup = filter(x -> x[1] == tup[1] && x[4] == tup[2] && x[5] == tup[3], res_tuple)
-        model_contents["c"]["reserve_final_eq"][tup] = @constraint(model, sum(v_res[r_tup]) .* (tup[1] == "fcr_n" ? 0.5 : 1.0) .== v_res_final[tup])
-        price = filter(x->x[1] == tup[3],filter(x->x.scenario == tup[2], markets[tup[1]].price)[1].series)[1][2]
-        push!(reserve_market_profits, @expression(model, v_res_final[tup] .* price * scen_p[tup[2]]))
-    end
+    # Start costs!!!:
+    @expression(model,start_cost_expr[tup in proc_online_tuple], processes[tup[1]].start_cost*v_start[tup])
+    =#
 
-    reserve_market_costs = -1 * sum(reserve_market_profits)
+    #reserve_market_costs = -1 * sum(reserve_market_profits)
 
     # Fixed values for markets (energy/reserve):
     #----------------------------------------------------------------------------------------------
@@ -638,7 +729,8 @@ function run_model()
 
     # Objective function (commodity + market + VOM + start costs)
     #----------------------------------------------------------------------------------------------------
-    @objective(model, Min, sum(commodity_costs) + sum(market_costs) + sum(vom_costs) + 100000 * sum(vq_state_dw .+ vq_state_up) + reserve_market_costs + sum(start_cost_expr))
+    #@objective(model, Min, sum(commodity_costs) + sum(market_costs) + sum(vom_costs) + 100000 * sum(vq_state_dw .+ vq_state_up) + reserve_market_costs + sum(start_cost_expr))
+    @objective(model, Min, sum(values(scen_p).*values(total_costs))+ 100000 * sum(vq_state_dw .+ vq_state_up))
     optimize!(model)
     println(raw_status(model))
 
