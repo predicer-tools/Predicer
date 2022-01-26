@@ -10,6 +10,13 @@
                     "relative": true,
                     "path": ".spinetoolbox/specifications/Importer/data_importer.json"
                 }
+            ],
+            "Tool": [
+                {
+                    "type": "path",
+                    "relative": true,
+                    "path": ".spinetoolbox/specifications/Tool/call_model.json"
+                }
             ]
         },
         "connections": [
@@ -32,6 +39,16 @@
                     "input_data",
                     "left"
                 ]
+            },
+            {
+                "from": [
+                    "input_data",
+                    "right"
+                ],
+                "to": [
+                    "Call model",
+                    "left"
+                ]
             }
         ]
     },
@@ -39,26 +56,26 @@
         "data_connection": {
             "type": "Data Connection",
             "description": "",
-            "x": -221.3230586399446,
-            "y": 0.3902683447097779,
+            "x": -274.33758814140214,
+            "y": 65.19686559916839,
             "references": [
                 {
                     "type": "path",
                     "relative": true,
-                    "path": "input_data/input_data.xlsx"
+                    "path": "input_data/input_data_V2.xlsx"
                 }
             ]
         },
         "data_importer 1": {
             "type": "Importer",
             "description": "",
-            "x": 6.390477013360293,
-            "y": 2.595398773387032,
+            "x": -103.2337593927559,
+            "y": -62.21632736795996,
             "specification": "data_importer",
             "cancel_on_error": true,
             "file_selection": [
                 [
-                    "input_data.xlsx",
+                    "input_data_V2.xlsx",
                     true
                 ]
             ]
@@ -66,8 +83,8 @@
         "input_data": {
             "type": "Data Store",
             "description": "",
-            "x": 227.82305863994463,
-            "y": 2.1256507465808454,
+            "x": 68.84677006053624,
+            "y": 59.2425240921912,
             "url": {
                 "dialect": "sqlite",
                 "username": "",
@@ -81,6 +98,23 @@
                 }
             },
             "cancel_on_error": false
+        },
+        "Call model": {
+            "type": "Tool",
+            "description": "",
+            "x": 280.83758814140197,
+            "y": -40.64286649565241,
+            "specification": "call_model",
+            "execute_in_work": false,
+            "cmd_line_args": [
+                {
+                    "type": "resource",
+                    "arg": "db_url@input_data"
+                }
+            ],
+            "options": {
+                "julia_sysimage": ""
+            }
         }
     }
 }
