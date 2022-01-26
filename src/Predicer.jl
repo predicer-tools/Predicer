@@ -4,8 +4,8 @@ module Predicer
     export get_data
     export test_AM2
 
-    function test_AM2(d)
-        return AbstractModel.test_AM(d)
+    function run_AbstractModel(d)
+        return AbstractModel.run_AM(d)
     end
 
     function get_data()
