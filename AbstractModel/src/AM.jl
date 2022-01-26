@@ -1,14 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
 # using SpineInterface
 using JuMP
 using Cbc
@@ -873,5 +862,3 @@ function main(imported_data)
     # Translate results to human-readable format
 
 end
-
-end  # End module

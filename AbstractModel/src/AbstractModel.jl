@@ -10,9 +10,9 @@ module AbstractModel
 
     include("structures.jl")
 
-    export test_AM
+    export run_AM
 
-    function test_AM(imported_data)
+    function run_AM(imported_data)
         return include(".\\AbstractModel\\src\\AM.jl")(imported_data)
     end
 
