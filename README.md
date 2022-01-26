@@ -25,7 +25,7 @@
 
         julia> using Predicer
 
-- Use `Predicer.get_data() to import the local data defined in the input data file. Use `Predicer.run_AbstractModel()` to run the current version of the model base don the defined input data. 
+- Use `Predicer.get_data()` to import the local data defined in the input data file. Use `Predicer.run_AbstractModel()` to run the current version of the model base don the defined input data. 
         
         julia> d = Predicer.get_data();
         julia> Predicer.run_AbstractModel(d);
