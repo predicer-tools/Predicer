@@ -224,9 +224,13 @@ function main()
         end
     end
 
-
-
-    return (unique(dates), scenarios, nodes, processes, markets)
+    imported_input_data = Dict()
+    imported_input_data["temporals"] = unique(dates)
+    imported_input_data["scenarios"] = scenarios
+    imported_input_data["nodes"] =nodes
+    imported_input_data["processes"] = processes
+    imported_input_data["markets"] = markets
+    return imported_input_data
 end
 
 
