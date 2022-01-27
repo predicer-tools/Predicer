@@ -10,8 +10,9 @@ module AbstractModel
 
     include("structures.jl")
 
+    # Run parallell version of AbstractModel. This version is used until it has been implemented
+    # as a part of the AbstractModel module. 
     export run_AM
-
     function run_AM(imported_data)
         return include(".\\AbstractModel\\src\\AM.jl")(imported_data)
     end
@@ -20,26 +21,29 @@ module AbstractModel
     export Initialize_contents
     export set_generic_constraints
 
-    # Basic settings
-    function Initialize()
-        model = JuMP.Model(Cbc.Optimizer)
+    # Function used to setup model based on the given input data. This function 
+    # calls separate functions for setting up the variables and constraints used 
+    # in the model. Returns "model_contents"; a dictionary containing all variables,
+    # constraints, tuples, and expressions used to build the model.
+    function Initialize(input_data)
+        model_contents = initialize_contents()
+        model = init_jump_model(Cbc.Optimizer)
+        model_contents["model"] = model
+
+
+    end
+
+    # Function to initialize jump model with the given solver. 
+    function init_jump_model(solver)
+        model = JuMP.Model(solver)
         set_optimizer_attributes(model, "LogLevel" => 1, "PrimalTolerance" => 1e-7)
         return model
     end
 
-    function setup_model(model, temporals, scenarios, nodes, processes, markets)
-        model = JuMP.Model(Cbc.Optimizer)
-        set_optimizer_attributes(model, "LogLevel" => 1, "PrimalTolerance" => 1e-7)
-
-        model_contents = Initialize_contents()
-
-        return 0
-
-    end
-
-        # Add all constraints, (expressions? and variables?) into a large dictionary for easier access, and being able to use the anonymous notation
-    # while still being conveniently accessible. 
-    # Alternatively, everything in a one layer solution: model_contents[(type, name)], eg: model_contents[("variable", "v_flow")]
+    # Add all constraints, (expressions? and variables?) into a large dictionary for easier access, 
+    # and being able to use the anonymous notation while still being conveniently accessible. 
+    # Alternatively, everything in a one layer solution: model_contents[(type, name)],
+    # eg: model_contents[("variable", "v_flow")]
     function Initialize_contents()
         model_contents = Dict()
         model_contents["constraint"] = Dict() #constraints

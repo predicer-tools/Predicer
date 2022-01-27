@@ -21,12 +21,12 @@ function main(imported_data)
     #else
     #    imported_data = include("C:\\Users\\dsdennis\\HOPE\\Predicer\\src\\import_input_data.jl")()
     #end
-    temporals = sort(imported_data[1])
-    scen_p = imported_data[2]
-    scenarios = collect(keys(imported_data[2]))
-    nodes = imported_data[3]
-    processes = imported_data[4]
-    markets = imported_data[5]
+    temporals = sort(imported_data["temporals"])
+    scen_p = imported_data["scenarios"]
+    scenarios = collect(keys(imported_data["scenarios"]))
+    nodes = imported_data["nodes"]
+    processes = imported_data["processes"]
+    markets = imported_data["markets"]
 
 
     println("Importing data...")
