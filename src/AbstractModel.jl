@@ -1,16 +1,11 @@
 module AbstractModel
 
-# using SpineInterface
 using JuMP
 using Cbc
 using DataFrames
-#using StatsPlots
-#using Plots
 using Dates
 using XLSX
 
-#include("structures.jl")
-#include("import_input_data.jl")
 include("structures_new.jl")
 include("import_input_data_new.jl")
 
@@ -25,6 +20,7 @@ end
 function run_model()
 
     # Basic settings
+    #--------------------------------------------------------------------------
     model = JuMP.Model(Cbc.Optimizer)
     set_optimizer_attributes(model, "LogLevel" => 1, "PrimalTolerance" => 1e-7)
     export_to_excel = 0
@@ -38,6 +34,7 @@ function run_model()
     processes = imported_data[4]
     markets = imported_data[5]
     op_effs = imported_data[6]
+    reserve_types = imported_data[7]
 
 
     println("Importing more data...")
@@ -53,8 +50,9 @@ function run_model()
     model_contents["c"]["node_balance_eq"] = Dict()
     model_contents["c"]["node_balance_eq"][("This", "is", "an", "index", "tuple")] = "@constraint(model, variable_at_index == 42)"
 
-    # reserve directions
+    # reserve directions and types
     res_dir = ["res_up", "res_down"]
+    res_typ = collect(keys(reserve_types))
 
     # Get nodes present in reserve markets
     #--------------------------------------------------------------------------------
@@ -93,23 +91,29 @@ function run_model()
     res_potential_tuple = []
     proc_online_tuple = []
     # mapping flow directions of processes
-    for p in keys(processes), s in scenarios, t in temporals 
+    for p in keys(processes), s in scenarios 
         for topo in processes[p].topos
-            push!(process_tuple, (p, topo.source, topo.sink, s, t))
-            if (topo.source in res_nodes || topo.sink in res_nodes) && processes[p].is_res
-                for r in res_dir
-                    push!(res_potential_tuple, (r, p, topo.source, topo.sink, s, t))
+            for t in temporals
+                push!(process_tuple, (p, topo.source, topo.sink, s, t))                
+                if (topo.source in res_nodes || topo.sink in res_nodes) && processes[p].is_res
+                    for r in res_dir
+                        for rt in res_typ
+                            push!(res_potential_tuple, (r, rt, p, topo.source, topo.sink, s, t))
+                        end
+                    end
                 end
             end
         end
         if processes[p].is_online
-            push!(proc_online_tuple, (p, s, t))
+            for t in temporals
+                push!(proc_online_tuple, (p, s, t))
+            end
         end
     end
 
     # divide reserve_tuple into consumers and producers
-    res_pot_prod_tuple = filter(x -> x[4] in res_nodes, res_potential_tuple)
-    res_pot_cons_tuple = filter(x -> x[3] in res_nodes, res_potential_tuple)
+    res_pot_prod_tuple = filter(x -> x[5] in res_nodes, res_potential_tuple)
+    res_pot_cons_tuple = filter(x -> x[4] in res_nodes, res_potential_tuple)
 
     # create variables with process_tuple
     @variable(model, v_flow[tup in process_tuple] >= 0)
@@ -366,8 +370,8 @@ function run_model()
 
     p_online = filter(x -> processes[x[1]].is_online, lim_tuple)
     p_offline = filter(x -> !(processes[x[1]].is_online), lim_tuple)
-    p_reserve_cons = filter(x -> ("res_up", x...) in res_pot_cons_tuple, lim_tuple)
-    p_reserve_prod = filter(x -> ("res_up", x...) in res_pot_prod_tuple, lim_tuple)
+    p_reserve_cons = filter(x -> (res_dir[1], res_typ[1], x...) in res_pot_cons_tuple, lim_tuple)
+    p_reserve_prod = filter(x -> (res_dir[1], res_typ[1], x...) in res_pot_prod_tuple, lim_tuple)
     p_noreserve = filter(x -> !(x in p_reserve_cons) && !(x in p_reserve_cons), lim_tuple)
     p_all = filter(x -> x in p_online || x in p_reserve_cons || x in p_reserve_prod, lim_tuple)
 
@@ -376,13 +380,17 @@ function run_model()
     e_lim_min = Dict(tup => AffExpr(0.0) for tup in lim_tuple)
 
     for tup in p_reserve_prod
-        add_to_expression!(e_lim_max[tup], v_reserve[("res_up", tup...)])
-        add_to_expression!(e_lim_min[tup], -v_reserve[("res_down", tup...)])
+        res_up_tup = filter(x->x[1] == "res_up" && x[3:end] == tup,res_pot_prod_tuple)
+        add_to_expression!(e_lim_max[tup], sum(v_reserve[(res_up_tup)]))
+        res_down_tup = filter(x->x[1] == "res_down" && x[3:end] == tup,res_pot_prod_tuple)
+        add_to_expression!(e_lim_min[tup], -sum(v_reserve[(res_down_tup)]))
     end
 
     for tup in p_reserve_cons
-        add_to_expression!(e_lim_max[tup], v_reserve[("res_down", tup...)])
-        add_to_expression!(e_lim_min[tup], -v_reserve[("res_up", tup...)])
+        res_up_tup = filter(x->x[1] == "res_down" && x[3:end] == tup,res_pot_cons_tuple)
+        add_to_expression!(e_lim_max[tup], sum(v_reserve[(res_up_tup)]))
+        res_down_tup = filter(x->x[1] == "res_up" && x[3:end] == tup,res_pot_cons_tuple)
+        add_to_expression!(e_lim_min[tup], -sum(v_reserve[(res_down_tup)]))
     end
 
     for tup in p_online
@@ -412,12 +420,12 @@ function run_model()
     e_res_bal_dn = []
     res_eq_tuple = []
     res_eq_updn_tuple = []
-    for n in res_nodes, s in scenarios, t in temporals
-        res_pot_u = filter(x -> x[1] == res_dir[1] && x[5] == s && x[6] == t && (x[3] == n || x[4] == n), res_potential_tuple)
-        res_pot_d = filter(x -> x[1] == res_dir[2] && x[5] == s && x[6] == t && (x[3] == n || x[4] == n), res_potential_tuple)
+    for n in res_nodes, r in res_typ, s in scenarios, t in temporals
+        res_pot_u = filter(x -> x[1] == res_dir[1] && x[2] == r && x[6] == s && x[7] == t && (x[4] == n || x[5] == n), res_potential_tuple)
+        res_pot_d = filter(x -> x[1] == res_dir[2] && x[2] == r && x[6] == s && x[7] == t && (x[4] == n || x[3] == n), res_potential_tuple)
 
-        res_u = filter(x -> x[3] == res_dir[1] && x[4] == s && x[5] == t && x[2] == n, res_tuple)
-        res_d = filter(x -> x[3] == res_dir[2] && x[4] == s && x[5] == t && x[2] == n, res_tuple)
+        res_u = filter(x -> x[3] == res_dir[1] && markets[x[1]].reserve_type == r && x[4] == s && x[5] == t && x[2] == n, res_tuple)
+        res_d = filter(x -> x[3] == res_dir[2] && markets[x[1]].reserve_type == r && x[4] == s && x[5] == t && x[2] == n, res_tuple)
 
         if !isempty(res_pot_u)
             up_lhs = @expression(model, sum(v_reserve[res_pot_u]))
@@ -442,7 +450,7 @@ function run_model()
         end
         push!(e_res_bal_up, up_lhs - up_rhs)
         push!(e_res_bal_dn, dn_lhs - dn_rhs)
-        push!(res_eq_tuple, (n, s, t))
+        push!(res_eq_tuple, (n, r, s, t))
     end
 
     for m in keys(markets), s in scenarios, t in temporals
@@ -470,12 +478,11 @@ function run_model()
     @variable(model, v_res_final[tup in res_final_tuple] >= 0)
     
     model_contents["c"]["reserve_final_eq"] = Dict()
-    #reserve_market_profits = []
+
     for tup in res_final_tuple
         r_tup = filter(x -> x[1] == tup[1] && x[4] == tup[2] && x[5] == tup[3], res_tuple)
         model_contents["c"]["reserve_final_eq"][tup] = @constraint(model, sum(v_res[r_tup]) .* (tup[1] == "fcr_n" ? 0.5 : 1.0) .== v_res_final[tup])
-        #price = filter(x->x[1] == tup[3],filter(x->x.scenario == tup[2], markets[tup[1]].price)[1].series)[1][2]
-        #push!(reserve_market_profits, @expression(model, v_res_final[tup] .* price * scen_p[tup[2]]))
+
     end
 
     # Cost calculations:
@@ -570,62 +577,6 @@ function run_model()
     end
     
 
-    #=
-    cost_tup = []
-    cost_vec = []
-    market_tup = []
-    market_vec = []
-    
-    for n in keys(nodes)
-        # Commodity costs
-        if nodes[n].is_commodity
-            push!(cost_tup, filter(x -> x[2] == n, process_tuple)...)
-            for s in scenarios
-                push!(cost_vec, scen_p[s]*map(x -> x[2], filter(x->x.scenario == s,nodes[n].cost)[1].series)...)
-            end
-        end
-        # Market costs/profits
-        if nodes[n].is_market
-            for s in scenarios
-                push!(market_tup, filter(x -> x[2] == n && x[4] == s, process_tuple)...)
-                push!(market_tup, filter(x -> x[3] == n && x[4] == s, process_tuple)...)
-                price = map(x -> x[2], filter(x->x.scenario == s,markets[n].price)[1].series)*scen_p[s]
-                push!(market_vec, price...)
-                push!(market_vec, -price...)
-            end
-        end
-    end
-    if !isempty(cost_tup)
-        @expression(model, commodity_costs, v_flow[cost_tup] .* cost_vec)
-    end
-    if !isempty(market_tup)
-        @expression(model, market_costs, v_flow[market_tup] .* market_vec)
-    end
-    
-
-    # VOM costs:
-    vom_tup = []
-    vom_vec = []
-    for tup in unique(map(x->(x[1],x[2],x[3]),process_tuple))
-        vom = filter(x->x.source == tup[2] && x.sink == tup[3], processes[tup[1]].topos)[1].VOM_cost
-        if !(vom == 0)
-            for s in scenarios
-                push!(vom_tup,filter(x->x[1:3] == tup && x[4] == s, process_tuple)...)
-                push!(vom_vec,scen_p[s]*vom*ones(length(temporals))...)
-            end
-        end
-    end
-
-    if !isempty(vom_tup)
-        @expression(model,vom_costs, vom_vec.*v_flow[vom_tup])
-    end
-    
-    # Start costs!!!:
-    @expression(model,start_cost_expr[tup in proc_online_tuple], processes[tup[1]].start_cost*v_start[tup])
-    =#
-
-    #reserve_market_costs = -1 * sum(reserve_market_profits)
-
     # Fixed values for markets (energy/reserve):
     #----------------------------------------------------------------------------------------------
     fix_expr = []
@@ -693,43 +644,57 @@ function run_model()
     end
     
     # Ramp constraints
-    #= 
-    function get_time_index_index(ts, t)
-        for i in 1:length(ts)
-            if ts[i] == t
-                return i
-            end
-        end
-        return 0
-    end
-                    
+    #------------------------------------------------------------------------------------------
     ramp_tuple = []
-    e_ramp = []
+    ramp_expr_up = []
+    ramp_expr_down = []
     for tup in process_tuple
-        if processes[tup[1]].conversion == "1" && !processes[tup[1]].is_cf && tup[1] == tup[2]
-            cap = filter(x -> x[1]==tup[2] && x[2] == tup[3], processes[tup[1]].topos)[1][3]
-            t = get_time_index_index(temporals, tup[4])
-            if t == 1
-                ramp_expr = 0
-            else
-                now_tup = (tup[1], tup[2], tup[3], temporals[t])
-                then_tup = (tup[1], tup[2], tup[3], temporals[t - 1])
-                ramp_expr = @expression(model, (v_flow[now_tup] - v_flow[then_tup]) / cap)
+        if processes[tup[1]].conversion == 1 && !processes[tup[1]].is_cf
+            
+            if tup[5] != temporals[1]
+                push!(ramp_tuple,tup)
+                topo = filter(x->x.source == tup[2] && x.sink == tup[3],processes[tup[1]].topos)[1]
+                ramp_up_cap = topo.ramp_up*topo.capacity
+                ramp_dw_cap = topo.ramp_down*topo.capacity
+                start_cap = max(0,processes[tup[1]].load_min-topo.ramp_up)*topo.capacity
+                stop_cap = max(0,processes[tup[1]].load_min-topo.ramp_down)*topo.capacity
+                if processes[tup[1]].is_online
+                    if processes[tup[1]].is_res
+                        if tup[2] in res_nodes
+                            push!(ramp_expr_up,@expression(model,-sum(values(reserve_types) .* v_reserve[filter(x->x[1]==res_dir[2] && x[3:end]==tup,res_potential_tuple)])+ramp_up_cap+start_cap*v_start[(tup[1],tup[4],tup[5])]))
+                            push!(ramp_expr_down,@expression(model,sum(values(reserve_types) .* v_reserve[filter(x->x[1]==res_dir[1] && x[3:end]==tup,res_potential_tuple)])-ramp_dw_cap-stop_cap*v_stop[(tup[1],tup[4],tup[5])]))
+                        elseif tup[3] in res_nodes
+                            push!(ramp_expr_up,@expression(model,-sum(values(reserve_types) .* v_reserve[filter(x->x[1]==res_dir[1] && x[3:end]==tup,res_potential_tuple)])+ramp_up_cap+start_cap*v_start[(tup[1],tup[4],tup[5])]))
+                            push!(ramp_expr_down,@expression(model,sum(values(reserve_types) .* v_reserve[filter(x->x[1]==res_dir[2] && x[3:end]==tup,res_potential_tuple)])-ramp_dw_cap-stop_cap*v_stop[(tup[1],tup[4],tup[5])]))
+                        else
+                            push!(ramp_expr_up,@expression(model,+ramp_up_cap+start_cap*v_start[(tup[1],tup[4],tup[5])]))
+                            push!(ramp_expr_down,@expression(model,-ramp_dw_cap-stop_cap*v_stop[(tup[1],tup[4],tup[5])]))
+                        end
+                    end
+                else
+                    if processes[tup[1]].is_res
+                        if tup[2] in res_nodes
+                            push!(ramp_expr_up,@expression(model,-sum(values(reserve_types) .* v_reserve[filter(x->x[1]==res_dir[2] && x[3:end]==tup,res_potential_tuple)])+ramp_up_cap))
+                            push!(ramp_expr_down,@expression(model,sum(values(reserve_types) .* v_reserve[filter(x->x[1]==res_dir[1] && x[3:end]==tup,res_potential_tuple)])-ramp_dw_cap))
+                        elseif tup[3] in res_nodes
+                            push!(ramp_expr_up,@expression(model,-sum(values(reserve_types) .* v_reserve[filter(x->x[1]==res_dir[1] && x[3:end]==tup,res_potential_tuple)])+ramp_up_cap))
+                            push!(ramp_expr_down,@expression(model,sum(values(reserve_types) .* v_reserve[filter(x->x[1]==res_dir[2] && x[3:end]==tup,res_potential_tuple)])-ramp_dw_cap))
+                        else                            
+                            push!(ramp_expr_up,@expression(model,+ramp_up_cap))
+                            push!(ramp_expr_down,@expression(model,-ramp_dw_cap))
+                        end
+                    end
+                end
             end
-            push!(ramp_tuple, tup)
-            push!(e_ramp, ramp_expr)
         end
     end
-      
-    
 
-    @constraint(model, process_ramp_up_eq[(i, tup) in enumerate(ramp_tuple)], e_ramp[i] <= processes[ramp_tuple[i][1]].ramp_up)
-    @constraint(model, process_ramp_dn_eq[(i, tup) in enumerate(ramp_tuple)], -e_ramp[i] <= processes[ramp_tuple[i][1]].ramp_down) 
-    =#
+    @constraint(model,ramp_up_eq[(i,tup) in enumerate(ramp_tuple)],v_flow[tup]-v_flow[process_tuple[findall(x->x==tup,process_tuple)[1]-1]]<=ramp_expr_up[i])
+    @constraint(model,ramp_down_eq[(i,tup) in enumerate(ramp_tuple)],v_flow[tup]-v_flow[process_tuple[findall(x->x==tup,process_tuple)[1]-1]]>=ramp_expr_down[i])
+   
 
     # Objective function (commodity + market + VOM + start costs)
     #----------------------------------------------------------------------------------------------------
-    #@objective(model, Min, sum(commodity_costs) + sum(market_costs) + sum(vom_costs) + 100000 * sum(vq_state_dw .+ vq_state_up) + reserve_market_costs + sum(start_cost_expr))
     @objective(model, Min, sum(values(scen_p).*values(total_costs))+ 100000 * sum(vq_state_dw .+ vq_state_up))
     optimize!(model)
     println(raw_status(model))
@@ -737,8 +702,7 @@ function run_model()
     # Result Dataframes:
     #---------------------------------------------------------------------------------------------------
     v_flow_df = DataFrame(t = temporals)
-    v_state_df = DataFrame(t = temporals)
-    v_res_pot_df = DataFrame(t = temporals)
+    v_q_df = DataFrame(t = temporals)
     v_online_df = DataFrame(t = temporals)
     v_res_final_df = DataFrame(t = temporals)
     for tup in unique(map(x->(x[1],x[2],x[3],x[4]),process_tuple))
@@ -746,31 +710,17 @@ function run_model()
         v_flow_df[!, colname] = value.(v_flow[filter(x->x[1:4] == tup, process_tuple)].data)
     end
 
-    #=
-    for tup in unique(map(x->(x[1],x[2]),nod_tuple))
-        tuple_indices = filter(x -> x[1] == tup[1], nod_tuple)
-        colname = string(tup[1])
-        v_state_df[!, colname] = map(x -> value.(v_state)[tuple_indices][x], tuple_indices)
-    end
-
-    for tup in unique(map(x->(x[1],x[2]),res_potential_tuple))
-        tuple_indices = filter(x -> x[1:4] == tup[1:4], res_potential_tuple)
-        print(tuple_indices, "\n")
-        colname = string(tup[1:4])
-        v_res_pot_df[!, colname] = map(x -> value.(v_reserve)[tuple_indices][x], tuple_indices)
-    end
-    =#
     for tup in unique(map(x->(x[1],x[2]),res_final_tuple))
         colname = join(tup,"-")
         v_res_final_df[!, colname] = value.(v_res_final[filter(x->x[1:2] == tup, res_final_tuple)].data)
     end
-    #=
-    for tup in filter(t -> t[2] == temporals[1], res_final_tuple)
-        tuple_indices = filter(x -> x[1] == tup[1], res_final_tuple)
-        colname = string(tup[1])
-        v_res_final_df[!, colname] = map(x -> value.(v_res_final)[tuple_indices][x], tuple_indices)
+
+    for tup in unique(map(x->(x[1],x[2]),node_balance_tuple))
+        colname1 = join(tup,"-")*"-up"
+        colname2 = join(tup,"-")*"-dw"
+        v_q_df[!, colname1] = value.(vq_state_up[filter(x->x[1:2] == tup, node_balance_tuple)].data)
+        v_q_df[!, colname2] = value.(vq_state_dw[filter(x->x[1:2] == tup, node_balance_tuple)].data)
     end
-    =#
 
     for tup in unique(map(x->(x[1],x[2]),proc_online_tuple))
         colname1 = "status-"*join(tup,"-")
@@ -795,82 +745,9 @@ function run_model()
         end
     end
 
-    return (model,v_flow_df,v_res_final_df,v_online_df)
+    return (model,v_flow_df,v_res_final_df,v_online_df,v_q_df)
     
 
-    #=
-    pt1 = @df v_flow_df plot(:t, cols(propertynames(v_flow_df)[2:2]), lw = 2, xticks = Time(0):Hour(4):Time(23))
-    pt2 = @df v_flow_df plot(:t, cols(propertynames(v_flow_df)[3:4]), lw = 2, xticks = Time(0):Hour(4):Time(23))
-    pt3 = @df v_flow_df plot(:t, cols(propertynames(v_flow_df)[5:7]), lw = 2, xticks = Time(0):Hour(4):Time(23))
-    pt4 = @df v_flow_df plot(:t, cols(propertynames(v_flow_df)[8:9]), lw = 2, xticks = Time(0):Hour(4):Time(23))
-    pt5 = @df v_flow_df plot(:t, cols(propertynames(v_flow_df)[10:11]), lw = 2, xticks = Time(0):Hour(4):Time(23))
-    pt6 = @df v_flow_df plot(:t, cols(propertynames(v_flow_df)[12:12]), lw = 2, xticks = Time(0):Hour(4):Time(23))
-    pt7 = @df v_state_df plot(:t, cols(propertynames(v_state_df)[2:end]), lw = 2, xticks = Time(0):Hour(4):Time(23))
-    pt8 = @df v_res_final_df plot(:t, cols(propertynames(v_res_final_df)[2:end]), lw = 2, xticks = Time(0):Hour(4):Time(23))
-    plot(pt1, pt2, pt3, pt4, pt5, pt6, pt7, pt8, layout = grid(8, 1), size = (1000, 1000), legend = :outerright)
-    =#
-
-    # @expression(model, e_cons[tup in node_balance_tuple], reduce(+,v_flow[filter(x->(x[3]==tup[1] && x[4]==tup[2]),process_tuple)],init = 0)-vq_state_up[tup])
-
-    # @constraint(model, node_bal_eq[tup in node_balance_tuple], sum(v_flow[filter(x->(x[2]==tup[1] && x[4]==tup[2]),process_tuple)]) == 0)
-    # @constraint(model, node_bal_eq[tup in node_balance_tuple], sum(v_flow[filter(x->(x[3]==tup[1] && x[4]==tup[2]),process_tuple)]) == 0)
-
-
-    # e_prod = @expression(model, sum(v_flow[tup] for tup in process_tuple if tup[3]==nodes[n].name && tup[4]==t))
-
-    # e_cons = @expression(model, sum(-v_flow[tup] for tup in process_tuple if tup[2]==nodes[n].name && tup[4]==t))
-
-
-
-    # @expression(model, nod_test, sum(v_flow[tup] for tup in process_tuple if tup[4]=="t1"))
-
-    # @variable(model, node_state[keys(nodes), stochastics, temporals])
-
-    # @variable(model, v_flow[p in keys(processes), "SOURCE", "SINK", stochastics, temporals])
-    # t in processes[p].topos
-
-
-
-    # As per Topis contrbution to discussion:
-    # @variable(model, node_state[nodes, stochastics, temporals])
-    # @variable(model, process_flow[processes, directions, nodes, stochastics, temporals])
-
-    # in case inflow can not be balanced
-    # @variable(model, node_slack[nodes, stochastics, temporals])
-
-    # Esas proposal for one (NGCHP) process for example
-    # v_flow(process, source node(NG), process(NGCHP), stochastics, temporal)
-    # v_flow(process, process(NGCHP), sink node1(dh), stochastics, temporal)
-    # v_flow(process, process(NGCHP), sink node2(elec), stochastics, temporal)
-    # @variable(model, v_flow[p in processes, p.sources, p.sinks, stochastics, temporals])
-
-    # Connections are basically a simple process with a efficiency of 1 (?). No need to implement?
-
-    # Node balance constraints
-    # sum of process flows in and out from a node should be equal
-
-
-    # process flow balance constraints
-    # ensure that the flows from/in to a process (?) are at equilibrium.
-    # In that case also need to model exhaust/wast heat/energy as one additional flow
-    # OR, just have flow_in * eff = flow_out
-
-    # node_slack constraints. Actually not needed, since the cost could be set as absolute?
-
-    # Get input data into abstract format
-
-    # Into node / process struct format
-    # Functions for each type of "special plant", such as CHP or wind, etc
-    # This means, that the abstract format data can be converted into a JuMP model easily
-
-    # Translate abstract format into JuMP
-
-    # How to do this?
-    # Processes as variables, and nodes as constraints?
-
-    # Run JuMP model
-
-    # Translate results to human-readable format
 
 end
 

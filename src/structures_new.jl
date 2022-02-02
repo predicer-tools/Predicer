@@ -56,8 +56,10 @@ struct Topology
     sink::String
     capacity::Float64
     VOM_cost::Float64
-    function Topology(source, sink, capacity, VOM_cost)
-        return new(source, sink, capacity, VOM_cost)
+    ramp_up::Float64
+    ramp_down::Float64
+    function Topology(source, sink, capacity, VOM_cost, ramp_up, ramp_down)
+        return new(source, sink, capacity, VOM_cost, ramp_up, ramp_down)
     end
 end
 
@@ -101,10 +103,11 @@ struct Market
     node::Any
     direction::String
     realisation::Float64
+    reserve_type::String
     price::Vector{TimeSeries}
     fixed::Vector{Tuple{Any,Any}}
-    function Market(name, type, node, direction, realisation)
-        return new(name, type, node, direction, realisation, [], [])
+    function Market(name, type, node, direction, realisation, reserve_type)
+        return new(name, type, node, direction, realisation, reserve_type, [], [])
     end
 end
 
