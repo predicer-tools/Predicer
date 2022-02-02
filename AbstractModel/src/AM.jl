@@ -4,6 +4,7 @@ using Cbc
 using DataFrames
 using Dates
 using XLSX
+using DataStructures
 
 #include("structures.jl")
 #include("import_input_data.jl")
@@ -33,13 +34,13 @@ function main(imported_data)
 
     # Add all constraints, (expressions? and variables?) into a large dictionary for easier access, and being able to use the anonymous notation
     # while still being conveniently accessible.
-    model_contents = Dict()
-    model_contents["c"] = Dict() # constraints
-    model_contents["e"] = Dict() # expressions?
-    model_contents["v"] = Dict() # variables?
+    model_contents = OrderedDict()
+    model_contents["c"] = OrderedDict() # constraints
+    model_contents["e"] = OrderedDict() # expressions?
+    model_contents["v"] = OrderedDict() # variables?
 
     # Example: node balance_eq
-    model_contents["c"]["node_balance_eq"] = Dict()
+    model_contents["c"]["node_balance_eq"] = OrderedDict()
     model_contents["c"]["node_balance_eq"][("This", "is", "an", "index", "tuple")] = "@constraint(model, variable_at_index == 42)"
 
     # reserve directions
@@ -120,18 +121,18 @@ function main(imported_data)
 
     # Tuples for states and balances
     #--------------------------------------------------------------------------------
-    nod_tuple = []
+    node_state_tuple = []
     node_balance_tuple = []
     for n in keys(nodes), s in scenarios, t in temporals
-        if nodes[n].is_state
-            push!(nod_tuple, (n, s, t))
-        end
         if !(nodes[n].is_commodity) & !(nodes[n].is_market)
             push!(node_balance_tuple, (n, s, t))
+            if nodes[n].is_state
+                push!(node_state_tuple, (n, s, t))
+            end
         end
     end
     # Node state variable
-    @variable(model, v_state[tup in nod_tuple] >= 0)
+    @variable(model, v_state[tup in node_state_tuple] >= 0)
 
     # Dummy variables for node_states
     @variable(model, vq_state_up[tup in node_balance_tuple] >= 0)
@@ -142,7 +143,6 @@ function main(imported_data)
     e_prod = []
     e_cons = []
     e_state = []
-    node_state_tuple = []
     for (i, tu) in enumerate(node_balance_tuple)
         cons = filter(x -> (x[2] == tu[1] && x[4] == tu[2] && x[5] == tu[3]), process_tuple)
         prod = filter(x -> (x[3] == tu[1] && x[4] == tu[2] && x[5] == tu[3]), process_tuple)
@@ -197,7 +197,6 @@ function main(imported_data)
             else
                 state_expr = @expression(model, v_state[tu] - v_state[node_balance_tuple[i-1]])
             end
-            push!(node_state_tuple, tu)
         else
             state_expr = 0
         end
@@ -291,10 +290,10 @@ function main(imported_data)
     op_min = []
     op_max = []
     op_eff = []
-    for p in keys(processes)
+    for p in keys(processes) 
         if !isempty(processes[p].eff_fun)
             cap = sum(map(x->x.capacity,filter(x->x.source == p,processes[p].topos)))
-            for s in scenarios, t in temporals
+            for j in 1:(length(scenarios)*length(temporals))#s in scenarios, t in temporals
                 for i in 1:length(processes[p].eff_ops)
                     if i==1
                         push!(op_min,0.0)
@@ -458,7 +457,7 @@ function main(imported_data)
 
     @variable(model, v_res_final[tup in res_final_tuple] >= 0)
     
-    model_contents["c"]["reserve_final_eq"] = Dict()
+    model_contents["c"]["reserve_final_eq"] = OrderedDict()
     #reserve_market_profits = []
     for tup in res_final_tuple
         r_tup = filter(x -> x[1] == tup[1] && x[4] == tup[2] && x[5] == tup[3], res_tuple)
@@ -469,13 +468,13 @@ function main(imported_data)
 
     # Cost calculations:
     # --------------------------------------------------------------------------------
-    cost_tup = Dict()
-    cost_vec = Dict()
-    market_tup = Dict()
-    market_vec = Dict()
+    cost_tup = OrderedDict()
+    cost_vec = OrderedDict()
+    market_tup = OrderedDict()
+    market_vec = OrderedDict()
 
-    commodity_costs = Dict()
-    market_costs = Dict()
+    commodity_costs = OrderedDict()
+    market_costs = OrderedDict()
 
     for s in scenarios
         cost_tup[s] = []
@@ -506,9 +505,9 @@ function main(imported_data)
     end
 
     # VOM costs:
-    vom_tup = Dict()
-    vom_vec = Dict()
-    vom_costs = Dict()
+    vom_tup = OrderedDict()
+    vom_vec = OrderedDict()
+    vom_costs = OrderedDict()
     for s in scenarios
         vom_tup[s] = []
         vom_vec[s] = []
@@ -531,7 +530,7 @@ function main(imported_data)
     end
 
     # Start costs:
-    start_costs = Dict()
+    start_costs = OrderedDict()
     for s in scenarios
         start_tuple = filter(x->x[2]==s,proc_online_tuple)
         start_costs[s] = []
@@ -543,7 +542,7 @@ function main(imported_data)
     end
     
     # Reserve profits:
-    reserve_costs = Dict()
+    reserve_costs = OrderedDict()
     for s in scenarios
         reserve_costs[s] = []
     end
@@ -553,7 +552,7 @@ function main(imported_data)
         push!(reserve_costs[tup[2]],-price*v_res_final[tup])
     end
     
-    total_costs = Dict()
+    total_costs = OrderedDict()
     for s in scenarios
         total_costs[s] = sum(commodity_costs[s])+sum(market_costs[s])+sum(vom_costs[s])+sum(reserve_costs[s])+sum(start_costs[s])
     end
@@ -644,7 +643,7 @@ function main(imported_data)
 
     # Constraints for bidding price and volume scenarios P(s1)>P(s2) => V(s1)>V(s2):
     #---------------------------------------------------------------------------------------------
-    price_matr = Dict()
+    price_matr = OrderedDict()
     for m in keys(markets)
         for (i,s) in enumerate(scenarios)
             vec = map(x->x[2],filter(x->x.scenario == s, markets[m].price)[1].series)
@@ -736,8 +735,8 @@ function main(imported_data)
     end
 
     #=
-    for tup in unique(map(x->(x[1],x[2]),nod_tuple))
-        tuple_indices = filter(x -> x[1] == tup[1], nod_tuple)
+    for tup in unique(map(x->(x[1],x[2]),node_state_tuple))
+        tuple_indices = filter(x -> x[1] == tup[1], node_state_tuple)
         colname = string(tup[1])
         v_state_df[!, colname] = map(x -> value.(v_state)[tuple_indices][x], tuple_indices)
     end
