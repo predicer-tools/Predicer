@@ -3,7 +3,7 @@ using XLSX
 import AbstractModel
 
 function main()
-    sheetnames_system = ["nodes", "processes", "process_topology", "markets","scenarios","efficiencies"]#, "energy_market", "reserve_market"]
+    sheetnames_system = ["nodes", "processes", "process_topology", "markets","scenarios","efficiencies", "reserve_type"]#, "energy_market", "reserve_market"]
     sheetnames_timeseries = ["cf", "inflow", "market_prices", "price","eff_ts"]
     # Assuming this file is under \predicer\model
     wd = split(string(@__DIR__), "src")[1]
@@ -15,6 +15,7 @@ function main()
     timeseries_data["scenarios"] = Dict()
 
     scenarios = Dict()
+    reserve_type = Dict()
 
     for sn in sheetnames_system
         system_data[sn] = DataFrame(XLSX.readtable(input_data_path, sn)...)
@@ -89,7 +90,7 @@ function main()
     processes = Dict()
     for i in 1:nrow(system_data["processes"])
         p = system_data["processes"][i, :]
-        processes[p.process] = AbstractModel.Process(p.process, Bool(p.is_cf), Bool(p.is_online), Bool(p.is_res), p.eff, p.conversion, p.load_min, p.load_max, p.ramp_down, p.ramp_up, p.start_cost, p.min_online, p.min_offline)
+        processes[p.process] = AbstractModel.Process(p.process, Bool(p.is_cf), Bool(p.is_online), Bool(p.is_res), p.eff, p.conversion, p.load_min, p.load_max, p.start_cost, p.min_online, p.min_offline)
         if Bool(p.is_cf)
             for s in keys(scenarios)
                 timesteps = timeseries_data["scenarios"][s]["cf"].t
@@ -109,27 +110,27 @@ function main()
             pt = system_data["process_topology"][j, :]
             if pt.process == p.process
                 if pt.source_sink == "source"
-                    push!(sources, (pt.node, pt.capacity, pt.VOM_cost))
+                    push!(sources, (pt.node, pt.capacity, pt.VOM_cost, pt.ramp_up, pt.ramp_down))
                 elseif pt.source_sink == "sink"
-                    push!(sinks, (pt.node, pt.capacity, pt.VOM_cost))
+                    push!(sinks, (pt.node, pt.capacity, pt.VOM_cost, pt.ramp_up, pt.ramp_down))
                 end
             end
         end
         if p.conversion == 1
             for so in sources
-                push!(processes[p.process].topos, AbstractModel.Topology(so[1], p.process, so[2], so[3]))
+                push!(processes[p.process].topos, AbstractModel.Topology(so[1], p.process, so[2], so[3], so[4], so[5]))
             end
             for si in sinks
-                push!(processes[p.process].topos, AbstractModel.Topology(p.process, si[1], si[2], si[3]))
+                push!(processes[p.process].topos, AbstractModel.Topology(p.process, si[1], si[2], si[3], si[4], si[5]))
             end
         elseif p.conversion == 2
             for so in sources, si in sinks
-                push!(processes[p.process].topos, AbstractModel.Topology(so[1], si[1], min(so[2], si[2]), so[3]))
+                push!(processes[p.process].topos, AbstractModel.Topology(so[1], si[1], min(so[2], si[2]), si[3], si[4], si[5]))
             end
         elseif p.conversion == 3
             for so in sources, si in sinks
-                push!(processes[p.process].topos, AbstractModel.Topology(so[1], si[1], min(so[2], si[2]), so[3]))
-                push!(processes[p.process].topos, AbstractModel.Topology(si[1], so[1], min(so[2], si[2]), si[3]))
+                push!(processes[p.process].topos, AbstractModel.Topology(so[1], si[1], min(so[2], si[2]), si[3], si[4], si[5]))
+                push!(processes[p.process].topos, AbstractModel.Topology(si[1], so[1], min(so[2], si[2]), si[3], si[4], si[5]))
             end
         end
     end
@@ -192,14 +193,17 @@ function main()
         end
     end
 
-
+    for i in 1:nrow(system_data["reserve_type"])
+        tt = system_data["reserve_type"][i,:]
+        reserve_type[tt.type] = tt.ramp_factor
+    end
 
     #-----------------------------------------------
    
     markets = Dict()
     for i in 1:nrow(system_data["markets"])
         mm = system_data["markets"][i, :]
-        markets[mm.market] = AbstractModel.Market(mm.market, mm.type, mm.node, mm.direction, mm.realisation)
+        markets[mm.market] = AbstractModel.Market(mm.market, mm.type, mm.node, mm.direction, mm.realisation, mm.reserve_type)
         #
         for s in keys(scenarios)
             timesteps = timeseries_data["scenarios"][s]["market_prices"].t
@@ -230,6 +234,7 @@ function main()
     imported_input_data["nodes"] =nodes
     imported_input_data["processes"] = processes
     imported_input_data["markets"] = markets
+    imported_input_data["reserve_type"] = reserve_type
     return imported_input_data
 end
 
