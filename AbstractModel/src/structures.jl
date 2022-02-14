@@ -51,13 +51,17 @@ struct NodeGroup <: AbstractNode
     end
 end
 
+
+
 struct Topology
     source::String
     sink::String
     capacity::Float64
     VOM_cost::Float64
-    function Topology(source, sink, capacity, VOM_cost)
-        return new(source, sink, capacity, VOM_cost)
+    ramp_up::Float64
+    ramp_down::Float64
+    function Topology(source, sink, capacity, VOM_cost, ramp_up, ramp_down)
+        return new(source, sink, capacity, VOM_cost, ramp_up, ramp_down)
     end
 end
 
@@ -71,8 +75,6 @@ struct Process <: AbstractProcess
     conversion::Integer
     load_min::Float64
     load_max::Float64
-    ramp_down::Float64
-    ramp_up::Float64
     start_cost::Float64
     min_online::Int64
     min_offline::Int64
@@ -82,8 +84,8 @@ struct Process <: AbstractProcess
     eff_ts::Vector{TimeSeries}
     eff_ops::Vector{Any}
     eff_fun::Vector{Tuple{Any,Any}}
-    function Process(name, is_cf, is_online, is_res, eff, conversion, load_min, load_max, ramp_down, ramp_up, start_cost, min_online, min_offline)
-        return new(name, is_cf, is_online, is_res, eff, conversion, load_min, load_max, ramp_down, ramp_up, start_cost, min_online, min_offline, [], [], [], [], [], [])
+    function Process(name, is_cf, is_online, is_res, eff, conversion, load_min, load_max, start_cost, min_online, min_offline)
+        return new(name, is_cf, is_online, is_res, eff, conversion, load_min, load_max, start_cost, min_online, min_offline, [], [], [], [], [], [])
     end
 end
 
@@ -102,10 +104,11 @@ struct Market
     node::Any
     direction::String
     realisation::Float64
+    reserve_type::String
     price::Vector{TimeSeries}
     fixed::Vector{Tuple{Any,Any}}
-    function Market(name, type, node, direction, realisation)
-        return new(name, type, node, direction, realisation, [], [])
+    function Market(name, type, node, direction, realisation, reserve_type)
+        return new(name, type, node, direction, realisation, reserve_type, [], [])
     end
 end
 
@@ -140,6 +143,19 @@ struct GenericConstraint
 end
 
 
+struct ReserveType
+    name::String
+    ramp_factor::Float64
+    function ReserveType(name, ramp_factor)
+        return new(name, ramp_factor)
+    end
+end
+
+
 struct Reserve
     name::String
+    node::Node
+    type::ReserveType
+    direction::String
+    realisation::Float64
 end
