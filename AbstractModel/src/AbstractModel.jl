@@ -70,55 +70,44 @@ module AbstractModel
     function setup_model(model_contents, input_data)
         create_tuples(model_contents, input_data)
         create_variables(model_contents, input_data)
-        #= setup_node_balance(model_contents, input_data)
-        setup_efficiencies(model_contents, input_data)
+        setup_node_balance(model_contents, input_data)
+        setup_process_online_balance(model_contents, input_data)
         setup_process_balance(model_contents, input_data)
-        setup_transfer_processes(model_contents, input_data)
-        setup_cf_processes(model_contents, input_data)
-        setup_ramp_rates(model_contents, input_data)
-        setup_reserves(model_contents, input_data)
-        setup_online_variables(model_contents, input_data)
-        setup_start_stop_periods(model_contents, input_data)
-        setup_objective_function(model_contents, input_data) =#
+        setup_processes_limits(model_contents, input_data)
     end
 
     function setup_node_balance(model_contents, input_data)
-         # create node state variables
         model = model_contents["model"]
-        node_state_tuple = model_contents["tuple"]["node_state_tuple"]
-        node_balance_tuple = model_contents["tuple"]["node_balance_tuple"]
         process_tuple = model_contents["tuple"]["process_tuple"]
         res_dir = model_contents["res_dir"]
+        node_state_tuple = model_contents["tuple"]["node_state_tuple"]
+        node_balance_tuple = model_contents["tuple"]["node_balance_tuple"]
         res_tuple = model_contents["tuple"]["res_tuple"]
-
+        v_state = model_contents["variable"]["v_state"]
+        v_flow = model_contents["variable"]["v_flow"]
+        vq_state_up = model_contents["variable"]["vq_state_up"]
+        vq_state_dw = model_contents["variable"]["vq_state_dw"]
+        temporals = input_data["temporals"]  
         nodes = input_data["nodes"]
         markets = input_data["markets"]
 
-
-        # Node state variable
-        v_state = @variable(model, v_state[tup in node_state_tuple] >= 0)
-        model_contents["variable"]["v_state"] = v_state
-
-        # Dummy variables for node states
-        vq_state_up = @variable(model, vq_state_up[tup in node_balance_tuple] >= 0)
-        vq_state_dw = @variable(model, vq_state_dw[tup in node_balance_tuple] >= 0)
-        model_contents["variable"]["vq_state_up"] = vq_state_up
-        model_contents["variable"]["vq_state_dw"] = vq_state_dw
-        temporals = input_data["temporals"]
-
         # Balance constraints
         # gather data in dicts, e_prod, etc, now point to a Dict()
-        e_prod = model_contents["constraint"]["e_prod"] = OrderedDict()
-        e_cons = model_contents["constraint"]["e_cons"] = OrderedDict()
-        e_state = model_contents["constraint"]["e_state"] = OrderedDict() 
+        e_prod = model_contents["expression"]["e_prod"] = OrderedDict()
+        e_cons = model_contents["expression"]["e_cons"] = OrderedDict()
+        e_state = model_contents["expression"]["e_state"] = OrderedDict() 
         
         for (i, tu) in enumerate(node_balance_tuple)
+            # tu of form (node, scenario, t)
+            # process tuple of form (process_name, source, sink, scenario, t)
             cons = filter(x -> (x[2] == tu[1] && x[4] == tu[2] && x[5] == tu[3]), process_tuple)
             prod = filter(x -> (x[3] == tu[1] && x[4] == tu[2] && x[5] == tu[3]), process_tuple)
 
             # get reserve markets for realisation
             real_up = []
             real_dw = []
+            # tu of form (node, scenario, t)
+            # res_tuple of form (res_market, node, res_dir, scenario, t)
             resu = filter(x-> x[2] == tu[1] && x[3] == res_dir[1] && x[4] == tu[2] && x[5] == tu[3],res_tuple)
             for ru in resu
                 push!(real_up,markets[ru[1]].realisation)
@@ -139,26 +128,26 @@ module AbstractModel
                 if isempty(resd)
                     cons_expr = @expression(model, -vq_state_dw[tu] + inflow_val)
                 else
-                    cons_expr = @expression(model, -vq_state_dw[tu] + inflow_val - sum(real_dw .* v_res[resd]))
+                    cons_expr = @expression(model, -vq_state_dw[tu] + inflow_val + sum(real_dw .* v_res[resd]))
                 end
             else
                 if isempty(resd)
                     cons_expr = @expression(model, -sum(v_flow[cons]) - vq_state_dw[tu] + inflow_val)
                 else
-                    cons_expr = @expression(model, -sum(v_flow[cons]) - vq_state_dw[tu] + inflow_val - sum(real_dw .* v_res[resd]))
+                    cons_expr = @expression(model, -sum(v_flow[cons]) - vq_state_dw[tu] + inflow_val + sum(real_dw .* v_res[resd]))
                 end
             end
             if isempty(prod)
                 if isempty(resu)
                     prod_expr = @expression(model, vq_state_up[tu])
                 else
-                    prod_expr = @expression(model, vq_state_up[tu] + sum(real_up .* v_res[resu]))
+                    prod_expr = @expression(model, vq_state_up[tu] - sum(real_up .* v_res[resu]))
                 end
             else
                 if isempty(resu)
                     prod_expr = @expression(model, sum(v_flow[prod]) + vq_state_up[tu])
                 else
-                    prod_expr = @expression(model, sum(v_flow[prod]) + vq_state_up[tu] + sum(real_up .* v_res[resu]))
+                    prod_expr = @expression(model, sum(v_flow[prod]) + vq_state_up[tu] - sum(real_up .* v_res[resu]))
                 end
             end
             if nodes[tu[1]].is_state
@@ -174,21 +163,246 @@ module AbstractModel
             e_prod[tu] = prod_expr
             e_cons[tu] = cons_expr
             e_state[tu] = state_expr
-
-            #push!(e_prod, prod_expr)
-            #push!(e_cons, cons_expr)
-            #push!(e_state, state_expr)
         end
+        node_bal_eq = @constraint(model, node_bal_eq[tup in node_balance_tuple], e_prod[tup] + e_cons[tup] == e_state[tup])
+        node_state_max_up = @constraint(model, node_state_max_up[tup in node_state_tuple], e_state[tup] <= nodes[tup[1]].state.in_max)
+        node_state_max_dw = @constraint(model, node_state_max_dw[tup in node_state_tuple], -e_state[tup] <= nodes[tup[1]].state.out_max)  
+        model_contents["constraint"]["node_bal_eq"] = node_bal_eq
+        model_contents["constraint"]["node_state_max_up"] = node_state_max_up
+        model_contents["constraint"]["node_state_max_dw"] = node_state_max_dw
+        for tu in node_state_tuple
+            set_upper_bound(v_state[tu], nodes[tu[1]].state.state_max)
+        end
+    end
 
+    function setup_process_online_balance(model_contents, input_data)
+        model = model_contents["model"]
+        v_start = model_contents["variable"]["v_start"]
+        v_stop = model_contents["variable"]["v_stop"]
+        v_online = model_contents["variable"]["v_online"]
+        proc_online_tuple = model_contents["tuple"]["proc_online_tuple"]
+        processes = input_data["processes"]
+        scenarios = collect(keys(input_data["scenarios"]))
+        temporals = input_data["temporals"]
 
+        # Dynamic equations for start/stop online variables
+        online_expr = model_contents["expression"]["online_expr"] = OrderedDict()
+        for (i,tup) in enumerate(proc_online_tuple)
+            if tup[3] == temporals[1]
+                # Note - initial online state is assumed 1!
+                online_expr[tup] = @expression(model,v_start[tup]-v_stop[tup]-v_online[tup]+1)
+            else
+                online_expr[tup] = @expression(model,v_start[tup]-v_stop[tup]-v_online[tup]+v_online[proc_online_tuple[i-1]])
+            end
+        end
+        online_dyn_eq =  @constraint(model,online_dyn_eq[tup in proc_online_tuple], online_expr[tup] == 0)
+        model_contents["constraint"]["online_dyn_eq"] = online_dyn_eq
+
+        # Minimum online and offline periods
+        min_online_cons = model_contents["constraint"]["min_online_con"] = OrderedDict()
+        min_offline_cons = model_contents["constraint"]["min_offline_con"] = OrderedDict()
+        for p in keys(processes)
+            if processes[p].is_online
+                min_online = processes[p].min_online
+                min_offline = processes[p].min_offline
+                for s in scenarios
+                    for t in temporals
+                        on_hours = filter(x->0<=Dates.value(convert(Dates.Hour,x-t))<=min_online,temporals)
+                        off_hours = filter(x->0<=Dates.value(convert(Dates.Hour,x-t))<=min_offline,temporals)
+                        for h in on_hours
+                            min_online_cons[(p, s, t, h)] = @constraint(model,v_online[(p,s,h)]>=v_start[(p,s,t)])
+                        end
+                        for h in off_hours
+                            min_offline_cons[(p, s, t, h)] = @constraint(model,v_online[(p,s,h)]<=(1-v_stop[(p,s,t)]))
+                        end
+                    end
+                end
+            end
+        end
     end
 
     function setup_process_balance(model_contents, input_data)
         model = model_contents["model"]
+        proc_balance_tuple = model_contents["tuple"]["proc_balance_tuple"]
         process_tuple = model_contents["tuple"]["process_tuple"]
-        v_flow = @variable(model, v_flow[tup in process_tuple] >= 0)
-        model_contents["variable"]["v_flow"] = v_flow
+        proc_op_tuple = model_contents["tuple"]["proc_op_tuple"]
+        proc_op_balance_tuple = model_contents["tuple"]["proc_op_balance_tuple"]
+        v_flow = model_contents["variable"]["v_flow"]
+        v_flow_op_out = model_contents["variable"]["v_flow_op_out"]
+        v_flow_op_in = model_contents["variable"]["v_flow_op_in"]
+        v_flow_op_bin = model_contents["variable"]["v_flow_op_bin"]
+        processes = input_data["processes"]
+
+        # Fixed efficiency case:
+        nod_eff = OrderedDict()
+        for tup in proc_balance_tuple
+            # fixed eff value
+            if isempty(processes[tup[1]].eff_ts)
+                eff = processes[tup[1]].eff
+            # timeseries based eff
+            else
+                eff = filter(x->x[1] == tup[3],filter(x->x.scenario == tup[2],processes[tup[1]].eff_ts)[1].series)[1][2]
+            end
+            sources = filter(x -> (x[1] == tup[1] && x[3] == tup[1] && x[4] == tup[2] && x[5] == tup[3]), process_tuple)
+            sinks = filter(x -> (x[1] == tup[1] && x[2] == tup[1] && x[4] == tup[2] && x[5] == tup[3]), process_tuple)
+            nod_eff[tup] = sum(v_flow[sinks]) - eff * sum(v_flow[sources])
+        end
+
+        process_bal_eq = @constraint(model, process_bal_eq[tup in proc_balance_tuple], nod_eff[tup] == 0)
+        model_contents["constraint"]["process_bal_eq"] = process_bal_eq
+
+        # Piecewise linear efficiency curve case:
+        op_min = OrderedDict()
+        op_max = OrderedDict()
+        op_eff = OrderedDict()
+
+        for tup in proc_op_balance_tuple
+            p = tup[1]
+            cap = sum(map(x->x.capacity,filter(x->x.source == p,processes[p].topos)))
+
+            i = parse(Int64,replace(tup[4], "op"=>""))# Clunky solution, how to improve?
+            if i == 1 
+                op_min[tup] = 0.0
+            else
+                op_min[tup] = processes[p].eff_fun[i-1][1]*cap
+            end
+            op_max[tup] = processes[p].eff_fun[i][1]*cap
+            op_eff[tup] = processes[p].eff_fun[i][2]
+        end
+
+        flow_op_out_sum = @constraint(model,flow_op_out_sum[tup in proc_op_tuple],sum(v_flow_op_out[filter(x->x[1:3]==tup,proc_op_balance_tuple)]) == sum(v_flow[filter(x->x[2]==tup[1] && x[4] == tup[2] && x[5] == tup[3],process_tuple)]))
+        flow_op_in_sum = @constraint(model,flow_op_in_sum[tup in proc_op_tuple],sum(v_flow_op_in[filter(x->x[1:3]==tup,proc_op_balance_tuple)]) == sum(v_flow[filter(x->x[3]==tup[1] && x[4] == tup[2] && x[5] == tup[3],process_tuple)]))
+        model_contents["constraint"]["flow_op_out_sum"] = flow_op_out_sum
+        model_contents["constraint"]["flow_op_in_sum"] = flow_op_in_sum
+
+        flow_op_lo = @constraint(model,flow_op_lo[tup in proc_op_balance_tuple], v_flow_op_out[tup] >= v_flow_op_bin[tup] .* op_min[tup])
+        flow_op_up = @constraint(model,flow_op_up[tup in proc_op_balance_tuple], v_flow_op_out[tup] <= v_flow_op_bin[tup] .* op_max[tup])
+        flow_op_ef = @constraint(model,flow_op_ef[tup in proc_op_balance_tuple], v_flow_op_out[tup] == op_eff[tup] .* v_flow_op_in[tup])
+        flow_bin = @constraint(model,flow_bin[tup in proc_op_tuple], sum(v_flow_op_bin[filter(x->x[1:3] == tup, proc_op_balance_tuple)]) == 1)
+        model_contents["constraint"]["flow_op_lo"] = flow_op_lo
+        model_contents["constraint"]["flow_op_up"] = flow_op_up
+        model_contents["constraint"]["flow_op_ef"] = flow_op_ef
+        model_contents["constraint"]["flow_bin"] = flow_bin
+
     end
+
+    function setup_cf_processes(model_contents, input_data)
+        model = model_contents["model"]
+        processes = input_data["processes"]
+        cf_balance_tuple = model_contents["tuple"]["cf_balance_tuple"]
+        v_flow = model_contents["variable"]["v_flow"]
+
+        cf_fac_fix = model_contents["expression"]["cf_fac_fix"] = OrderedDict()
+        cf_fac_up = model_contents["expression"]["cf_fac_up"] = OrderedDict()
+        for tup in cf_balance_tuple
+            cf_val = filter(x->x[1] ==  tup[5], filter(x->x.scenario == tup[4],processes[tup[1]].cf)[1].series)[1][2]
+            cap = filter(x -> (x.sink == tup[3]), processes[tup[1]].topos)[1].capacity
+            if processes[tup[1]].is_cf_fix
+                cf_fac_fix[tup] = @expression(model, sum(v_flow[tup]) - cf_val * cap)
+            else
+                cf_fac_up[tup] = @expression(model, sum(v_flow[tup]) - cf_val * cap)
+            end
+        end
+
+        cf_fix_bal_eq = @constraint(model, cf_fix_bal_eq[tup in collect(keys(cf_fac_fix))], cf_fac_fix[tup] == 0)
+        cf_up_bal_eq = @constraint(model, cf_up_bal_eq[tup in collect(keys(cf_fac_up))], cf_fac_up[tup] <= 0)
+        model_contents["constraint"]["cf_fix_bal_eq"] = cf_fix_bal_eq
+        model_contents["constraint"]["cf_up_bal_eq"] = cf_up_bal_eq
+    end
+
+    function setup_processes_limits(model_contents, input_data)
+        model = model_contents["model"]
+        trans_tuple = model_contents["tuple"]["trans_tuple"]
+        lim_tuple = model_contents["tuple"]["lim_tuple"]
+        cf_balance_tuple = model_contents["tuple"]["cf_balance_tuple"]
+        res_pot_cons_tuple = model_contents["tuple"]["res_pot_cons_tuple"]
+        res_pot_prod_tuple = model_contents["tuple"]["res_pot_prod_tuple"]
+        v_flow = model_contents["variable"]["v_flow"]
+        v_reserve = model_contents["variable"]["v_reserve"]
+        v_online = model_contents["variable"]["v_online"]
+        processes = input_data["processes"]
+        res_typ = collect(keys(input_data["reserve_type"]))
+        res_dir = model_contents["res_dir"]
+
+        # Transport processes
+        for tup in trans_tuple
+            set_upper_bound(v_flow[tup], filter(x -> x.sink == tup[3], processes[tup[1]].topos)[1].capacity)
+        end
+
+        # cf processes
+        cf_fac_fix = model_contents["expression"]["cf_fac_fix"] = OrderedDict()
+        cf_fac_up = model_contents["expression"]["cf_fac_up"] = OrderedDict()
+        for tup in cf_balance_tuple
+            cf_val = filter(x->x[1] ==  tup[5], filter(x->x.scenario == tup[4],processes[tup[1]].cf)[1].series)[1][2]
+            cap = filter(x -> (x.sink == tup[3]), processes[tup[1]].topos)[1].capacity
+            if processes[tup[1]].is_cf_fix
+                cf_fac_fix[tup] = @expression(model, sum(v_flow[tup]) - cf_val * cap)
+            else
+                cf_fac_up[tup] = @expression(model, sum(v_flow[tup]) - cf_val * cap)
+            end
+        end
+
+        cf_fix_bal_eq = @constraint(model, cf_fix_bal_eq[tup in collect(keys(cf_fac_fix))], cf_fac_fix[tup] == 0)
+        cf_up_bal_eq = @constraint(model, cf_up_bal_eq[tup in collect(keys(cf_fac_up))], cf_fac_up[tup] <= 0)
+        model_contents["constraint"]["cf_fix_bal_eq"] = cf_fix_bal_eq
+        model_contents["constraint"]["cf_up_bal_eq"] = cf_up_bal_eq
+
+        # Other
+        p_online = filter(x -> processes[x[1]].is_online, lim_tuple)
+        p_offline = filter(x -> !(processes[x[1]].is_online), lim_tuple)
+        p_reserve_cons = filter(x -> (res_dir[1], res_typ[1], x...) in res_pot_cons_tuple, lim_tuple)
+        p_reserve_prod = filter(x -> (res_dir[1], res_typ[1], x...) in res_pot_prod_tuple, lim_tuple)
+        p_noreserve = filter(x -> !(x in p_reserve_cons) && !(x in p_reserve_cons), lim_tuple)
+        p_all = filter(x -> x in p_online || x in p_reserve_cons || x in p_reserve_prod, lim_tuple)
+
+        # Base expressions as Dict:
+        e_lim_max = model_contents["expression"]["e_lim_max"] = OrderedDict()
+        e_lim_min = model_contents["expression"]["e_lim_min"] = OrderedDict()
+        
+        for tup in lim_tuple
+            e_lim_max[tup] = AffExpr(0.0)
+            e_lim_min[tup] = AffExpr(0.0)
+        end
+
+        for tup in p_reserve_prod
+            res_up_tup = filter(x->x[1] == "res_up" && x[3:end] == tup,res_pot_prod_tuple)
+            add_to_expression!(e_lim_max[tup], sum(v_reserve[(res_up_tup)]))
+            res_down_tup = filter(x->x[1] == "res_down" && x[3:end] == tup,res_pot_prod_tuple)
+            add_to_expression!(e_lim_min[tup], -sum(v_reserve[(res_down_tup)]))
+        end
+    
+        for tup in p_reserve_cons
+            res_up_tup = filter(x->x[1] == "res_down" && x[3:end] == tup,res_pot_cons_tuple)
+            add_to_expression!(e_lim_max[tup], sum(v_reserve[(res_up_tup)]))
+            res_down_tup = filter(x->x[1] == "res_up" && x[3:end] == tup,res_pot_cons_tuple)
+            add_to_expression!(e_lim_min[tup], -sum(v_reserve[(res_down_tup)]))
+        end
+    
+        for tup in p_online
+            cap = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1].capacity
+            add_to_expression!(e_lim_max[tup], -processes[tup[1]].load_max * cap * v_online[(tup[1], tup[4], tup[5])])
+            add_to_expression!(e_lim_min[tup], -processes[tup[1]].load_min * cap * v_online[(tup[1], tup[4], tup[5])])
+        end
+    
+        for tup in p_offline
+            cap = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1].capacity
+            if tup in p_reserve_prod || tup in p_reserve_cons
+                add_to_expression!(e_lim_max[tup], -cap)
+            else
+                set_upper_bound(v_flow[tup], cap)
+            end
+        end
+    
+        con_max_tuples = filter(x -> !(e_lim_max[x] == AffExpr(0)), keys(e_lim_max))
+        con_min_tuples = filter(x -> !(e_lim_min[x] == AffExpr(0)), keys(e_lim_min))
+    
+        max_eq = @constraint(model, max_eq[tup in con_max_tuples], v_flow[tup] + e_lim_max[tup] <= 0)
+        min_eq = @constraint(model, min_eq[tup in con_min_tuples], v_flow[tup] + e_lim_min[tup] >= 0)
+        model_contents["constraint"]["max_eq"] = max_eq
+        model_contents["constraint"]["min_eq"] = min_eq
+    end
+
+
 
     function create_variables(model_contents, input_data)
         create_v_flow(model_contents)
@@ -251,7 +465,7 @@ module AbstractModel
         # Dummy variables for node_states
         vq_state_up = @variable(model, vq_state_up[tup in node_balance_tuple] >= 0)
         vq_state_dw = @variable(model, vq_state_dw[tup in node_balance_tuple] >= 0)
-        model_contents["variable"]["vq_state_up_res"] = vq_state_up
+        model_contents["variable"]["vq_state_up"] = vq_state_up
         model_contents["variable"]["vq_state_dw"] = vq_state_dw
     end
 
@@ -357,7 +571,7 @@ module AbstractModel
         processes = input_data["processes"]
         scenarios = collect(keys(input_data["scenarios"]))
         temporals = input_data["temporals"]
-        for p in keys(processes), s in keys(scenarios), t in temporals
+        for p in keys(processes), s in scenarios, t in temporals
             for topo in processes[p].topos
                 push!(process_tuple, (p, topo.source, topo.sink, s, t))
             end
@@ -383,15 +597,15 @@ module AbstractModel
     function create_res_pot_prod_tuple(model_contents, input_data)
         res_nodes_tuple = model_contents["tuple"]["res_nodes_tuple"]
         res_potential_tuple = model_contents["tuple"]["res_potential_tuple"]
-        res_pot_prod_tuple = filter(x -> x[4] in res_nodes_tuple, res_potential_tuple)
+        res_pot_prod_tuple = filter(x -> x[5] in res_nodes_tuple, res_potential_tuple)
         model_contents["tuple"]["res_pot_prod_tuple"] = res_pot_prod_tuple
     end
 
     function create_res_pot_cons_tuple(model_contents, input_data)
         res_nodes_tuple = model_contents["tuple"]["res_nodes_tuple"]
         res_potential_tuple = model_contents["tuple"]["res_potential_tuple"]
-        res_pot_cons_tuple = filter(x -> x[3] in res_nodes_tuple, res_potential_tuple)
-        model_contents["tuple"]["res_pot_prod_tuple"] = res_pot_cons_tuple
+        res_pot_cons_tuple = filter(x -> x[4] in res_nodes_tuple, res_potential_tuple)
+        model_contents["tuple"]["res_pot_cons_tuple"] = res_pot_cons_tuple
     end
 
     function create_node_state_tuple(model_contents, input_data)
@@ -430,11 +644,12 @@ module AbstractModel
         scenarios = collect(keys(input_data["scenarios"]))
         temporals = input_data["temporals"]
         res_nodes_tuple = model_contents["tuple"]["res_nodes_tuple"]
-        for p in keys(processes), s in keys(scenarios), t in temporals
+        res_typ = collect(keys(input_data["reserve_type"]))
+        for p in keys(processes), s in scenarios, t in temporals
             for topo in processes[p].topos
                 if (topo.source in res_nodes_tuple|| topo.sink in res_nodes_tuple) && processes[p].is_res
-                    for r in model_contents["res_dir"]
-                        push!(res_potential_tuple, (r, p, topo.source, topo.sink, s, t))
+                    for r in model_contents["res_dir"], rt in res_typ
+                        push!(res_potential_tuple, (r, rt, p, topo.source, topo.sink, s, t))
                     end
                 end
             end
@@ -449,11 +664,12 @@ module AbstractModel
         scenarios = collect(keys(input_data["scenarios"]))
         temporals = input_data["temporals"]
         res_nodes_tuple = model_contents["tuple"]["res_nodes_tuple"]
-        for p in keys(processes), s in keys(scenarios), t in temporals
+        res_typ = collect(keys(input_data["reserve_type"]))
+        for p in keys(processes), s in scenarios, t in temporals
             for topo in processes[p].topos
                 if (topo.source in res_nodes_tuple|| topo.sink in res_nodes_tuple) && processes[p].is_res
-                    for r in res_dir
-                        push!(res_potential_tuple, (r, p, topo.source, topo.sink, s, t))
+                    for r in res_dir, rt in res_typ
+                        push!(res_potential_tuple, (r, rt, p, topo.source, topo.sink, s, t))
                     end
                 end
             end
@@ -469,7 +685,7 @@ module AbstractModel
         for p in keys(processes)
             if processes[p].conversion == 1 && !processes[p].is_cf
                 if isempty(processes[p].eff_fun)
-                    for s in keys(scenarios), t in temporals
+                    for s in scenarios, t in temporals
                         push!(proc_balance_tuple, (p, s, t))
                     end
                 end
@@ -486,7 +702,7 @@ module AbstractModel
         for p in keys(processes)
             if processes[p].conversion == 1 && !processes[p].is_cf
                 if !isempty(processes[p].eff_fun)
-                    for s in keys(scenarios), t in temporals, o in processes[p].eff_ops
+                    for s in scenarios, t in temporals, o in processes[p].eff_ops
                         push!(proc_op_balance_tuple, (p, s, t, o))
                     end
                 end
@@ -510,7 +726,7 @@ module AbstractModel
         for p in keys(processes) 
             if !isempty(processes[p].eff_fun)
                 cap = sum(map(x->x.capacity,filter(x->x.source == p,processes[p].topos)))
-                for s in keys(scenarios), t in temporals
+                for s in scenarios, t in temporals
                     for i in 1:length(processes[p].eff_ops)
                         if i==1
                             push!(op_min_tuple,0.0)
@@ -561,7 +777,7 @@ module AbstractModel
                 push!(trans_tuple, filter(x -> x[1] == p, process_tuple)...)
             end
         end
-        model_contents["tuple"]["lim_tuple"] = trans_tuple
+        model_contents["tuple"]["trans_tuple"] = trans_tuple
     end
 
     function create_res_eq_tuple(model_contents, input_data)

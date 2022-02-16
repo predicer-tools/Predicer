@@ -90,7 +90,7 @@ function main()
     processes = Dict()
     for i in 1:nrow(system_data["processes"])
         p = system_data["processes"][i, :]
-        processes[p.process] = AbstractModel.Process(p.process, Bool(p.is_cf), Bool(p.is_online), Bool(p.is_res), p.eff, p.conversion, p.load_min, p.load_max, p.start_cost, p.min_online, p.min_offline)
+        processes[p.process] = AbstractModel.Process(p.process, Bool(p.is_cf), Bool(p.is_cf_fix), Bool(p.is_online), Bool(p.is_res), p.eff, p.conversion, p.load_min, p.load_max, p.start_cost, p.min_online, p.min_offline)
         if Bool(p.is_cf)
             for s in keys(scenarios)
                 timesteps = timeseries_data["scenarios"][s]["cf"].t
