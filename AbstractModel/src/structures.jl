@@ -69,6 +69,7 @@ end
 struct Process <: AbstractProcess
     name::String
     is_cf::Bool
+    is_cf_fix::Bool
     is_online::Bool
     is_res::Bool
     eff::Float64
@@ -84,8 +85,8 @@ struct Process <: AbstractProcess
     eff_ts::Vector{TimeSeries}
     eff_ops::Vector{Any}
     eff_fun::Vector{Tuple{Any,Any}}
-    function Process(name, is_cf, is_online, is_res, eff, conversion, load_min, load_max, start_cost, min_online, min_offline)
-        return new(name, is_cf, is_online, is_res, eff, conversion, load_min, load_max, start_cost, min_online, min_offline, [], [], [], [], [], [])
+    function Process(name, is_cf, is_cf_fix, is_online, is_res, eff, conversion, load_min, load_max, start_cost, min_online, min_offline)
+        return new(name, is_cf, is_cf_fix, is_online, is_res, eff, conversion, load_min, load_max, start_cost, min_online, min_offline, [], [], [], [], [], [])
     end
 end
 
