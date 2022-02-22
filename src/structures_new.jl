@@ -111,6 +111,28 @@ struct Market
     end
 end
 
+struct ConFactor
+    flow::Tuple{Any,Any}
+    data::Vector{TimeSeries}
+    function ConFactor(flow,data)
+        return new(flow,data)
+    end
+end
+
+struct GenConstraint
+    name::String
+    type::String
+    factors::Vector{ConFactor}
+    constant::Vector{TimeSeries}
+    function GenConstraint(name,type)
+        return new(name,type,[],[])
+    end
+end
+
+
+
+
+
 
 #Define acceptable data types. Will be extended in the future. 
 gcu = Union{Process, TimeSeries, Real, AbstractExpr}

@@ -35,6 +35,7 @@ function run_model()
     markets = imported_data[5]
     op_effs = imported_data[6]
     reserve_types = imported_data[7]
+    gen_constraints = imported_data[8]
 
 
     println("Importing more data...")
@@ -183,26 +184,26 @@ function run_model()
             if isempty(resd)
                 cons_expr = @expression(model, -vq_state_dw[tu] + inflow_val)
             else
-                cons_expr = @expression(model, -vq_state_dw[tu] + inflow_val - sum(real_dw .* v_res[resd]))
+                cons_expr = @expression(model, -vq_state_dw[tu] + inflow_val + sum(real_dw .* v_res[resd]))
             end
         else
             if isempty(resd)
                 cons_expr = @expression(model, -sum(v_flow[cons]) - vq_state_dw[tu] + inflow_val)
             else
-                cons_expr = @expression(model, -sum(v_flow[cons]) - vq_state_dw[tu] + inflow_val - sum(real_dw .* v_res[resd]))
+                cons_expr = @expression(model, -sum(v_flow[cons]) - vq_state_dw[tu] + inflow_val + sum(real_dw .* v_res[resd]))
             end
         end
         if isempty(prod)
             if isempty(resu)
                 prod_expr = @expression(model, vq_state_up[tu])
             else
-                prod_expr = @expression(model, vq_state_up[tu] + sum(real_up .* v_res[resu]))
+                prod_expr = @expression(model, vq_state_up[tu] - sum(real_up .* v_res[resu]))
             end
         else
             if isempty(resu)
                 prod_expr = @expression(model, sum(v_flow[prod]) + vq_state_up[tu])
             else
-                prod_expr = @expression(model, sum(v_flow[prod]) + vq_state_up[tu] + sum(real_up .* v_res[resu]))
+                prod_expr = @expression(model, sum(v_flow[prod]) + vq_state_up[tu] - sum(real_up .* v_res[resu]))
             end
         end
 
@@ -422,7 +423,7 @@ function run_model()
     res_eq_updn_tuple = []
     for n in res_nodes, r in res_typ, s in scenarios, t in temporals
         res_pot_u = filter(x -> x[1] == res_dir[1] && x[2] == r && x[6] == s && x[7] == t && (x[4] == n || x[5] == n), res_potential_tuple)
-        res_pot_d = filter(x -> x[1] == res_dir[2] && x[2] == r && x[6] == s && x[7] == t && (x[4] == n || x[3] == n), res_potential_tuple)
+        res_pot_d = filter(x -> x[1] == res_dir[2] && x[2] == r && x[6] == s && x[7] == t && (x[4] == n || x[5] == n), res_potential_tuple)
 
         res_u = filter(x -> x[3] == res_dir[1] && markets[x[1]].reserve_type == r && x[4] == s && x[5] == t && x[2] == n, res_tuple)
         res_d = filter(x -> x[3] == res_dir[2] && markets[x[1]].reserve_type == r && x[4] == s && x[5] == t && x[2] == n, res_tuple)
@@ -481,7 +482,7 @@ function run_model()
 
     for tup in res_final_tuple
         r_tup = filter(x -> x[1] == tup[1] && x[4] == tup[2] && x[5] == tup[3], res_tuple)
-        model_contents["c"]["reserve_final_eq"][tup] = @constraint(model, sum(v_res[r_tup]) .* (tup[1] == "fcr_n" ? 0.5 : 1.0) .== v_res_final[tup])
+        model_contents["c"]["reserve_final_eq"][tup] = @constraint(model, sum(v_res[r_tup]) .* (markets[tup[1]].direction == "up_down" ? 0.5 : 1.0) .== v_res_final[tup])
 
     end
 
@@ -504,7 +505,8 @@ function run_model()
             #Commodity costs:
             if nodes[n].is_commodity
                 push!(cost_tup[s], filter(x -> x[2] == n && x[4] == s, process_tuple)...)
-                push!(cost_vec[s], map(x -> x[2], filter(x->x.scenario == s,nodes[n].cost)[1].series)...)
+                procs_in_comm = unique(map(x->x[1],filter(x -> x[2] == n && x[4] == s, process_tuple)))
+                push!(cost_vec[s], repeat(map(x -> x[2], filter(x->x.scenario == s,nodes[n].cost)[1].series),length(procs_in_comm))...)
             end
             # Spot-Market costs and profits
             if nodes[n].is_market
@@ -670,6 +672,9 @@ function run_model()
                             push!(ramp_expr_up,@expression(model,+ramp_up_cap+start_cap*v_start[(tup[1],tup[4],tup[5])]))
                             push!(ramp_expr_down,@expression(model,-ramp_dw_cap-stop_cap*v_stop[(tup[1],tup[4],tup[5])]))
                         end
+                    else
+                        push!(ramp_expr_up,@expression(model,+ramp_up_cap+start_cap*v_start[(tup[1],tup[4],tup[5])]))
+                        push!(ramp_expr_down,@expression(model,-ramp_dw_cap-stop_cap*v_stop[(tup[1],tup[4],tup[5])]))
                     end
                 else
                     if processes[tup[1]].is_res
@@ -683,6 +688,9 @@ function run_model()
                             push!(ramp_expr_up,@expression(model,+ramp_up_cap))
                             push!(ramp_expr_down,@expression(model,-ramp_dw_cap))
                         end
+                    else
+                        push!(ramp_expr_up,@expression(model,+ramp_up_cap))
+                        push!(ramp_expr_down,@expression(model,-ramp_dw_cap))
                     end
                 end
             end
@@ -692,6 +700,33 @@ function run_model()
     @constraint(model,ramp_up_eq[(i,tup) in enumerate(ramp_tuple)],v_flow[tup]-v_flow[process_tuple[findall(x->x==tup,process_tuple)[1]-1]]<=ramp_expr_up[i])
     @constraint(model,ramp_down_eq[(i,tup) in enumerate(ramp_tuple)],v_flow[tup]-v_flow[process_tuple[findall(x->x==tup,process_tuple)[1]-1]]>=ramp_expr_down[i])
    
+    # General constraints
+    #---------------------------------------------------------------------------------------------------
+    const_expr = Dict()
+    const_dict = Dict()
+    for c in keys(gen_constraints)
+        const_expr[c] = Dict((s,t) => AffExpr(0.0) for s in scenarios, t in temporals)
+        facs = gen_constraints[c].factors
+        consta = gen_constraints[c].constant
+        eq_dir = gen_constraints[c].type
+        for s in scenarios, t in temporals
+            add_to_expression!(const_expr[c][(s,t)],filter(x->x[1] == t,filter(x->x.scenario == s,consta)[1].series)[1][2])
+
+            for f in facs
+                p_flow = f.flow
+                tup = filter(x->x[1]==p_flow[1] && (x[2]==p_flow[2] || x[3]==p_flow[2]) && x[4]==s && x[5]==t,process_tuple)[1]
+                fac_data = filter(x->x[1] == t,filter(x->x.scenario == s,f.data)[1].series)[1][2]
+                add_to_expression!(const_expr[c][(s,t)],fac_data,v_flow[tup])
+            end
+        end
+        if eq_dir == "eq"
+            const_dict[c] = @constraint(model,[s in scenarios,t in temporals],const_expr[c][(s,t)]==0.0)
+        elseif eq_dir == "gt"
+            const_dict[c] = @constraint(model,[s in scenarios,t in temporals],const_expr[c][(s,t)]>=0.0)
+        else
+            const_dict[c] = @constraint(model,[s in scenarios,t in temporals],const_expr[c][(s,t)]<=0.0)
+        end
+    end
 
     # Objective function (commodity + market + VOM + start costs)
     #----------------------------------------------------------------------------------------------------
