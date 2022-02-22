@@ -14,7 +14,6 @@ function main()
     timeseries_data = Dict()
     timeseries_data["scenarios"] = Dict()
 
-
     scenarios = Dict()
     reserve_type = Dict()
 
@@ -26,11 +25,15 @@ function main()
         timeseries_data[sn] = DataFrame(XLSX.readtable(input_data_path, sn)...)
     end
 
-    fixed_data = DataFrame(XLSX.readtable(input_data_path, "fixed_ts")...)    
+    fixed_data = DataFrame(XLSX.readtable(input_data_path, "fixed_ts")...)
+    constraint_data = DataFrame(XLSX.readtable(input_data_path, "gen_constraint")...) 
+    constraint_type = DataFrame(XLSX.readtable(input_data_path, "constraints")...)
+    gen_constraints = Dict()
 
     for i in 1:nrow(system_data["scenarios"])
         scenarios[system_data["scenarios"][i,1]] = system_data["scenarios"][i,2]
     end
+
 
     for k in keys(timeseries_data)
         if k!="scenarios"
@@ -198,8 +201,46 @@ function main()
         end
     end
 
+    for i in 1:nrow(constraint_type)
+        con = constraint_type[i,1]
+        con_dir = constraint_type[i,2]
+        gen_constraints[con] = GenConstraint(con,con_dir)
+    end
 
-    return (unique(dates), scenarios, nodes, processes, markets, op_eff, reserve_type)
+    con_vecs = Dict()
+    for n in names(constraint_data)
+        timesteps = constraint_data.t
+        if n != "t"
+            col = split(n,",")
+            constr = col[1]
+            scen = col[end]
+            data = constraint_data[!,n]
+            ts = TimeSeries(scen)
+            for i in 1:length(timesteps)
+                push!(ts.series,(timesteps[i],data[i]))
+            end
+            if length(col) == 4
+                tup = (col[1],col[2],col[3])
+                if tup in keys(con_vecs)
+                    push!(con_vecs[tup],ts)
+                else
+                    con_vecs[tup] = []
+                    push!(con_vecs[tup],ts)
+                end
+            else
+                push!(gen_constraints[constr].constant,ts)
+            end
+        end
+    end
+
+    for k in keys(con_vecs)
+        con_fac = ConFactor((k[2],k[3]),con_vecs[k])
+        push!(gen_constraints[k[1]].factors,con_fac)
+    end
+
+
+
+    return (unique(dates), scenarios, nodes, processes, markets, op_eff, reserve_type, gen_constraints)
 end
 
 
