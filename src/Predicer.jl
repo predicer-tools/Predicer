@@ -4,6 +4,8 @@ module Predicer
     export get_data
     export test_AM2
     export export_model_contents_dict
+    export init_model
+    export solve_model
 
     function run_AbstractModel(d)
         return AbstractModel.run_AM(d)
@@ -13,8 +15,11 @@ module Predicer
         return include(".\\src\\import_input_data.jl")()
     end
 
-    function export_model_contents_dict(mc)
-        return AbstractModel.export_model_contents(mc)
+    function export_model_contents_dict(mc, results=false)
+        AbstractModel.export_model_contents(mc, false)
+        if results
+            AbstractModel.export_model_contents(mc, results)
+        end
     end
 
     function init_model()
@@ -22,6 +27,10 @@ module Predicer
         imported_data = include(".\\src\\import_input_data.jl")()
         model_contents = AbstractModel.Initialize(imported_data)
         return model_contents
+    end
+
+    function solve_model(model_contents)
+        return AbstractModel.solve_model(model_contents)
     end
     
 end # module

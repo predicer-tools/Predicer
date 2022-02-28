@@ -4,8 +4,6 @@ module AbstractModel
     using JuMP
     using Cbc
     using DataFrames
-    using StatsPlots
-    using Plots
     using TimeZones
     using Dates
     using DataStructures
@@ -21,11 +19,10 @@ module AbstractModel
     end
 
     export Initialize
-    #export solve_model
+    export solve_model
     #export set_generic_constraints
 
     # For debugging
-    export create_tuples
     export export_model_contents
 
     # Function used to setup model based on the given input data. This function 
@@ -41,7 +38,8 @@ module AbstractModel
     end
 
     # Function to run the model built based on the given input data. 
-    function solve_model(model, save_results)
+    function solve_model(model_contents)
+        model = model_contents["model"]
         optimize!(model)
     end
 
@@ -57,10 +55,10 @@ module AbstractModel
     function Initialize_contents()
         model_contents = OrderedDict()
         model_contents["constraint"] = OrderedDict() #constraints
-        model_contents["genericconstraint"] = OrderedDict() #GenericConstraints
         model_contents["expression"] = OrderedDict() #expressions?
         model_contents["variable"] = OrderedDict() #variables?
         model_contents["tuple"] = OrderedDict() #tuples used by variables?
+        model_contents["genericconstraint"] = OrderedDict() #GenericConstraints
         model_contents["res_dir"] = ["res_up", "res_down"]
         return model_contents
     end
@@ -74,6 +72,12 @@ module AbstractModel
         setup_process_online_balance(model_contents, input_data)
         setup_process_balance(model_contents, input_data)
         setup_processes_limits(model_contents, input_data)
+        setup_reserve_balances(model_contents, input_data)
+        setup_ramp_constraints(model_contents, input_data)
+        setup_fixed_values(model_contents, input_data)
+        setup_bidding_constraints(model_contents, input_data)
+        setup_cost_calculations(model_contents, input_data)
+        setup_objective_function(model_contents, input_data)
     end
 
     function setup_node_balance(model_contents, input_data)
@@ -199,8 +203,10 @@ module AbstractModel
         model_contents["constraint"]["online_dyn_eq"] = online_dyn_eq
 
         # Minimum online and offline periods
-        min_online_cons = model_contents["constraint"]["min_online_con"] = OrderedDict()
-        min_offline_cons = model_contents["constraint"]["min_offline_con"] = OrderedDict()
+        min_online_rhs = OrderedDict()
+        min_online_lhs = OrderedDict()
+        min_offline_rhs = OrderedDict()
+        min_offline_lhs = OrderedDict()
         for p in keys(processes)
             if processes[p].is_online
                 min_online = processes[p].min_online
@@ -210,15 +216,24 @@ module AbstractModel
                         on_hours = filter(x->0<=Dates.value(convert(Dates.Hour,x-t))<=min_online,temporals)
                         off_hours = filter(x->0<=Dates.value(convert(Dates.Hour,x-t))<=min_offline,temporals)
                         for h in on_hours
-                            min_online_cons[(p, s, t, h)] = @constraint(model,v_online[(p,s,h)]>=v_start[(p,s,t)])
+                            min_online_rhs[(p, s, t, h)] = v_start[(p,s,t)]
+                            min_online_lhs[(p, s, t, h)] = v_online[(p,s,h)]
                         end
                         for h in off_hours
-                            min_offline_cons[(p, s, t, h)] = @constraint(model,v_online[(p,s,h)]<=(1-v_stop[(p,s,t)]))
+                            min_offline_rhs[(p, s, t, h)] = (1-v_stop[(p,s,t)])
+                            min_offline_lhs[(p, s, t, h)] = v_online[(p,s,h)]
                         end
                     end
                 end
             end
         end
+
+        min_online_con = @constraint(model, min_online_con[tup in keys(min_online_lhs)], min_online_lhs[tup] >= min_online_rhs[tup])
+        min_offline_con = @constraint(model, min_offline_con[tup in keys(min_offline_lhs)], min_offline_lhs[tup] <= min_offline_rhs[tup])
+
+        model_contents["constraint"]["min_online_con"] = min_online_con
+        model_contents["constraint"]["min_offline_con"] = min_offline_con
+
     end
 
     function setup_process_balance(model_contents, input_data)
@@ -228,6 +243,9 @@ module AbstractModel
         proc_op_tuple = model_contents["tuple"]["proc_op_tuple"]
         proc_op_balance_tuple = model_contents["tuple"]["proc_op_balance_tuple"]
         v_flow = model_contents["variable"]["v_flow"]
+        #vq_flow_up = model_contents["variable"]["vq_flow_up"]
+        #vq_flow_down = model_contents["variable"]["vq_flow_down"]
+
         v_flow_op_out = model_contents["variable"]["v_flow_op_out"]
         v_flow_op_in = model_contents["variable"]["v_flow_op_in"]
         v_flow_op_bin = model_contents["variable"]["v_flow_op_bin"]
@@ -284,30 +302,6 @@ module AbstractModel
         model_contents["constraint"]["flow_op_ef"] = flow_op_ef
         model_contents["constraint"]["flow_bin"] = flow_bin
 
-    end
-
-    function setup_cf_processes(model_contents, input_data)
-        model = model_contents["model"]
-        processes = input_data["processes"]
-        cf_balance_tuple = model_contents["tuple"]["cf_balance_tuple"]
-        v_flow = model_contents["variable"]["v_flow"]
-
-        cf_fac_fix = model_contents["expression"]["cf_fac_fix"] = OrderedDict()
-        cf_fac_up = model_contents["expression"]["cf_fac_up"] = OrderedDict()
-        for tup in cf_balance_tuple
-            cf_val = filter(x->x[1] ==  tup[5], filter(x->x.scenario == tup[4],processes[tup[1]].cf)[1].series)[1][2]
-            cap = filter(x -> (x.sink == tup[3]), processes[tup[1]].topos)[1].capacity
-            if processes[tup[1]].is_cf_fix
-                cf_fac_fix[tup] = @expression(model, sum(v_flow[tup]) - cf_val * cap)
-            else
-                cf_fac_up[tup] = @expression(model, sum(v_flow[tup]) - cf_val * cap)
-            end
-        end
-
-        cf_fix_bal_eq = @constraint(model, cf_fix_bal_eq[tup in collect(keys(cf_fac_fix))], cf_fac_fix[tup] == 0)
-        cf_up_bal_eq = @constraint(model, cf_up_bal_eq[tup in collect(keys(cf_fac_up))], cf_fac_up[tup] <= 0)
-        model_contents["constraint"]["cf_fix_bal_eq"] = cf_fix_bal_eq
-        model_contents["constraint"]["cf_up_bal_eq"] = cf_up_bal_eq
     end
 
     function setup_processes_limits(model_contents, input_data)
@@ -402,7 +396,349 @@ module AbstractModel
         model_contents["constraint"]["min_eq"] = min_eq
     end
 
+    function setup_reserve_balances(model_contents, input_data)
+        model = model_contents["model"]
+        res_eq_tuple = model_contents["tuple"]["res_eq_tuple"]
+        res_eq_updn_tuple = model_contents["tuple"]["res_eq_updn_tuple"]
+        res_potential_tuple = model_contents["tuple"]["res_potential_tuple"]
+        res_tuple = model_contents["tuple"]["res_tuple"]
+        res_final_tuple = model_contents["tuple"]["res_final_tuple"]
+        res_nodes_tuple = model_contents["tuple"]["res_nodes_tuple"]
+        res_typ = collect(keys(input_data["reserve_type"]))
+        res_dir = model_contents["res_dir"]
+        scenarios = collect(keys(input_data["scenarios"]))
+        temporals = input_data["temporals"]
+        markets = input_data["markets"]
+        v_reserve = model_contents["variable"]["v_reserve"]
+        v_res = model_contents["variable"]["v_res"]
+        v_res_final = model_contents["variable"]["v_res_final"]
 
+        # Reserve balances (from reserve potential to reserve product):
+        e_res_bal_up = model_contents["expression"]["e_res_bal_up"] = OrderedDict()
+        e_res_bal_dn = model_contents["expression"]["e_res_bal_up"] = OrderedDict()
+        for n in res_nodes_tuple, r in res_typ, s in scenarios, t in temporals
+            tup = (n, r, s, t) # same as res_eq_tuple
+            e_res_bal_up[tup] = AffExpr(0.0)
+            e_res_bal_dn[tup] = AffExpr(0.0)
+
+            res_pot_u = filter(x -> x[1] == res_dir[1] && x[2] == r && x[6] == s && x[7] == t && (x[4] == n || x[5] == n), res_potential_tuple)
+            res_pot_d = filter(x -> x[1] == res_dir[2] && x[2] == r && x[6] == s && x[7] == t && (x[4] == n || x[5] == n), res_potential_tuple)
+    
+            res_u = filter(x -> x[3] == res_dir[1] && markets[x[1]].reserve_type == r && x[4] == s && x[5] == t && x[2] == n, res_tuple)
+            res_d = filter(x -> x[3] == res_dir[2] && markets[x[1]].reserve_type == r && x[4] == s && x[5] == t && x[2] == n, res_tuple)
+    
+            if !isempty(res_pot_u)
+                add_to_expression!(e_res_bal_up[tup], sum(v_reserve[res_pot_u]))
+            end
+            if !isempty(res_pot_d)
+                add_to_expression!(e_res_bal_dn[tup], sum(v_reserve[res_pot_d]))
+            end
+    
+            if !isempty(res_u)
+                add_to_expression!(e_res_bal_up[tup], -sum(v_res[res_u]))
+            end
+            if !isempty(res_d)
+                add_to_expression!(e_res_bal_dn[tup], -sum(v_res[res_d]))
+            end
+        end            
+
+        # res_tuple is the tuple use for v_res (market, n, res_dir, s, t)
+        # res_eq_updn_tuple (market, s, t)
+        # the previously used tuple is res_eq_tuple, of form (n, rt, s, t)
+        res_eq_updn = @constraint(model, res_eq_updn[tup in res_eq_updn_tuple], v_res[(tup[1], markets[tup[1]].node, res_dir[1], tup[2], tup[3])] - v_res[(tup[1], markets[tup[1]].node, res_dir[2], tup[2], tup[3])] == 0)
+        res_eq_up = @constraint(model, res_eq_up[tup in res_eq_tuple], e_res_bal_up[tup] == 0)
+        res_eq_dn = @constraint(model, res_eq_dn[tup in res_eq_tuple], e_res_bal_dn[tup] == 0)
+        model_contents["constraint"]["res_eq_updn"] = res_eq_updn
+        model_contents["constraint"]["res_eq_up"] = res_eq_up
+        model_contents["constraint"]["res_eq_dn"] = res_eq_dn
+
+        # Final reserve product:
+        # res_final_tuple (m, s, t)
+        # r_tup = res_tuple = (m, n, res_dir, s, t)
+        reserve_final_exp = model_contents["expression"]["reserve_final_exp"] = OrderedDict()
+        for tup in res_final_tuple
+            r_tup = filter(x -> x[1] == tup[1] && x[4] == tup[2] && x[5] == tup[3], res_tuple)
+            reserve_final_exp[tup] = @expression(model, sum(v_res[r_tup]) .* (tup[1] == "fcr_n" ? 0.5 : 1.0) .- v_res_final[tup])
+        end
+        reserve_final_eq = @constraint(model, reserve_final_eq[tup in res_final_tuple], reserve_final_exp[tup] == 0)
+        model_contents["constraint"]["reserve_final_eq"] = reserve_final_eq
+    end
+
+    function setup_ramp_constraints(model_contents, input_data)
+        model = model_contents["model"]
+        ramp_tuple = model_contents["tuple"]["ramp_tuple"]
+        process_tuple = model_contents["tuple"]["process_tuple"]
+        res_nodes_tuple = model_contents["tuple"]["res_nodes_tuple"]
+        res_potential_tuple = model_contents["tuple"]["res_potential_tuple"]
+        v_reserve = model_contents["variable"]["v_reserve"]
+        v_start = model_contents["variable"]["v_start"]
+        v_stop = model_contents["variable"]["v_stop"]
+        v_flow = model_contents["variable"]["v_flow"]
+
+        res_dir = model_contents["res_dir"]
+        reserve_types = input_data["reserve_type"]
+       
+        processes = input_data["processes"]
+        temporals = input_data["temporals"]
+
+
+        ramp_expr_up = model_contents["expression"]["ramp_expr_up"] = OrderedDict()
+        ramp_expr_down = model_contents["expression"]["ramp_expr_down"] = OrderedDict()
+
+
+        for tup in process_tuple
+            if processes[tup[1]].conversion == 1 && !processes[tup[1]].is_cf
+                if tup[5] != temporals[1]
+                    ramp_expr_up[tup] = AffExpr(0.0)
+                    ramp_expr_down[tup] = AffExpr(0.0)        
+                    topo = filter(x -> x.source == tup[2] && x.sink == tup[3], processes[tup[1]].topos)[1]
+                    ramp_up_cap = topo.ramp_up * topo.capacity
+                    ramp_dw_cap = topo.ramp_down * topo.capacity
+                    start_cap = max(0,processes[tup[1]].load_min-topo.ramp_up)*topo.capacity
+                    stop_cap = max(0,processes[tup[1]].load_min-topo.ramp_down)*topo.capacity
+                    if processes[tup[1]].is_online
+                        if processes[tup[1]].is_res
+                            res_tup_up = filter(x->x[1]==res_dir[1] && x[3:end]==tup,res_potential_tuple)
+                            res_tup_down = filter(x->x[1]==res_dir[2] && x[3:end]==tup,res_potential_tuple)
+                            if tup[2] in res_nodes_tuple
+                                add_to_expression!(ramp_expr_up[tup], -1 * sum(values(reserve_types) .* v_reserve[res_tup_down]) + ramp_up_cap + start_cap * v_start[(tup[1], tup[4], tup[5])]) 
+                                add_to_expression!(ramp_expr_down[tup], sum(values(reserve_types) .* v_reserve[res_tup_up]) - ramp_dw_cap - stop_cap * v_stop[(tup[1], tup[4], tup[5])]) 
+                            elseif tup[3] in res_nodes_tuple
+                                add_to_expression!(ramp_expr_up[tup], -1 * sum(values(reserve_types) .* v_reserve[res_tup_up]) + ramp_up_cap + start_cap * v_start[(tup[1], tup[4], tup[5])]) 
+                                add_to_expression!(ramp_expr_down[tup], sum(values(reserve_types) .* v_reserve[res_tup_down]) - ramp_dw_cap - stop_cap * v_stop[(tup[1], tup[4], tup[5])]) 
+                            else
+                                add_to_expression!(ramp_expr_up[tup], ramp_up_cap + start_cap * v_start[(tup[1], tup[4], tup[5])]) 
+                                add_to_expression!(ramp_expr_down[tup], - ramp_dw_cap - stop_cap * v_stop[(tup[1], tup[4], tup[5])]) 
+                            end
+                        else
+                            add_to_expression!(ramp_expr_up[tup], ramp_up_cap + start_cap * v_start[(tup[1], tup[4], tup[5])]) 
+                            add_to_expression!(ramp_expr_down[tup], - ramp_dw_cap - stop_cap * v_stop[(tup[1], tup[4], tup[5])]) 
+                        end
+                    else
+                        if processes[tup[1]].is_res
+                            res_tup_up = filter(x->x[1]==res_dir[1] && x[3:end]==tup,res_potential_tuple)
+                            res_tup_down = filter(x->x[1]==res_dir[2] && x[3:end]==tup,res_potential_tuple)
+                            if tup[2] in res_nodes_tuple
+                                add_to_expression!(ramp_expr_up[tup], -sum(values(reserve_types) .* v_reserve[res_tup_down]) + ramp_up_cap) 
+                                add_to_expression!(ramp_expr_down[tup], sum(values(reserve_types) .* v_reserve[res_tup_up]) - ramp_dw_cap) 
+                            elseif tup[3] in res_nodes_tuple
+                                add_to_expression!(ramp_expr_up[tup], -sum(values(reserve_types) .* v_reserve[res_tup_up]) + ramp_up_cap) 
+                                add_to_expression!(ramp_expr_down[tup], sum(values(reserve_types) .* v_reserve[res_tup_down]) - ramp_dw_cap) 
+                            else
+                                add_to_expression!(ramp_expr_up[tup], ramp_up_cap)
+                                add_to_expression!(ramp_expr_down[tup], - ramp_dw_cap)
+                            end
+                        else
+                            add_to_expression!(ramp_expr_up[tup], ramp_up_cap)
+                            add_to_expression!(ramp_expr_down[tup], - ramp_dw_cap)
+                        end
+                    end
+                end
+            end
+        end
+
+        ramp_up_eq = @constraint(model, ramp_up_eq[tup in ramp_tuple], v_flow[tup] - v_flow[process_tuple[findall(x->x==tup,process_tuple)[1]-1]] <= ramp_expr_up[tup])
+        ramp_down_eq = @constraint(model, ramp_down_eq[tup in ramp_tuple], v_flow[tup] - v_flow[process_tuple[findall(x->x==tup,process_tuple)[1]-1]] >= ramp_expr_down[tup])
+        model_contents["constraint"]["ramp_up_eq"] = ramp_up_eq
+        model_contents["constraint"]["ramp_down_eq"] = ramp_down_eq
+    end
+
+    function setup_fixed_values(model_contents, input_data)
+        model = model_contents["model"]
+        
+        process_tuple = model_contents["tuple"]["process_tuple"]
+        fixed_value_tuple = model_contents["tuple"]["fixed_value_tuple"]
+        v_flow = model_contents["variable"]["v_flow"]
+        v_res_final = model_contents["variable"]["v_res_final"]
+        markets = input_data["markets"]
+        scenarios = collect(keys(input_data["scenarios"]))
+        
+        fix_expr = model_contents["expression"]["fix_expr"] = OrderedDict()
+        for m in keys(markets)
+            if !isempty(markets[m].fixed)
+                temps = map(x->x[1],markets[m].fixed)
+                fix_vec = map(x->x[2],markets[m].fixed)
+
+                if markets[m].type == "energy"
+                    for (t, fix_val) in zip(temps, fix_vec)
+                        for s in scenarios
+                            tup1 = filter(x->x[2]==m && x[4]==s && x[5]==t,process_tuple)[1]
+                            tup2 = filter(x->x[3]==m && x[4]==s && x[5]==t,process_tuple)[1]
+                            fix_expr[(m, s, t)] = @expression(model,v_flow[tup1]-v_flow[tup2]-fix_val)
+                        end
+                    end
+                elseif markets[m].type == "reserve"
+                    for (t, fix_val) in zip(temps, fix_vec)
+                        for s in scenarios
+                            fix(v_res_final[(m, s, t)], fix_val; force=true)
+                        end
+                    end
+                end
+            end
+        end
+        fixed_value_eq = @constraint(model, fixed_value_eq[tup in fixed_value_tuple], fix_expr[tup] == 0)
+        model_contents["constraint"]["fixed_value_eq"] = fixed_value_eq
+    end
+
+    function setup_bidding_constraints(model_contents, input_data)
+        model = model_contents["model"]
+        markets = input_data["markets"]
+        scenarios = collect(keys(input_data["scenarios"]))
+        temporals = input_data["temporals"]
+
+        process_tuple = model_contents["tuple"]["process_tuple"]
+        v_res_final = model_contents["variable"]["v_res_final"]
+        v_flow = model_contents["variable"]["v_flow"]
+        
+        price_matr = OrderedDict()
+        for m in keys(markets)
+            for (i,s) in enumerate(scenarios)
+                vec = map(x->x[2],filter(x->x.scenario == s, markets[m].price)[1].series)
+                if i == 1
+                    price_matr[m] = vec
+                else
+                    price_matr[m] = hcat(price_matr[m],vec)
+                end
+            end
+        end
+        for m in keys(markets)
+            for (i,t) in enumerate(temporals)
+                s_indx = sortperm((price_matr[m][i,:]))
+                if markets[m].type == "energy"
+                    for k in 2:length(s_indx)
+                        if price_matr[m][s_indx[k]] == price_matr[m][s_indx[k-1]]
+                            @constraint(model, v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]] == 
+                                v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]])
+                        else
+                            @constraint(model, v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]] >= 
+                                v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]])
+                        end
+                    end
+                elseif markets[m].type == "reserve"
+                    for k in 2:length(s_indx)
+                        if price_matr[m][s_indx[k]] == price_matr[m][s_indx[k-1]]
+                            @constraint(model, v_res_final[(m,scenarios[s_indx[k]],t)] == v_res_final[(m,scenarios[s_indx[k-1]],t)])
+                        else
+                            @constraint(model, v_res_final[(m,scenarios[s_indx[k]],t)] >= v_res_final[(m,scenarios[s_indx[k-1]],t)])
+                        end
+    
+                    end
+                end
+            end
+        end
+    end
+
+    function setup_cost_calculations(model_contents, input_data)
+        model = model_contents["model"]
+        process_tuple = model_contents["tuple"]["process_tuple"]
+        proc_online_tuple = model_contents["tuple"]["proc_online_tuple"]
+        res_final_tuple = model_contents["tuple"]["res_final_tuple"]
+        node_balance_tuple = model_contents["tuple"]["node_balance_tuple"]
+        v_flow = model_contents["variable"]["v_flow"]
+        v_start = model_contents["variable"]["v_start"]
+        v_res_final = model_contents["variable"]["v_res_final"]
+        vq_state_up = model_contents["variable"]["vq_state_up"]
+        vq_state_dw = model_contents["variable"]["vq_state_dw"]
+
+        scenarios = collect(keys(input_data["scenarios"]))
+        nodes = input_data["nodes"]
+        markets = input_data["markets"]
+        processes = input_data["processes"]
+
+        # Commodity costs and marklet costs
+        commodity_costs = model_contents["expression"]["commodity_costs"] = OrderedDict()
+        market_costs = model_contents["expression"]["market_costs"] = OrderedDict()
+        for s in scenarios
+            commodity_costs[s] = AffExpr(0.0)
+            market_costs[s] = AffExpr(0.0)
+            for n in keys(nodes)
+                #Commodity costs:
+                if nodes[n].is_commodity
+                    flow_tups = filter(x -> x[2] == n && x[4] == s, process_tuple)
+                    cost_series = filter(x->x.scenario == s,nodes[n].cost)[1].series
+                    # Add to expression for each t found in series
+                    for cost in cost_series
+                        flow = filter(x -> x[5] == cost[1], flow_tups)
+                        add_to_expression!(commodity_costs[s], sum(v_flow[flow]) * cost[2])
+                    end
+                end
+                # Spot-Market costs and profits
+                if nodes[n].is_market
+                    flow_out = filter(x -> x[2] == n && x[4] == s, process_tuple)
+                    flow_in = filter(x -> x[3] == n && x[4] == s, process_tuple)
+                    price_series = filter(x->x.scenario == s, markets[n].price)[1].series
+                    for price in price_series
+                        out = filter(x -> x[5] == price[1], flow_out)
+                        in = filter(x -> x[5] == price[1], flow_in)
+                        # Assuming what goes into the node is sold and has a negatuive cost
+                        add_to_expression!(market_costs[s], sum(v_flow[out]) * price[2] - sum(v_flow[in]) * price[2])
+                    end
+                end
+            end
+        end
+
+        # VOM_costs
+        vom_costs = model_contents["expression"]["vom_costs"] = OrderedDict()
+        for s in scenarios
+            vom_costs[s] = AffExpr(0.0)
+            for tup in unique(map(x->(x[1],x[2],x[3]),process_tuple))
+                vom = filter(x->x.source == tup[2] && x.sink == tup[3], processes[tup[1]].topos)[1].VOM_cost
+                if vom != 0
+                    flows = filter(x -> x[1:3] == tup && x[4] == s, process_tuple)
+                    add_to_expression!(vom_costs[s], sum(v_flow[flows]) * vom)
+                end
+            end
+        end
+
+        # Start costs
+        start_costs = model_contents["expression"]["start_costs"] = OrderedDict()
+        for s in scenarios
+            start_costs[s] = AffExpr(0.0)
+            for p in keys(processes)
+                start_tup = filter(x->x[1] == p && x[2]==s,proc_online_tuple)
+                if !isempty(start_tup)
+                    cost = processes[p].start_cost
+                    add_to_expression!(start_costs[s], sum(v_start[start_tup]) * cost)
+                end
+            end
+        end
+
+        # Reserve profits:
+        reserve_costs = model_contents["expression"]["reserve_costs"] = OrderedDict()
+        for s in scenarios
+            reserve_costs[s] = AffExpr(0.0)
+            for tup in filter(x -> x[2] == s, res_final_tuple)
+                price = filter(x->x[1] == tup[3],filter(x->x.scenario == s, markets[tup[1]].price)[1].series)[1][2]
+                add_to_expression!(reserve_costs[s],-price*v_res_final[tup])
+            end
+        end
+
+        # Dummy variable costs
+        dummy_costs = model_contents["expression"]["dummy_costs"] = OrderedDict()
+        p = 1000000
+        # State dummy variables
+        # Process balance dummy variables?
+        for s in scenarios
+            dummy_costs[s] = AffExpr(0.0)
+            for tup in node_balance_tuple
+                add_to_expression!(dummy_costs[s], sum(vq_state_up[tup])*p + sum(vq_state_dw[tup])*p)
+            end
+        end
+
+
+        # Total model costs
+        total_costs = model_contents["expression"]["total_costs"] = OrderedDict()
+        for s in scenarios
+            total_costs[s] = sum(commodity_costs[s] + sum(market_costs[s]) + sum(vom_costs[s]) + sum(reserve_costs[s]) + sum(start_costs[s]) + sum(dummy_costs[s]))
+        end
+    end
+
+    function setup_objective_function(model_contents, input_data)
+        model = model_contents["model"]
+        total_costs = model_contents["expression"]["total_costs"]
+        scen_p = collect(values(input_data["scenarios"]))
+        @objective(model, Min, sum(values(scen_p).*values(total_costs)))
+    end
 
     function create_variables(model_contents, input_data)
         create_v_flow(model_contents)
@@ -417,6 +753,11 @@ module AbstractModel
         model = model_contents["model"]
         v_flow = @variable(model, v_flow[tup in process_tuple] >= 0)
         model_contents["variable"]["v_flow"] = v_flow
+
+        #vq_flow_up = @variable(model, v_q_flow_up[tup in process_tuple] >= 0)
+        #vq_flow_down = @variable(model, v_q_flow_down[tup in process_tuple] >= 0)
+        #model_contents["variable"]["vq_flow_up"] = vq_flow_up
+        #model_contents["variable"]["vq_flow_down"] = vq_flow_down
     end
 
     function create_v_online(model_contents)
@@ -448,8 +789,10 @@ module AbstractModel
         end
 
         res_final_tuple = model_contents["tuple"]["res_final_tuple"]
-        @variable(model, v_res_final[tup in res_final_tuple] >= 0)
-        model_contents["variable"]["v_res_final"] = v_res_final
+        if !isempty(res_final_tuple)
+            @variable(model, v_res_final[tup in res_final_tuple] >= 0)
+            model_contents["variable"]["v_res_final"] = v_res_final
+        end
     end
 
     function create_v_state(model_contents)
@@ -503,28 +846,63 @@ module AbstractModel
         create_res_eq_tuple(model_contents, input_data)
         create_res_eq_updn_tuple(model_contents, input_data)
         create_res_final_tuple(model_contents, input_data)
+        create_fixed_value_tuple(model_contents, input_data)
         create_ramp_tuple(model_contents, input_data)
     end
 
     # Saves the contents of the model dict to an excel file. 
-    function export_model_contents(model_contents)
-        output_path = string(pwd()) * "\\debug\\model_contents_"*Dates.format(Dates.now(), "yyyy-mm-dd-HH-MM-SS")*".xlsx"
+    function export_model_contents(model_contents, results)
+        output_path = string(pwd()) * "\\results\\model_contents_"*(results ? "results_" : "")*Dates.format(Dates.now(), "yyyy-mm-dd-HH-MM-SS")*".xlsx"
         XLSX.openxlsx(output_path, mode="w") do xf
             for (key_index, key1) in enumerate(collect(keys(model_contents)))
                 XLSX.addsheet!(xf, string(key1))
-                if key1 in ["tuple", "variable", "expression", "constraint"] 
+                if key1 == "tuple"
                     for (colnr, key2) in enumerate(collect(keys(model_contents[key1])))
                         xf[key_index+1][XLSX.CellRef(1, colnr)] = string(key2)
-                        if typeof(model_contents[key1][key2]) == OrderedDict
-                            # Iterate through keys of dict with dictname in AffExpr
-                            # And key : value pairs in Bx:Nx
-                            for (i, key3) in enumerate(collect(keys(model_contents[key1][key2])))
-                                xf[key_index+1][XLSX.CellRef(i+1, colnr)]=string(key3)*" : "*string(model_contents[key1][key2][key3])
+                        for (i, e) in enumerate(model_contents[key1][key2])
+                            output = string(e)
+                            xf[key_index+1][XLSX.CellRef(i+1, colnr)] = first(output, 32000)
+                        end
+                    end
+
+                elseif key1 == "expression"
+                    for (colnr, key2) in enumerate(collect(keys(model_contents[key1])))
+                        xf[key_index+1][XLSX.CellRef(1, colnr)] = string(key2)
+                        for (i, (key3, val3)) in enumerate(zip(keys(model_contents[key1][key2]), values(model_contents[key1][key2])))
+                            if results
+                                output = string(key3) * " : " * string(JuMP.value.(val3))
+                                xf[key_index+1][XLSX.CellRef(i+1, colnr)] = first(output, 32000)
+                            else
+                                output = string(key3)*" : "*string(val3)
+                                xf[key_index+1][XLSX.CellRef(i+1, colnr)] = first(output, 32000)
                             end
-                        else
-                            # Print name of vector in Ax and values in Bx:Nx
-                            for (i, e) in enumerate(model_contents[key1][key2])
-                                xf[key_index+1][XLSX.CellRef(i+1, colnr)] = string(e)
+                        end
+                    end
+
+                elseif key1 == "constraint"
+                    for (colnr, key2) in enumerate(collect(keys(model_contents[key1])))
+                        xf[key_index+1][XLSX.CellRef(1, colnr)] = string(key2)
+                        for (i, val) in enumerate(values(model_contents["model"].obj_dict[Symbol(key2)]))
+                            if results
+                                output = string(val) * " : " * string(JuMP.value.(val))
+                                xf[key_index+1][XLSX.CellRef(i+1, colnr)] = first(output, 32000)
+                            else
+                                output = string(val)
+                                xf[key_index+1][XLSX.CellRef(i+1, colnr)] = first(output, 32000)
+                            end
+                        end
+                    end
+
+                elseif key1 == "variable"
+                    for (colnr, key2) in enumerate(collect(keys(model_contents[key1])))
+                        xf[key_index+1][XLSX.CellRef(1, colnr)] = string(key2)
+                        for (i, val) in enumerate(values(model_contents["model"].obj_dict[Symbol(key2)]))
+                            if results
+                                output = string(val) * " : " * string(JuMP.value.(val))
+                                xf[key_index+1][XLSX.CellRef(i+1, colnr)] = first(output, 32000)
+                            else
+                                output = string(val)
+                                xf[key_index+1][XLSX.CellRef(i+1, colnr)] = first(output, 32000)
                             end
                         end
                     end
@@ -541,7 +919,7 @@ module AbstractModel
                 push!(res_nodes_tuple, markets[m].node)
             end
         end
-        model_contents["tuple"]["res_nodes_tuple"] = res_nodes_tuple
+        model_contents["tuple"]["res_nodes_tuple"] = unique(res_nodes_tuple)
     end
 
     function create_res_tuple(model_contents, input_data)
@@ -802,7 +1180,7 @@ module AbstractModel
                 push!(res_eq_updn_tuple, (m, s, t))
             end
         end
-        model_contents["tuple"]["res_eq_updntuple"] = res_eq_updn_tuple
+        model_contents["tuple"]["res_eq_updn_tuple"] = res_eq_updn_tuple
     end
 
     function create_res_final_tuple(model_contents, input_data)
@@ -818,6 +1196,21 @@ module AbstractModel
             end
         end
         model_contents["tuple"]["res_final_tuple"] = res_final_tuple
+    end
+
+    function create_fixed_value_tuple(model_contents, input_data)
+        fixed_value_tuple = []
+        markets = input_data["markets"]
+        scenarios = collect(keys(input_data["scenarios"]))
+        for m in keys(markets)
+            if !isempty(markets[m].fixed) && markets[m].type == "energy"
+                temps = map(x->x[1],markets[m].fixed)
+                for s in scenarios, t in temps
+                    push!(fixed_value_tuple, (m, s, t))
+                end
+            end
+        end
+        model_contents["tuple"]["fixed_value_tuple"] = fixed_value_tuple
     end
 
     function create_ramp_tuple(model_contents, input_data)
