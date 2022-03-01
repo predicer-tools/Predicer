@@ -157,7 +157,7 @@ module AbstractModel
             end
             if nodes[tu[1]].is_state
                 if tu[3] == temporals[1]
-                    state_expr = @expression(model, v_state[tu])
+                    state_expr = @expression(model, v_state[tu] + nodes[tu[1]].state.initial_state)
                 else
                     state_expr = @expression(model, v_state[tu] - v_state[node_balance_tuple[i-1]])
                 end
@@ -195,7 +195,7 @@ module AbstractModel
         for (i,tup) in enumerate(proc_online_tuple)
             if tup[3] == temporals[1]
                 # Note - initial online state is assumed 1!
-                online_expr[tup] = @expression(model,v_start[tup]-v_stop[tup]-v_online[tup]+1)
+                online_expr[tup] = @expression(model,v_start[tup]-v_stop[tup]-v_online[tup] + Int(processes[tup[1]].initial_state))
             else
                 online_expr[tup] = @expression(model,v_start[tup]-v_stop[tup]-v_online[tup]+v_online[proc_online_tuple[i-1]])
             end
@@ -944,6 +944,8 @@ module AbstractModel
                             end
                         end
                     end
+                elseif key1 == "gen_constraints"
+                    
                 end
             end
         end
@@ -987,9 +989,11 @@ module AbstractModel
         processes = input_data["processes"]
         scenarios = collect(keys(input_data["scenarios"]))
         temporals = input_data["temporals"]
-        for p in keys(processes), s in scenarios, t in temporals
+        for p in keys(processes), s in scenarios
             for topo in processes[p].topos
-                push!(process_tuple, (p, topo.source, topo.sink, s, t))
+                for t in temporals
+                    push!(process_tuple, (p, topo.source, topo.sink, s, t))
+                end
             end
         end
         model_contents["tuple"]["process_tuple"] = process_tuple

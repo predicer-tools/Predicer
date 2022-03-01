@@ -61,7 +61,7 @@ function main()
     nodes = Dict()
     for i in 1:nrow(system_data["nodes"])
         n = system_data["nodes"][i, :]
-        nodes[n.node] = AbstractModel.Node(n.node, Bool(n.is_commodity), Bool(n.is_state), Bool(n.is_res), Bool(n.is_inflow), Bool(n.is_market), n.state_max, n.in_max, n.out_max)
+        nodes[n.node] = AbstractModel.Node(n.node, Bool(n.is_commodity), Bool(n.is_state), Bool(n.is_res), Bool(n.is_inflow), Bool(n.is_market), n.state_max, n.in_max, n.out_max, n.initial_state)
         if Bool(n.is_commodity)
             for s in keys(scenarios)
                 timesteps = timeseries_data["scenarios"][s]["price"].t
@@ -93,7 +93,7 @@ function main()
     processes = Dict()
     for i in 1:nrow(system_data["processes"])
         p = system_data["processes"][i, :]
-        processes[p.process] = AbstractModel.Process(p.process, Bool(p.is_cf), Bool(p.is_cf_fix), Bool(p.is_online), Bool(p.is_res), p.eff, p.conversion, p.load_min, p.load_max, p.start_cost, p.min_online, p.min_offline)
+        processes[p.process] = AbstractModel.Process(p.process, Bool(p.is_cf), Bool(p.is_cf_fix), Bool(p.is_online), Bool(p.is_res), p.eff, p.conversion, p.load_min, p.load_max, p.start_cost, p.min_online, p.min_offline, p.initial_state)
         if Bool(p.is_cf)
             for s in keys(scenarios)
                 timesteps = timeseries_data["scenarios"][s]["cf"].t
