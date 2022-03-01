@@ -890,6 +890,9 @@ module AbstractModel
 
     # Saves the contents of the model dict to an excel file. 
     function export_model_contents(model_contents, results)
+        if !isdir(pwd()*"\\results")
+            mkdir("results")
+        end
         output_path = string(pwd()) * "\\results\\model_contents_"*(results ? "results_" : "")*Dates.format(Dates.now(), "yyyy-mm-dd-HH-MM-SS")*".xlsx"
         XLSX.openxlsx(output_path, mode="w") do xf
             for (key_index, key1) in enumerate(collect(keys(model_contents)))
