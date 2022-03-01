@@ -2,6 +2,7 @@
 .vscode/
 log/
 logs/
+results/*
 *.log
 *.pyc
 *.bak
