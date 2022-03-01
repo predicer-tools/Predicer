@@ -8,8 +8,9 @@ struct State <: AbstractState
     out_max::Float64
     state_max::Float64
     state_min::Float64
-    function State(in_max, out_max, state_max, state_min=0)
-        return new(in_max, out_max, state_max, state_min)
+    initial_state::Float64
+    function State(in_max, out_max, initial_state, state_max, state_min=0)
+        return new(in_max, out_max, initial_state, state_max, state_min)
     end
 end
 
@@ -36,8 +37,8 @@ struct Node <: AbstractNode
     cost::Vector{TimeSeries}
     inflow::Vector{TimeSeries}
     nodegroup::Vector{AbstractNode}
-    function Node(name, is_commodity, is_state, is_res, is_inflow, is_market, state_max, in_max, out_max)
-        return new(name, is_commodity, is_state, is_res, is_inflow, is_market, State(in_max, out_max, state_max), [], [], [])
+    function Node(name, is_commodity, is_state, is_res, is_inflow, is_market, state_max, in_max, out_max, initial_state)
+        return new(name, is_commodity, is_state, is_res, is_inflow, is_market, State(in_max, out_max, initial_state, state_max), [], [], [])
     end
 end
 
@@ -79,14 +80,15 @@ struct Process <: AbstractProcess
     start_cost::Float64
     min_online::Int64
     min_offline::Int64
+    initial_state::Bool
     topos::Vector{Topology}
     group::Vector{AbstractProcess}
     cf::Vector{TimeSeries}
     eff_ts::Vector{TimeSeries}
     eff_ops::Vector{Any}
     eff_fun::Vector{Tuple{Any,Any}}
-    function Process(name, is_cf, is_cf_fix, is_online, is_res, eff, conversion, load_min, load_max, start_cost, min_online, min_offline)
-        return new(name, is_cf, is_cf_fix, is_online, is_res, eff, conversion, load_min, load_max, start_cost, min_online, min_offline, [], [], [], [], [], [])
+    function Process(name, is_cf, is_cf_fix, is_online, is_res, eff, conversion, load_min, load_max, start_cost, min_online, min_offline, initial_state)
+        return new(name, is_cf, is_cf_fix, is_online, is_res, eff, conversion, load_min, load_max, start_cost, min_online, min_offline, initial_state, [], [], [], [], [], [])
     end
 end
 
