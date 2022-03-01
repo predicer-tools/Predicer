@@ -58,7 +58,7 @@ module AbstractModel
         model_contents["expression"] = OrderedDict() #expressions?
         model_contents["variable"] = OrderedDict() #variables?
         model_contents["tuple"] = OrderedDict() #tuples used by variables?
-        model_contents["genericconstraint"] = OrderedDict() #GenericConstraints
+        model_contents["gen_constraints"] = OrderedDict() #GenericConstraints
         model_contents["res_dir"] = ["res_up", "res_down"]
         return model_contents
     end
@@ -76,6 +76,7 @@ module AbstractModel
         setup_ramp_constraints(model_contents, input_data)
         setup_fixed_values(model_contents, input_data)
         setup_bidding_constraints(model_contents, input_data)
+        setup_generic_constraints(model_contents, input_data)
         setup_cost_calculations(model_contents, input_data)
         setup_objective_function(model_contents, input_data)
     end
@@ -624,6 +625,43 @@ module AbstractModel
     
                     end
                 end
+            end
+        end
+    end
+
+    function setup_generic_constraints(model_contents, input_data)
+        model = model_contents["model"]
+        process_tuple = model_contents["tuple"]["process_tuple"]
+        v_flow = model_contents["variable"]["v_flow"]
+
+        scenarios = collect(keys(input_data["scenarios"]))
+        temporals = input_data["temporals"]
+        gen_constraints = input_data["gen_constraints"]
+
+        const_expr = model_contents["gen_constraints"]["expression"] = OrderedDict()
+        const_dict = model_contents["gen_constraints"]["constraint"] = OrderedDict()
+
+        for c in keys(gen_constraints)
+            const_expr[c] = OrderedDict((s,t) => AffExpr(0.0) for s in scenarios, t in temporals)
+            facs = gen_constraints[c].factors
+            consta = gen_constraints[c].constant
+            eq_dir = gen_constraints[c].type
+            for s in scenarios, t in temporals
+                add_to_expression!(const_expr[c][(s,t)],filter(x->x[1] == t,filter(x->x.scenario == s,consta)[1].series)[1][2])
+
+                for f in facs
+                    p_flow = f.flow
+                    tup = filter(x->x[1]==p_flow[1] && (x[2]==p_flow[2] || x[3]==p_flow[2]) && x[4]==s && x[5]==t,process_tuple)[1]
+                    fac_data = filter(x->x[1] == t,filter(x->x.scenario == s,f.data)[1].series)[1][2]
+                    add_to_expression!(const_expr[c][(s,t)],fac_data,v_flow[tup])
+                end
+            end 
+            if eq_dir == "eq"
+                const_dict[c] = @constraint(model,[s in scenarios,t in temporals],const_expr[c][(s,t)]==0.0)
+            elseif eq_dir == "gt"
+                const_dict[c] = @constraint(model,[s in scenarios,t in temporals],const_expr[c][(s,t)]>=0.0)
+            else
+                const_dict[c] = @constraint(model,[s in scenarios,t in temporals],const_expr[c][(s,t)]<=0.0)
             end
         end
     end
@@ -1231,7 +1269,7 @@ module AbstractModel
 
 
 
-    function read_GenExpr(ge::GenExpr)
+ #=    function read_GenExpr(ge::GenExpr)
         # Reads a GenExpr, and returns the value
         if ge.c_type == AbstractExpr
             c_coeff = read_GenExpr(ge.coeff) #Returns value of nested GenExpr
@@ -1293,5 +1331,5 @@ module AbstractModel
         end
     end
 
-
+ =#
 end

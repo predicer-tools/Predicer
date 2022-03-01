@@ -26,6 +26,9 @@ function main()
     end
 
     fixed_data = DataFrame(XLSX.readtable(input_data_path, "fixed_ts")...)    
+    constraint_data = DataFrame(XLSX.readtable(input_data_path, "gen_constraint")...) 
+    constraint_type = DataFrame(XLSX.readtable(input_data_path, "constraints")...)
+    gen_constraints = Dict()
 
     for i in 1:nrow(system_data["scenarios"])
         scenarios[system_data["scenarios"][i,1]] = system_data["scenarios"][i,2]
@@ -166,20 +169,6 @@ function main()
         end
     end
 
-    # Old version by Esa. Requires ops/effs to be on one row in input
-    #op_eff = names(system_data["efficiencies"])[2:Int64((length(names(system_data["efficiencies"]))-1)/2)+1]
-    #=for i in 1:nrow(system_data["efficiencies"])
-        nc_adj = Int64((ncol(system_data["efficiencies"])-1)/2)
-        proc = system_data["efficiencies"][i,1]
-        if proc in keys(processes)
-            for k in 2:nc_adj+1
-                push!(processes[proc].eff_fun,(system_data["efficiencies"][i,k],system_data["efficiencies"][i,k+nc_adj]))
-            end
-        end
-    end =#
-
-    #-----------------------------------------------
-
     for s in keys(scenarios)
         timesteps = timeseries_data["scenarios"][s]["eff_ts"].t
         for n in names(timeseries_data["scenarios"][s]["eff_ts"])[2:end]
@@ -228,6 +217,43 @@ function main()
         end
     end
 
+    for i in 1:nrow(constraint_type)
+        con = constraint_type[i,1]
+        con_dir = constraint_type[i,2]
+        gen_constraints[con] = AbstractModel.GenConstraint(con,con_dir)
+    end
+
+    con_vecs = Dict()
+    for n in names(constraint_data)
+        timesteps = constraint_data.t
+        if n != "t"
+            col = split(n,",")
+            constr = col[1]
+            scen = col[end]
+            data = constraint_data[!,n]
+            ts = AbstractModel.TimeSeries(scen)
+            for i in 1:length(timesteps)
+                push!(ts.series,(timesteps[i],data[i]))
+            end
+            if length(col) == 4
+                tup = (col[1],col[2],col[3])
+                if tup in keys(con_vecs)
+                    push!(con_vecs[tup],ts)
+                else
+                    con_vecs[tup] = []
+                    push!(con_vecs[tup],ts)
+                end
+            else
+                push!(gen_constraints[constr].constant,ts)
+            end
+        end
+    end
+
+    for k in keys(con_vecs)
+        con_fac = AbstractModel.ConFactor((k[2],k[3]),con_vecs[k])
+        push!(gen_constraints[k[1]].factors,con_fac)
+    end
+
     imported_input_data = Dict()
     imported_input_data["temporals"] = unique(dates)
     imported_input_data["scenarios"] = scenarios
@@ -235,6 +261,8 @@ function main()
     imported_input_data["processes"] = processes
     imported_input_data["markets"] = markets
     imported_input_data["reserve_type"] = reserve_type
+    imported_input_data["gen_constraints"] = gen_constraints
+
     return imported_input_data
 end
 
