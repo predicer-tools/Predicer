@@ -395,13 +395,25 @@ function run_model()
     end
 
     for tup in p_online
-        cap = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1].capacity
+        topo = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1]
+        if isempty(topo.cap_ts)
+            cap = topo.capacity
+        else
+            cap = filter(x->x[1]==tup[5],filter(x->x.scenario==tup[4],topo.cap_ts)[1].series)[1][2]
+        end
+        #cap = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1].capacity
         add_to_expression!(e_lim_max[tup], -processes[tup[1]].load_max * cap * v_online[(tup[1], tup[4], tup[5])])
         add_to_expression!(e_lim_min[tup], -processes[tup[1]].load_min * cap * v_online[(tup[1], tup[4], tup[5])])
     end
 
     for tup in p_offline
-        cap = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1].capacity
+        topo = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1]
+        if isempty(topo.cap_ts)
+            cap = topo.capacity
+        else
+            cap = filter(x->x[1]==tup[5],filter(x->x.scenario==tup[4],topo.cap_ts)[1].series)[1][2]
+        end
+        #cap = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1].capacity
         if tup in p_reserve_prod || tup in p_reserve_cons
             add_to_expression!(e_lim_max[tup], -cap)
         else
