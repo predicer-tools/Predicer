@@ -58,8 +58,9 @@ struct Topology
     VOM_cost::Float64
     ramp_up::Float64
     ramp_down::Float64
+    cap_ts::Vector{TimeSeries}
     function Topology(source, sink, capacity, VOM_cost, ramp_up, ramp_down)
-        return new(source, sink, capacity, VOM_cost, ramp_up, ramp_down)
+        return new(source, sink, capacity, VOM_cost, ramp_up, ramp_down, [])
     end
 end
 

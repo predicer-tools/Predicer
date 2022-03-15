@@ -26,6 +26,7 @@ function main()
     end
 
     fixed_data = DataFrame(XLSX.readtable(input_data_path, "fixed_ts")...)
+    cap_ts = DataFrame(XLSX.readtable(input_data_path, "cap_ts")...)
     constraint_data = DataFrame(XLSX.readtable(input_data_path, "gen_constraint")...) 
     constraint_type = DataFrame(XLSX.readtable(input_data_path, "constraints")...)
     gen_constraints = Dict()
@@ -138,7 +139,31 @@ function main()
             end
         end
     end
+
     
+    for n in names(cap_ts)
+        timesteps = cap_ts.t
+        if n != "t"
+            col = split(n,",")
+            proc = col[1]
+            nod = col[2]
+            scen = col[3]
+            ts = TimeSeries(scen)
+            data = cap_ts[!,n]
+            for i in 1:length(timesteps)
+                push!(ts.series,(timesteps[i],data[i]))
+            end
+            push!(filter(x->x.source==nod || x.sink==nod,processes[proc].topos)[1].cap_ts,ts)
+        end
+    end
+
+    # Check list for errors:
+    # Process sink: commodity (ERROR)
+    # Process (non-market) sink: market (ERROR)
+    # Process source: market
+    # Conversion 2 and several branches (ERROR)
+    # Source in CF process (ERROR)
+    # Reserve in CF process
     #-------------------------------------------
     op_eff = names(system_data["efficiencies"])[2:Int64((length(names(system_data["efficiencies"]))-1)/2)+1]
     for i in 1:nrow(system_data["efficiencies"])
