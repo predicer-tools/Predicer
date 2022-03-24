@@ -10,6 +10,7 @@ module AbstractModel
     using XLSX
 
     include("structures.jl")
+    include("validate_data.jl")
 
     # Run parallell version of AbstractModel. This version is used until it has been implemented
     # as a part of the AbstractModel module. 
@@ -58,7 +59,8 @@ module AbstractModel
         model_contents["expression"] = OrderedDict() #expressions?
         model_contents["variable"] = OrderedDict() #variables?
         model_contents["tuple"] = OrderedDict() #tuples used by variables?
-        model_contents["gen_constraints"] = OrderedDict() #GenericConstraints
+        model_contents["gen_constraint"] = OrderedDict() #GenericConstraints
+        model_contents["gen_expression"] = OrderedDict() #GenericConstraints
         model_contents["res_dir"] = ["res_up", "res_down"]
         return model_contents
     end
@@ -638,8 +640,8 @@ module AbstractModel
         temporals = input_data["temporals"]
         gen_constraints = input_data["gen_constraints"]
 
-        const_expr = model_contents["gen_constraints"]["expression"] = OrderedDict()
-        const_dict = model_contents["gen_constraints"]["constraint"] = OrderedDict()
+        const_expr = model_contents["gen_expression"] = OrderedDict()
+        const_dict = model_contents["gen_constraint"] = OrderedDict()
 
         for c in keys(gen_constraints)
             const_expr[c] = OrderedDict((s,t) => AffExpr(0.0) for s in scenarios, t in temporals)
@@ -947,8 +949,32 @@ module AbstractModel
                             end
                         end
                     end
-                elseif key1 == "gen_constraints"
-                    
+                elseif key1 == "gen_constraint"
+                    for (colnr, key2) in enumerate(collect(keys(model_contents[key1])))
+                        xf[key_index+1][XLSX.CellRef(1, colnr)] = string(key2)
+                        for (i, val) in enumerate(values(model_contents["model"].obj_dict[Symbol(key2)]))
+                            if results
+                                output = string(val) * " : " * string(JuMP.value.(val))
+                                xf[key_index+1][XLSX.CellRef(i+1, colnr)] = first(output, 32000)
+                            else
+                                output = string(val)
+                                xf[key_index+1][XLSX.CellRef(i+1, colnr)] = first(output, 32000)
+                            end
+                        end
+                    end
+                elseif key1 == "gen_expression"
+                    for (colnr, key2) in enumerate(collect(keys(model_contents[key1])))
+                        xf[key_index+1][XLSX.CellRef(1, colnr)] = string(key2)
+                        for (i, (key3, val3)) in enumerate(zip(keys(model_contents[key1][key2]), values(model_contents[key1][key2])))
+                            if results
+                                output = string(key3) * " : " * string(JuMP.value.(val3))
+                                xf[key_index+1][XLSX.CellRef(i+1, colnr)] = first(output, 32000)
+                            else
+                                output = string(key3)*" : "*string(val3)
+                                xf[key_index+1][XLSX.CellRef(i+1, colnr)] = first(output, 32000)
+                            end
+                        end
+                    end
                 end
             end
         end
