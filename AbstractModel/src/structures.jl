@@ -9,8 +9,9 @@ struct State <: AbstractState
     state_max::Float64
     state_min::Float64
     initial_state::Float64
-    function State(in_max, out_max, initial_state, state_max, state_min=0)
-        return new(in_max, out_max, initial_state, state_max, state_min)
+    state_loss::Float64
+    function State(in_max, out_max, initial_state, state_max, state_loss, state_min=0)
+        return new(in_max, out_max, state_max, state_min, initial_state, state_loss)
     end
 end
 
@@ -37,8 +38,8 @@ struct Node <: AbstractNode
     cost::Vector{TimeSeries}
     inflow::Vector{TimeSeries}
     nodegroup::Vector{AbstractNode}
-    function Node(name, is_commodity, is_state, is_res, is_inflow, is_market, state_max, in_max, out_max, initial_state)
-        return new(name, is_commodity, is_state, is_res, is_inflow, is_market, State(in_max, out_max, initial_state, state_max), [], [], [])
+    function Node(name, is_commodity, is_state, is_res, is_inflow, is_market, state_max, in_max, out_max, initial_state, state_loss)
+        return new(name, is_commodity, is_state, is_res, is_inflow, is_market, State(in_max, out_max, initial_state, state_max, state_loss), [], [], [])
     end
 end
 
@@ -61,8 +62,9 @@ struct Topology
     VOM_cost::Float64
     ramp_up::Float64
     ramp_down::Float64
+    cap_ts::Vector{TimeSeries}
     function Topology(source, sink, capacity, VOM_cost, ramp_up, ramp_down)
-        return new(source, sink, capacity, VOM_cost, ramp_up, ramp_down)
+        return new(source, sink, capacity, VOM_cost, ramp_up, ramp_down,[])
     end
 end
 

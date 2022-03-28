@@ -33,4 +33,13 @@ module Predicer
         return AbstractModel.solve_model(model_contents)
     end
     
+    function get_result_df(mc,type="",process="",node="",scenario="")
+        return AbstractModel.get_result_dataframe(mc,type,process,node,scenario)
+    end
+    
+    function export_bid_matrix(mc)
+        input_data = get_data()
+        AbstractModel.write_bid_matrix(mc,input_data)
+    end
+
 end # module
