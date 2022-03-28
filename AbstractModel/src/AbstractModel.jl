@@ -157,9 +157,9 @@ module AbstractModel
             end
             if nodes[tu[1]].is_state
                 if tu[3] == temporals[1]
-                    state_expr = @expression(model, v_state[tu] + nodes[tu[1]].state.initial_state)
+                    state_expr = @expression(model, v_state[tu] - (1-nodes[tu[1]].state.state_loss)*nodes[tu[1]].state.initial_state)
                 else
-                    state_expr = @expression(model, v_state[tu] - v_state[node_balance_tuple[i-1]])
+                    state_expr = @expression(model, v_state[tu] - (1-nodes[tu[1]].state.state_loss)*v_state[node_balance_tuple[i-1]])
                 end
             else
                 state_expr = 0
@@ -374,13 +374,25 @@ module AbstractModel
         end
     
         for tup in p_online
-            cap = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1].capacity
+            topo = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1]
+            if isempty(topo.cap_ts)
+                cap = topo.capacity
+            else
+                cap = filter(x->x[1]==tup[5],filter(x->x.scenario==tup[4],topo.cap_ts)[1].series)[1][2]
+            end
+            #cap = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1].capacity
             add_to_expression!(e_lim_max[tup], -processes[tup[1]].load_max * cap * v_online[(tup[1], tup[4], tup[5])])
             add_to_expression!(e_lim_min[tup], -processes[tup[1]].load_min * cap * v_online[(tup[1], tup[4], tup[5])])
         end
     
         for tup in p_offline
-            cap = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1].capacity
+            topo = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1]
+            if isempty(topo.cap_ts)
+                cap = topo.capacity
+            else
+                cap = filter(x->x[1]==tup[5],filter(x->x.scenario==tup[4],topo.cap_ts)[1].series)[1][2]
+            end
+            #cap = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1].capacity
             if tup in p_reserve_prod || tup in p_reserve_cons
                 add_to_expression!(e_lim_max[tup], -cap)
             else
@@ -459,7 +471,7 @@ module AbstractModel
         reserve_final_exp = model_contents["expression"]["reserve_final_exp"] = OrderedDict()
         for tup in res_final_tuple
             r_tup = filter(x -> x[1] == tup[1] && x[4] == tup[2] && x[5] == tup[3], res_tuple)
-            reserve_final_exp[tup] = @expression(model, sum(v_res[r_tup]) .* (tup[1] == "fcr_n" ? 0.5 : 1.0) .- v_res_final[tup])
+            reserve_final_exp[tup] = @expression(model, sum(v_res[r_tup]) .* (markets[tup[1]].direction == "up_down" ? 0.5 : 1.0) .- v_res_final[tup])
         end
         reserve_final_eq = @constraint(model, reserve_final_eq[tup in res_final_tuple], reserve_final_exp[tup] == 0)
         model_contents["constraint"]["reserve_final_eq"] = reserve_final_eq
@@ -1272,7 +1284,113 @@ module AbstractModel
         model_contents["tuple"]["ramp_tuple"] = ramp_tuple
     end
 
+    function get_result_dataframe(model_contents,type="",process="",node="",scenario="")
+        println("Getting results for:")
+        tuples = model_contents["tuple"]
+        temporals = unique(map(x->x[5],tuples["process_tuple"]))
+        df = DataFrame(t = temporals)
+        vars = model_contents["variable"]
+        if type == "v_flow"
+            v_flow = vars[type]
+            tups = unique(map(x->(x[1],x[2],x[3]),filter(x->x[1]==process, tuples["process_tuple"])))
+            for tup in tups
+                colname = join(tup,"-")
+                col_tup = filter(x->x[1:3]==tup && x[4]==scenario, tuples["process_tuple"])
+                if !isempty(col_tup)
+                    df[!, colname] = value.(v_flow[col_tup].data)
+                end
+            end
+        elseif type == "v_reserve"
+            v_res = vars[type]
+            tups = unique(map(x->(x[1],x[2],x[3],x[5]),filter(x->x[3]==process, tuples["res_potential_tuple"])))
+            for tup in tups
+                col_name = join(tup,"-")
+                col_tup = filter(x->(x[1],x[2],x[3],x[5])==tup && x[6]==scenario, tuples["res_potential_tuple"])
+                if !isempty(col_tup)
+                    df[!, col_name] = value.(v_res[col_tup].data)
+                end
+            end
+        elseif type == "v_res_final"
+            v_res = vars[type]
+            ress = unique(map(x->x[1],tuples["res_final_tuple"]))
+            for r in ress
+                col_tup = filter(x->x[1]==r && x[2]==scenario, tuples["res_final_tuple"])
+                if !isempty(col_tup)
+                    df[!, r] = value.(v_res[col_tup].data)
+                end
+            end
+    
+        elseif type == "v_online" || type == "v_start" || type == "v_stop"
+            v_bin = vars[type]
+            procs = unique(map(x->x[1],tuples["process_tuple"]))
+            for p in procs
+                col_tup = filter(x->x[1]==p && x[2]==scenario, tuples["proc_online_tuple"])
+                if !isempty(col_tup)
+                    df[!, p] = value.(v_bin[col_tup].data)
+                end
+            end
+        elseif type == "v_state"
+            v_state = vars[type]
+            nods = unique(map(x->x[1],tuples["node_state_tuple"]))
+            for n in nods
+                col_tup = filter(x->x[1]==n && x[2]==scenario, tuples["node_state_tuple"])
+                if !isempty(col_tup)
+                    df[!, n] = value.(v_state[col_tup].data)
+                end
+            end
+        elseif type == "vq_state_up" || type == "vq_state_dw"
+            v_state = vars[type]
+            nods = unique(map(x->x[1],tuples["node_balance_tuple"]))
+            for n in nods
+                col_tup = filter(x->x[1]==n && x[2]==scenario, tuples["node_balance_tuple"])
+                if !isempty(col_tup)
+                    df[!, n] = value.(v_state[col_tup].data)
+                end
+            end
+        else
+            println("ERROR: incorrect type")
+        end
+        return df
+    end
 
+    function write_bid_matrix(model_contents,input_data)
+        println("Writing bid matrix...")
+        vars = model_contents["variable"]
+        v_flow = vars["v_flow"]
+        v_res_final = vars["v_res_final"]
+
+        tuples = model_contents["tuple"]
+        temporals = unique(map(x->x[5],tuples["process_tuple"]))
+        markets = input_data["markets"]
+        scenarios = keys(input_data["scenarios"])
+
+        if !isdir(pwd()*"\\results")
+            mkdir("results")
+        end
+        output_path = string(pwd()) * "\\results\\bid_matrix_"*Dates.format(Dates.now(), "yyyy-mm-dd-HH-MM-SS")*".xlsx"
+        XLSX.openxlsx(output_path, mode="w") do xf
+            for (i,m) in enumerate(keys(markets))
+                XLSX.addsheet!(xf, m)
+                df = DataFrame(t = temporals)
+                for s in scenarios
+                    p_name = "PRICE-"*s
+                    v_name = "VOLUME-"*s
+                    price = map(x->x[2],filter(x->x.scenario==s,markets[m].price)[1].series)
+                    if markets[m].type == "energy"
+                        tup_b = filter(x->x[2]==m && x[4]==s,tuples["process_tuple"])
+                        tup_s = filter(x->x[3]==m && x[4]==s,tuples["process_tuple"])
+                        volume = value.(v_flow[tup_s].data)-value.(v_flow[tup_b].data)
+                    else
+                        tup = filter(x->x[1]==m && x[2]==s,tuples["res_final_tuple"])
+                        volume = value.(v_res_final[tup].data)
+                    end
+                    df[!,p_name] = price
+                    df[!,v_name] = volume
+                end
+                XLSX.writetable!(xf[i+1], collect(eachcol(df)), names(df))
+            end
+        end
+    end
 
 
 

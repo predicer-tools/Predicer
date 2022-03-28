@@ -25,7 +25,8 @@ function main()
         timeseries_data[sn] = DataFrame(XLSX.readtable(input_data_path, sn)...)
     end
 
-    fixed_data = DataFrame(XLSX.readtable(input_data_path, "fixed_ts")...)    
+    fixed_data = DataFrame(XLSX.readtable(input_data_path, "fixed_ts")...)
+    cap_ts = DataFrame(XLSX.readtable(input_data_path, "cap_ts")...)    
     constraint_data = DataFrame(XLSX.readtable(input_data_path, "gen_constraint")...) 
     constraint_type = DataFrame(XLSX.readtable(input_data_path, "constraints")...)
     gen_constraints = Dict()
@@ -61,7 +62,7 @@ function main()
     nodes = Dict()
     for i in 1:nrow(system_data["nodes"])
         n = system_data["nodes"][i, :]
-        nodes[n.node] = AbstractModel.Node(n.node, Bool(n.is_commodity), Bool(n.is_state), Bool(n.is_res), Bool(n.is_inflow), Bool(n.is_market), n.state_max, n.in_max, n.out_max, n.initial_state)
+        nodes[n.node] = AbstractModel.Node(n.node, Bool(n.is_commodity), Bool(n.is_state), Bool(n.is_res), Bool(n.is_inflow), Bool(n.is_market), n.state_max, n.in_max, n.out_max, n.initial_state, n.state_loss)
         if Bool(n.is_commodity)
             for s in keys(scenarios)
                 timesteps = timeseries_data["scenarios"][s]["price"].t
@@ -139,6 +140,25 @@ function main()
     end
     #return system_data["efficiencies"]
     
+    for n in names(cap_ts)
+        timesteps = cap_ts.t
+        if n != "t"
+            col = split(n,",")
+            proc = col[1]
+            nod = col[2]
+            scen = col[3]
+            ts = AbstractModel.TimeSeries(scen)
+            data = cap_ts[!,n]
+            for i in 1:length(timesteps)
+                push!(ts.series,(timesteps[i],data[i]))
+            end
+            push!(filter(x->x.source==nod || x.sink==nod,processes[proc].topos)[1].cap_ts,ts)
+        end
+    end
+
+
+
+
     # Get piecewise efficiencies from the input data.
     #-------------------------------------------
     # Get name of processes defined in the input data
