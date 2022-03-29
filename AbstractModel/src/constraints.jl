@@ -92,9 +92,9 @@ function setup_node_balance(model_contents, input_data)
         end
         if nodes[tu[1]].is_state
             if tu[3] == temporals[1]
-                state_expr = @expression(model, v_state[tu] + nodes[tu[1]].state.initial_state)
+                state_expr = @expression(model, v_state[tu] - (1-nodes[tu[1]].state.state_loss)*nodes[tu[1]].state.initial_state)
             else
-                state_expr = @expression(model, v_state[tu] - v_state[node_balance_tuple[i-1]])
+                state_expr = @expression(model, v_state[tu] - (1-nodes[tu[1]].state.state_loss)*v_state[node_balance_tuple[i-1]])
             end
         else
             state_expr = 0
@@ -309,13 +309,25 @@ function setup_processes_limits(model_contents, input_data)
     end
 
     for tup in p_online
-        cap = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1].capacity
+        topo = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1]
+        if isempty(topo.cap_ts)
+            cap = topo.capacity
+        else
+            cap = filter(x->x[1]==tup[5],filter(x->x.scenario==tup[4],topo.cap_ts)[1].series)[1][2]
+        end
+        #cap = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1].capacity
         add_to_expression!(e_lim_max[tup], -processes[tup[1]].load_max * cap * v_online[(tup[1], tup[4], tup[5])])
         add_to_expression!(e_lim_min[tup], -processes[tup[1]].load_min * cap * v_online[(tup[1], tup[4], tup[5])])
     end
 
     for tup in p_offline
-        cap = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1].capacity
+        topo = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1]
+        if isempty(topo.cap_ts)
+            cap = topo.capacity
+        else
+            cap = filter(x->x[1]==tup[5],filter(x->x.scenario==tup[4],topo.cap_ts)[1].series)[1][2]
+        end
+        #cap = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1].capacity
         if tup in p_reserve_prod || tup in p_reserve_cons
             add_to_expression!(e_lim_max[tup], -cap)
         else
@@ -394,7 +406,7 @@ function setup_reserve_balances(model_contents, input_data)
     reserve_final_exp = model_contents["expression"]["reserve_final_exp"] = OrderedDict()
     for tup in res_final_tuple
         r_tup = filter(x -> x[1] == tup[1] && x[4] == tup[2] && x[5] == tup[3], res_tuple)
-        reserve_final_exp[tup] = @expression(model, sum(v_res[r_tup]) .* (tup[1] == "fcr_n" ? 0.5 : 1.0) .- v_res_final[tup])
+        reserve_final_exp[tup] = @expression(model, sum(v_res[r_tup]) .* (markets[tup[1]].direction == "up_down" ? 0.5 : 1.0) .- v_res_final[tup])
     end
     reserve_final_eq = @constraint(model, reserve_final_eq[tup in res_final_tuple], reserve_final_exp[tup] == 0)
     model_contents["constraint"]["reserve_final_eq"] = reserve_final_eq

@@ -7,7 +7,9 @@ module AbstractModel
 
     export Initialize,
     solve_model,
-    export_model_contents
+    export_model_contents,
+    get_result_dataframe,
+    write_bid_matrix
 
     export Node,
     Process, 
