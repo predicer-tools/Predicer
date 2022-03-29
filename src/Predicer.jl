@@ -2,14 +2,9 @@ module Predicer
     import AbstractModel
 
     export get_data
-    export test_AM2
     export export_model_contents_dict
     export init_model
     export solve_model
-
-    function run_AbstractModel(d)
-        return AbstractModel.run_AM(d)
-    end
 
     function get_data()
         return include(".\\src\\import_input_data.jl")()
