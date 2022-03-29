@@ -1,6 +1,6 @@
 # --- State ---
 """
-    struct State <: AbstractState
+    struct State
         in_max::Float64
         out_max::Float64
         state_max::Float64
@@ -21,7 +21,7 @@ A struct for node states (storage), holds information on the parameters of the s
 - `initial_state::Float64`: Initial value of the state variable at t = 0.
 - `state_loss`: Losses over time in the state. 
 """
-struct State <: AbstractState
+struct State
     in_max::Float64
     out_max::Float64
     state_max::Float64
@@ -102,8 +102,8 @@ struct Node
     state::State
     cost::Vector{TimeSeries}
     inflow::Vector{TimeSeries}
-    function Node(name, is_commodity, is_state, is_res, is_inflow, is_market, state_max, in_max, out_max, initial_state)
-        return new(name, is_commodity, is_state, is_res, is_inflow, is_market, State(in_max, out_max, initial_state, state_max), [], [])
+    function Node(name, is_commodity, is_state, is_res, is_inflow, is_market, state_max, in_max, out_max, initial_state, state_loss)
+        return new(name, is_commodity, is_state, is_res, is_inflow, is_market, State(in_max, out_max, initial_state, state_max, state_loss), [], [])
     end
 end
 
