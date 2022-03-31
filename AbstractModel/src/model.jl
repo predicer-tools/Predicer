@@ -10,7 +10,28 @@ using XLSX
 # calls separate functions for setting up the variables and constraints used 
 # in the model. Returns "model_contents"; a dictionary containing all variables,
 # constraints, tuples, and expressions used to build the model.
-function Initialize(input_data)
+"""
+    Initialize(input_data::OrderedDict)
+
+Function to initialize the model based on given input data. This function calls functions initializing the solver, model, etc. 
+
+# Arguments
+- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+
+# Examples
+'''julia-repl
+julia> model_contents = Initialize(input_data);
+"constraint"     => ...
+"expression"     => ...
+"variable"       => ...
+"tuple"          => ...
+"gen_constraint" => ...
+"gen_expression" => ...
+"res_dir"        => ...
+"model"          => ...
+'''
+"""
+function Initialize(input_data::OrderedDict)
     model_contents = Initialize_contents()
     model = init_jump_model(Cbc.Optimizer)
     model_contents["model"] = model
@@ -19,7 +40,21 @@ function Initialize(input_data)
 end
 
 # Function to run the model built based on the given input data. 
-function solve_model(model_contents)
+
+"""
+    solve_model(model_contents::OrderedDict)
+
+Function to solve model. 
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+
+# Examples
+'''julia repl
+julia> Predicer.solve_model(model_contents);
+'''
+"""
+function solve_model(model_contents::OrderedDict)
     model = model_contents["model"]
     optimize!(model)
 end
@@ -60,8 +95,15 @@ function setup_objective_function(model_contents, input_data)
     @objective(model, Min, sum(values(scen_p).*values(total_costs)))
 end
 
-# Saves the contents of the model dict to an excel file. 
-function export_model_contents(model_contents, results)
+"""
+    export_model_contents(model_contents::OrderedDict, results::Bool)
+
+Saves the contents of the model dict to an excel file.
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+"""
+function export_model_contents(model_contents::OrderedDict, results::Bool)
     if !isdir(pwd()*"\\results")
         mkdir("results")
     end
@@ -122,12 +164,13 @@ function export_model_contents(model_contents, results)
             elseif key1 == "gen_constraint"
                 for (colnr, key2) in enumerate(collect(keys(model_contents[key1])))
                     xf[key_index+1][XLSX.CellRef(1, colnr)] = string(key2)
-                    for (i, val) in enumerate(values(model_contents["model"].obj_dict[Symbol(key2)]))
+
+                    for (i, (key3,val3)) in enumerate(zip(keys(model_contents[key1][key2]), values(model_contents[key1][key2])))
                         if results
-                            output = string(val) * " : " * string(JuMP.value.(val))
+                            output = string(key3) * " : " * string(JuMP.value.(val3))
                             xf[key_index+1][XLSX.CellRef(i+1, colnr)] = first(output, 32000)
                         else
-                            output = string(val)
+                            output = string(key3)*" : "*string(val3)
                             xf[key_index+1][XLSX.CellRef(i+1, colnr)] = first(output, 32000)
                         end
                     end
@@ -148,112 +191,113 @@ function export_model_contents(model_contents, results)
             end
         end
     end
+end
 
-    function get_result_dataframe(model_contents,type="",process="",node="",scenario="")
-        println("Getting results for:")
-        tuples = model_contents["tuple"]
-        temporals = unique(map(x->x[5],tuples["process_tuple"]))
-        df = DataFrame(t = temporals)
-        vars = model_contents["variable"]
-        if type == "v_flow"
-            v_flow = vars[type]
-            tups = unique(map(x->(x[1],x[2],x[3]),filter(x->x[1]==process, tuples["process_tuple"])))
-            for tup in tups
-                colname = join(tup,"-")
-                col_tup = filter(x->x[1:3]==tup && x[4]==scenario, tuples["process_tuple"])
-                if !isempty(col_tup)
-                    df[!, colname] = value.(v_flow[col_tup].data)
-                end
+
+function get_result_dataframe(model_contents,type="",process="",node="",scenario="")
+    println("Getting results for:")
+    tuples = model_contents["tuple"]
+    temporals = unique(map(x->x[5],tuples["process_tuple"]))
+    df = DataFrame(t = temporals)
+    vars = model_contents["variable"]
+    if type == "v_flow"
+        v_flow = vars[type]
+        tups = unique(map(x->(x[1],x[2],x[3]),filter(x->x[1]==process, tuples["process_tuple"])))
+        for tup in tups
+            colname = join(tup,"-")
+            col_tup = filter(x->x[1:3]==tup && x[4]==scenario, tuples["process_tuple"])
+            if !isempty(col_tup)
+                df[!, colname] = value.(v_flow[col_tup].data)
             end
-        elseif type == "v_reserve"
-            v_res = vars[type]
-            tups = unique(map(x->(x[1],x[2],x[3],x[5]),filter(x->x[3]==process, tuples["res_potential_tuple"])))
-            for tup in tups
-                col_name = join(tup,"-")
-                col_tup = filter(x->(x[1],x[2],x[3],x[5])==tup && x[6]==scenario, tuples["res_potential_tuple"])
-                if !isempty(col_tup)
-                    df[!, col_name] = value.(v_res[col_tup].data)
-                end
-            end
-        elseif type == "v_res_final"
-            v_res = vars[type]
-            ress = unique(map(x->x[1],tuples["res_final_tuple"]))
-            for r in ress
-                col_tup = filter(x->x[1]==r && x[2]==scenario, tuples["res_final_tuple"])
-                if !isempty(col_tup)
-                    df[!, r] = value.(v_res[col_tup].data)
-                end
-            end
-    
-        elseif type == "v_online" || type == "v_start" || type == "v_stop"
-            v_bin = vars[type]
-            procs = unique(map(x->x[1],tuples["process_tuple"]))
-            for p in procs
-                col_tup = filter(x->x[1]==p && x[2]==scenario, tuples["proc_online_tuple"])
-                if !isempty(col_tup)
-                    df[!, p] = value.(v_bin[col_tup].data)
-                end
-            end
-        elseif type == "v_state"
-            v_state = vars[type]
-            nods = unique(map(x->x[1],tuples["node_state_tuple"]))
-            for n in nods
-                col_tup = filter(x->x[1]==n && x[2]==scenario, tuples["node_state_tuple"])
-                if !isempty(col_tup)
-                    df[!, n] = value.(v_state[col_tup].data)
-                end
-            end
-        elseif type == "vq_state_up" || type == "vq_state_dw"
-            v_state = vars[type]
-            nods = unique(map(x->x[1],tuples["node_balance_tuple"]))
-            for n in nods
-                col_tup = filter(x->x[1]==n && x[2]==scenario, tuples["node_balance_tuple"])
-                if !isempty(col_tup)
-                    df[!, n] = value.(v_state[col_tup].data)
-                end
-            end
-        else
-            println("ERROR: incorrect type")
         end
-        return df
+    elseif type == "v_reserve"
+        v_res = vars[type]
+        tups = unique(map(x->(x[1],x[2],x[3],x[5]),filter(x->x[3]==process, tuples["res_potential_tuple"])))
+        for tup in tups
+            col_name = join(tup,"-")
+            col_tup = filter(x->(x[1],x[2],x[3],x[5])==tup && x[6]==scenario, tuples["res_potential_tuple"])
+            if !isempty(col_tup)
+                df[!, col_name] = value.(v_res[col_tup].data)
+            end
+        end
+    elseif type == "v_res_final"
+        v_res = vars[type]
+        ress = unique(map(x->x[1],tuples["res_final_tuple"]))
+        for r in ress
+            col_tup = filter(x->x[1]==r && x[2]==scenario, tuples["res_final_tuple"])
+            if !isempty(col_tup)
+                df[!, r] = value.(v_res[col_tup].data)
+            end
+        end
+
+    elseif type == "v_online" || type == "v_start" || type == "v_stop"
+        v_bin = vars[type]
+        procs = unique(map(x->x[1],tuples["process_tuple"]))
+        for p in procs
+            col_tup = filter(x->x[1]==p && x[2]==scenario, tuples["proc_online_tuple"])
+            if !isempty(col_tup)
+                df[!, p] = value.(v_bin[col_tup].data)
+            end
+        end
+    elseif type == "v_state"
+        v_state = vars[type]
+        nods = unique(map(x->x[1],tuples["node_state_tuple"]))
+        for n in nods
+            col_tup = filter(x->x[1]==n && x[2]==scenario, tuples["node_state_tuple"])
+            if !isempty(col_tup)
+                df[!, n] = value.(v_state[col_tup].data)
+            end
+        end
+    elseif type == "vq_state_up" || type == "vq_state_dw"
+        v_state = vars[type]
+        nods = unique(map(x->x[1],tuples["node_balance_tuple"]))
+        for n in nods
+            col_tup = filter(x->x[1]==n && x[2]==scenario, tuples["node_balance_tuple"])
+            if !isempty(col_tup)
+                df[!, n] = value.(v_state[col_tup].data)
+            end
+        end
+    else
+        println("ERROR: incorrect type")
     end
+    return df
+end
 
-    function write_bid_matrix(model_contents,input_data)
-        println("Writing bid matrix...")
-        vars = model_contents["variable"]
-        v_flow = vars["v_flow"]
-        v_res_final = vars["v_res_final"]
+function write_bid_matrix(model_contents,input_data)
+    println("Writing bid matrix...")
+    vars = model_contents["variable"]
+    v_flow = vars["v_flow"]
+    v_res_final = vars["v_res_final"]
 
-        tuples = model_contents["tuple"]
-        temporals = unique(map(x->x[5],tuples["process_tuple"]))
-        markets = input_data["markets"]
-        scenarios = keys(input_data["scenarios"])
+    tuples = model_contents["tuple"]
+    temporals = unique(map(x->x[5],tuples["process_tuple"]))
+    markets = input_data["markets"]
+    scenarios = keys(input_data["scenarios"])
 
-        if !isdir(pwd()*"\\results")
-            mkdir("results")
-        end
-        output_path = string(pwd()) * "\\results\\bid_matrix_"*Dates.format(Dates.now(), "yyyy-mm-dd-HH-MM-SS")*".xlsx"
-        XLSX.openxlsx(output_path, mode="w") do xf
-            for (i,m) in enumerate(keys(markets))
-                XLSX.addsheet!(xf, m)
-                df = DataFrame(t = temporals)
-                for s in scenarios
-                    p_name = "PRICE-"*s
-                    v_name = "VOLUME-"*s
-                    price = map(x->x[2],filter(x->x.scenario==s,markets[m].price)[1].series)
-                    if markets[m].type == "energy"
-                        tup_b = filter(x->x[2]==m && x[4]==s,tuples["process_tuple"])
-                        tup_s = filter(x->x[3]==m && x[4]==s,tuples["process_tuple"])
-                        volume = value.(v_flow[tup_s].data)-value.(v_flow[tup_b].data)
-                    else
-                        tup = filter(x->x[1]==m && x[2]==s,tuples["res_final_tuple"])
-                        volume = value.(v_res_final[tup].data)
-                    end
-                    df[!,p_name] = price
-                    df[!,v_name] = volume
+    if !isdir(pwd()*"\\results")
+        mkdir("results")
+    end
+    output_path = string(pwd()) * "\\results\\bid_matrix_"*Dates.format(Dates.now(), "yyyy-mm-dd-HH-MM-SS")*".xlsx"
+    XLSX.openxlsx(output_path, mode="w") do xf
+        for (i,m) in enumerate(keys(markets))
+            XLSX.addsheet!(xf, m)
+            df = DataFrame(t = temporals)
+            for s in scenarios
+                p_name = "PRICE-"*s
+                v_name = "VOLUME-"*s
+                price = map(x->x[2],filter(x->x.scenario==s,markets[m].price)[1].series)
+                if markets[m].type == "energy"
+                    tup_b = filter(x->x[2]==m && x[4]==s,tuples["process_tuple"])
+                    tup_s = filter(x->x[3]==m && x[4]==s,tuples["process_tuple"])
+                    volume = value.(v_flow[tup_s].data)-value.(v_flow[tup_b].data)
+                else
+                    tup = filter(x->x[1]==m && x[2]==s,tuples["res_final_tuple"])
+                    volume = value.(v_res_final[tup].data)
                 end
-                XLSX.writetable!(xf[i+1], collect(eachcol(df)), names(df))
+                df[!,p_name] = price
+                df[!,v_name] = volume
             end
+            XLSX.writetable!(xf[i+1], collect(eachcol(df)), names(df))
         end
     end
 end

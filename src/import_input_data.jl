@@ -1,5 +1,6 @@
 using DataFrames
 using XLSX
+using DataStructures
 import AbstractModel
 
 function main()
@@ -10,12 +11,12 @@ function main()
     input_data_path = wd * "input_data\\input_data.xlsx"
     
 
-    system_data = Dict()
-    timeseries_data = Dict()
-    timeseries_data["scenarios"] = Dict()
+    system_data = OrderedDict()
+    timeseries_data = OrderedDict()
+    timeseries_data["scenarios"] = OrderedDict()
 
-    scenarios = Dict()
-    reserve_type = Dict()
+    scenarios = OrderedDict()
+    reserve_type = OrderedDict()
 
     for sn in sheetnames_system
         system_data[sn] = DataFrame(XLSX.readtable(input_data_path, sn)...)
@@ -29,7 +30,7 @@ function main()
     cap_ts = DataFrame(XLSX.readtable(input_data_path, "cap_ts")...)    
     constraint_data = DataFrame(XLSX.readtable(input_data_path, "gen_constraint")...) 
     constraint_type = DataFrame(XLSX.readtable(input_data_path, "constraints")...)
-    gen_constraints = Dict()
+    gen_constraints = OrderedDict()
 
     for i in 1:nrow(system_data["scenarios"])
         scenarios[system_data["scenarios"][i,1]] = system_data["scenarios"][i,2]
@@ -44,7 +45,7 @@ function main()
                     scenario = split(n, ",")[2]
                     #push!(scenarios, scenario)
                     if !(scenario in keys(timeseries_data["scenarios"]))
-                        timeseries_data["scenarios"][scenario] = Dict()
+                        timeseries_data["scenarios"][scenario] = OrderedDict()
                     end
                     if !(k in keys(timeseries_data["scenarios"][scenario]))
                         timeseries_data["scenarios"][scenario][k] = DataFrame(t=timeseries_data[k].t)
@@ -59,7 +60,7 @@ function main()
 
     dates = []
 
-    nodes = Dict()
+    nodes = OrderedDict()
     for i in 1:nrow(system_data["nodes"])
         n = system_data["nodes"][i, :]
         nodes[n.node] = AbstractModel.Node(n.node, Bool(n.is_commodity), Bool(n.is_state), Bool(n.is_res), Bool(n.is_inflow), Bool(n.is_market), n.state_max, n.in_max, n.out_max, n.initial_state, n.state_loss)
@@ -91,7 +92,7 @@ function main()
         end
     end
     
-    processes = Dict()
+    processes = OrderedDict()
     for i in 1:nrow(system_data["processes"])
         p = system_data["processes"][i, :]
         processes[p.process] = AbstractModel.Process(p.process, Bool(p.is_cf), Bool(p.is_cf_fix), Bool(p.is_online), Bool(p.is_res), p.eff, p.conversion, p.load_min, p.load_max, p.start_cost, p.min_online, p.min_offline, p.initial_state)
@@ -209,7 +210,7 @@ function main()
 
     #-----------------------------------------------
    
-    markets = Dict()
+    markets = OrderedDict()
     for i in 1:nrow(system_data["markets"])
         mm = system_data["markets"][i, :]
         markets[mm.market] = AbstractModel.Market(mm.market, mm.type, mm.node, mm.direction, mm.realisation, mm.reserve_type)
@@ -243,7 +244,7 @@ function main()
         gen_constraints[con] = AbstractModel.GenConstraint(con,con_dir)
     end
 
-    con_vecs = Dict()
+    con_vecs = OrderedDict()
     for n in names(constraint_data)
         timesteps = constraint_data.t
         if n != "t"
@@ -274,7 +275,7 @@ function main()
         push!(gen_constraints[k[1]].factors,con_fac)
     end
 
-    imported_input_data = Dict()
+    imported_input_data = OrderedDict()
     imported_input_data["temporals"] = unique(dates)
     imported_input_data["scenarios"] = scenarios
     imported_input_data["nodes"] =nodes
