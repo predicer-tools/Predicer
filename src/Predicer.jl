@@ -37,4 +37,5 @@ module Predicer
         AbstractModel.write_bid_matrix(mc,input_data)
     end
 
+
 end # module

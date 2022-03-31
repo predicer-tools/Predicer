@@ -1,7 +1,16 @@
 using DataStructures
 using JuMP
 
-function create_constraints(model_contents, input_data)
+"""
+    create_constraints(model_contents::OrderedDict, input_data::OrderedDict)
+
+Create all constraints used in the model.
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+"""
+function create_constraints(model_contents::OrderedDict, input_data::OrderedDict)
     setup_node_balance(model_contents, input_data)
     setup_process_online_balance(model_contents, input_data)
     setup_process_balance(model_contents, input_data)
@@ -13,10 +22,19 @@ function create_constraints(model_contents, input_data)
     setup_generic_constraints(model_contents, input_data)
     setup_cost_calculations(model_contents, input_data)
     setup_objective_function(model_contents, input_data)
-
 end
 
-function setup_node_balance(model_contents, input_data)
+
+"""
+    setup_node_balance(model_contents::OrderedDict, input_data::OrderedDict)
+
+Setup node balance constraints used in the model.
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+"""
+function setup_node_balance(model_contents::OrderedDict, input_data::OrderedDict)
     model = model_contents["model"]
     process_tuple = model_contents["tuple"]["process_tuple"]
     res_dir = model_contents["res_dir"]
@@ -115,7 +133,17 @@ function setup_node_balance(model_contents, input_data)
     end
 end
 
-function setup_process_online_balance(model_contents, input_data)
+
+"""
+    setup_process_online_balance(model_contents::OrderedDict, input_data::OrderedDict)
+
+Setup necessary functionalities for processes with binary online variables.
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+"""
+function setup_process_online_balance(model_contents::OrderedDict, input_data::OrderedDict)
     model = model_contents["model"]
     v_start = model_contents["variable"]["v_start"]
     v_stop = model_contents["variable"]["v_stop"]
@@ -172,7 +200,17 @@ function setup_process_online_balance(model_contents, input_data)
 
 end
 
-function setup_process_balance(model_contents, input_data)
+
+"""
+    setup_process_balance(model_contents::OrderedDict, input_data::OrderedDict)
+
+Setup constraints used in process balance calculations. 
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+"""
+function setup_process_balance(model_contents::OrderedDict, input_data::OrderedDict)
     model = model_contents["model"]
     proc_balance_tuple = model_contents["tuple"]["proc_balance_tuple"]
     process_tuple = model_contents["tuple"]["process_tuple"]
@@ -240,7 +278,17 @@ function setup_process_balance(model_contents, input_data)
 
 end
 
-function setup_processes_limits(model_contents, input_data)
+
+"""
+    setup_processes_limits(model_contents::OrderedDict, input_data::OrderedDict)
+
+Setup constraints used for process limitations, such as min/max loads, unit starts and participation in reserves.
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+"""
+function setup_processes_limits(model_contents::OrderedDict, input_data::OrderedDict)
     model = model_contents["model"]
     trans_tuple = model_contents["tuple"]["trans_tuple"]
     lim_tuple = model_contents["tuple"]["lim_tuple"]
@@ -344,7 +392,17 @@ function setup_processes_limits(model_contents, input_data)
     model_contents["constraint"]["min_eq"] = min_eq
 end
 
-function setup_reserve_balances(model_contents, input_data)
+
+"""
+    setup_reserve_balances(model_contents::OrderedDict, input_data::OrderedDict)
+
+Setup constraints for reserves. 
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+"""
+function setup_reserve_balances(model_contents::OrderedDict, input_data::OrderedDict)
     model = model_contents["model"]
     res_eq_tuple = model_contents["tuple"]["res_eq_tuple"]
     res_eq_updn_tuple = model_contents["tuple"]["res_eq_updn_tuple"]
@@ -412,7 +470,17 @@ function setup_reserve_balances(model_contents, input_data)
     model_contents["constraint"]["reserve_final_eq"] = reserve_final_eq
 end
 
-function setup_ramp_constraints(model_contents, input_data)
+
+"""
+    setup_ramp_constraints(model_contents::OrderedDict, input_data::OrderedDict)
+
+Setup process ramp constraints, based on ramp limits defined in input data and participation in reserves.  
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+"""
+function setup_ramp_constraints(model_contents::OrderedDict, input_data::OrderedDict)
     model = model_contents["model"]
     ramp_tuple = model_contents["tuple"]["ramp_tuple"]
     process_tuple = model_contents["tuple"]["process_tuple"]
@@ -491,7 +559,17 @@ function setup_ramp_constraints(model_contents, input_data)
     model_contents["constraint"]["ramp_down_eq"] = ramp_down_eq
 end
 
-function setup_fixed_values(model_contents, input_data)
+
+"""
+    setup_fixed_values(model_contents::OrderedDict, input_data::OrderedDict)
+
+Setup constraints for setting fixed process values at certain timesteps.   
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+"""
+function setup_fixed_values(model_contents::OrderedDict, input_data::OrderedDict)
     model = model_contents["model"]
     
     process_tuple = model_contents["tuple"]["process_tuple"]
@@ -528,7 +606,17 @@ function setup_fixed_values(model_contents, input_data)
     model_contents["constraint"]["fixed_value_eq"] = fixed_value_eq
 end
 
-function setup_bidding_constraints(model_contents, input_data)
+
+"""
+    setup_bidding_constraints(model_contents::OrderedDict, input_data::OrderedDict)
+
+Setup constraints for market bidding.   
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+"""
+function setup_bidding_constraints(model_contents::OrderedDict, input_data::OrderedDict)
     model = model_contents["model"]
     markets = input_data["markets"]
     scenarios = collect(keys(input_data["scenarios"]))
@@ -576,7 +664,17 @@ function setup_bidding_constraints(model_contents, input_data)
     end
 end
 
-function setup_generic_constraints(model_contents, input_data)
+
+"""
+    setup_generic_constraints(model_contents::OrderedDict, input_data::OrderedDict)
+
+Setup generic constraints. 
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+"""
+function setup_generic_constraints(model_contents::OrderedDict, input_data::OrderedDict)
     model = model_contents["model"]
     process_tuple = model_contents["tuple"]["process_tuple"]
     v_flow = model_contents["variable"]["v_flow"]
@@ -613,7 +711,17 @@ function setup_generic_constraints(model_contents, input_data)
     end
 end
 
-function setup_cost_calculations(model_contents, input_data)
+
+"""
+    setup_cost_calculations(model_contents::OrderedDict, input_data::OrderedDict)
+
+Setup expressions used for calculating the costs in the model. 
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+"""
+function setup_cost_calculations(model_contents::OrderedDict, input_data::OrderedDict)
     model = model_contents["model"]
     process_tuple = model_contents["tuple"]["process_tuple"]
     proc_online_tuple = model_contents["tuple"]["proc_online_tuple"]
