@@ -1,7 +1,15 @@
 using JuMP
 using DataStructures
 
-function create_variables(model_contents, input_data)
+"""
+    create_variables(model_contents::OrderedDict)
+
+Create the variables used in the model, and save them in the model_contents dict.
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+"""
+function create_variables(model_contents::OrderedDict)
     create_v_flow(model_contents)
     create_v_online(model_contents)
     create_v_reserve(model_contents)
@@ -9,14 +17,32 @@ function create_variables(model_contents, input_data)
     create_v_flow_op(model_contents)
 end
 
-function create_v_flow(model_contents)
+
+"""
+    create_v_flow(model_contents::OrderedDict)
+
+Sets up v_flow, which is the variable symbolising flows between nodes/processes.
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+"""
+function create_v_flow(model_contents::OrderedDict)
     process_tuple = model_contents["tuple"]["process_tuple"]
     model = model_contents["model"]
     v_flow = @variable(model, v_flow[tup in process_tuple] >= 0)
     model_contents["variable"]["v_flow"] = v_flow
 end
 
-function create_v_online(model_contents)
+
+"""
+    create_v_online(model_contents::OrderedDict)
+
+Sets up variables used for modelling functionality for processes with binary online variables, as well as starts/stops.
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+"""
+function create_v_online(model_contents::OrderedDict)
     proc_online_tuple = model_contents["tuple"]["proc_online_tuple"]
     if !isempty(proc_online_tuple)
         model = model_contents["model"]
@@ -29,7 +55,16 @@ function create_v_online(model_contents)
     end
 end
 
-function create_v_reserve(model_contents)
+
+"""
+    create_v_reserve(model_contents::OrderedDict)
+
+Sets up the variables used for modelling reserves.
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+"""
+function create_v_reserve(model_contents::OrderedDict)
     model = model_contents["model"]
 
     res_potential_tuple = model_contents["tuple"]["res_potential_tuple"]
@@ -51,7 +86,16 @@ function create_v_reserve(model_contents)
     end
 end
 
-function create_v_state(model_contents)
+
+"""
+    create_v_state(model_contents::OrderedDict)
+
+Sets up variables used for node state (storage) functionality.
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+"""
+function create_v_state(model_contents::OrderedDict)
     model = model_contents["model"]
     node_state_tuple = model_contents["tuple"]["node_state_tuple"]
     node_balance_tuple = model_contents["tuple"]["node_balance_tuple"]
@@ -68,7 +112,16 @@ function create_v_state(model_contents)
     model_contents["variable"]["vq_state_dw"] = vq_state_dw
 end
 
-function create_v_flow_op(model_contents)
+
+"""
+    create_v_flow_op(model_contents::OrderedDict)
+
+Sets up variables for processes with piecewise efficiency functionality.
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+"""
+function create_v_flow_op(model_contents::OrderedDict)
     model = model_contents["model"]
     proc_op_balance_tuple = model_contents["tuple"]["proc_op_balance_tuple"]
     v_flow_op_in = @variable(model,v_flow_op_in[tup in proc_op_balance_tuple] >= 0)
