@@ -1,8 +1,7 @@
 using Documenter
 using AbstractModel
 
-Documenter.makedocs(source = "src",
-    build = "build",
+Documenter.makedocs(build = "build",
     clean = true,
     doctest = false,
     modules = Module[AbstractModel],

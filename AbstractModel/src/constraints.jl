@@ -825,3 +825,15 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Ordere
         total_costs[s] = sum(commodity_costs[s] + sum(market_costs[s]) + sum(vom_costs[s]) + sum(reserve_costs[s]) + sum(start_costs[s]) + sum(dummy_costs[s]))
     end
 end
+
+"""
+    setup_objective_function(model_contents::OrderedDict, input_data::OrderedDict)
+
+Sets up the objective function, which in this model aims to minimize the costs.
+"""
+function setup_objective_function(model_contents::OrderedDict, input_data::OrderedDict)
+    model = model_contents["model"]
+    total_costs = model_contents["expression"]["total_costs"]
+    scen_p = collect(values(input_data["scenarios"]))
+    @objective(model, Min, sum(values(scen_p).*values(total_costs)))
+end
