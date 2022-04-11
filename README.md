@@ -1,10 +1,10 @@
 # Predicer
 ‘Predictive decider’ for actors making decisions over multiple stages
 
-## How to use
+## How to install
 
 - Clone the project to your computer using git.
-- Make sure that the main branch  is activated.
+- Make sure that the main branch is activated.
 - Open a julia REPL. It is recommended to use a IDE such as VSCode or Atom, as the results from the model are currently not saved in a separate file.
 - Navigate to *.\Predicer* using the `cd` command.
 
@@ -16,18 +16,35 @@
 
 - Press backspace to exit the package manager
 - Type `using Pkg` followed by `Pkg.instantiate()` to install the required packages. This can take a while.
-- In case of errors, type `Pkg.instantiate()` again. This usually works for some reason. 
 
         julia> using Pkg
         julia> Pkg.instantiate()
 
 - Finally type `using Predicer` to use the package.
 
+## How to use
+
+- Navigate to the local folder containing the Predicer package.
+- type `]` to open the package manager in julia, and type `activate .` to activate the local Julia environment.
+
+        (Predicer) pkg> activate .
+
+- Press backspace to exit the package manager
+- Type `using Predicer` to use the package.
+
         julia> using Predicer
 
-- Use `Predicer.get_data()` to import the local data defined in the input data file. Use `Predicer.run_AbstractModel()` to run the current version of the model base don the defined input data. 
+- `Predicer.init_model()` builds the model based on the defined input data in `.\\input_data\\input_data.xlsx`, and returns a dictionary containing the model and the model structure. 
         
-        julia> d = Predicer.get_data();
-        julia> Predicer.run_AbstractModel(d);
+        julia> mc = Predicer.init_model();
 
-- The output of the model is not refined at the current state, and can be enabled by setting the "export_to_excel"-flag to 1 in '\Predicer\AbstractModel\src\AM.jl'.
+
+- `Predicer.solve_model(mc)` solves the model `mc`, and shows the output of the solver.
+
+        julia> Predicer.solve_model(mc)
+
+- `Predicer.export_model_contents(mc, results=false)` can be used to export structure and indices of the model to an excel file located in `.\\results\\`. If the parameter `results` is true and the model has been solved, two files will be generated. One file (model_contents_yyy_mm_dd_hh_mm_ss.xlsx) contains the structure and indices of the model, and the other (model_contents_results_yyy_mm_dd_hh_mm_ss.xlsx) contains the model structure and the values for these. 
+
+        julia> Predicer.export_model_contents(mc)
+
+        julia> Predicer.export_model_contents(mc, true)
