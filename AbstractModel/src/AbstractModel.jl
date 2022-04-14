@@ -20,6 +20,23 @@ module AbstractModel
     ConFactor,
     GenConstraint
 
+    export add_inflow,
+    add_state, 
+    add_node_to_reserve,
+    convert_to_commodity,
+    convert_to_market,
+    add_cost,
+    MarketProcess,
+    TransferProcess,
+    add_fixed_eff,
+    add_piecewise_eff,
+    add_online,
+    add_eff,
+    add_cf,
+    add_process_to_reserve,
+    add_topology,
+    add_load_limits
+
     export create_tuples,
     create_res_nodes_tuple,
     create_res_tuple,

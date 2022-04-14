@@ -63,8 +63,9 @@ function main()
     nodes = OrderedDict()
     for i in 1:nrow(system_data["nodes"])
         n = system_data["nodes"][i, :]
-        nodes[n.node] = AbstractModel.Node(n.node, Bool(n.is_commodity), Bool(n.is_state), Bool(n.is_res), Bool(n.is_inflow), Bool(n.is_market), n.state_max, n.in_max, n.out_max, n.initial_state, n.state_loss)
+        nodes[n.node] = AbstractModel.Node(n.node)
         if Bool(n.is_commodity)
+            AbstractModel.convert_to_commodity(nodes[n.node])
             for s in keys(scenarios)
                 timesteps = timeseries_data["scenarios"][s]["price"].t
                 prices = timeseries_data["scenarios"][s]["price"][!, n.node]
@@ -73,9 +74,11 @@ function main()
                     tup = (timesteps[i], prices[i],)
                     push!(ts.series, tup)
                 end
-                push!(nodes[n.node].cost, ts)
+                AbstractModel.add_cost(nodes[n.node], ts)
                 append!(dates, timesteps)
             end
+        elseif Bool(n.is_market)
+            AbstractModel.convert_to_market(nodes[n.node])
         end
         if Bool(n.is_inflow)
             for s in keys(scenarios)
@@ -86,16 +89,30 @@ function main()
                     tup = (timesteps[i], flows[i],)
                     push!(ts.series, tup)
                 end
-                push!(nodes[n.node].inflow, ts)
+                AbstractModel.add_inflow(nodes[n.node], ts)
                 append!(dates, timesteps)
             end
+        end
+        if Bool(n.is_state)
+            AbstractModel.add_state(nodes[n.node], AbstractModel.State(n.in_max, n.out_max, n.state_loss, n.state_max, 0.0, n.initial_state))
+        end
+        if Bool(n.is_res)
+            AbstractModel.add_node_to_reserve(nodes[n.node])
         end
     end
     
     processes = OrderedDict()
     for i in 1:nrow(system_data["processes"])
         p = system_data["processes"][i, :]
-        processes[p.process] = AbstractModel.Process(p.process, Bool(p.is_cf), Bool(p.is_cf_fix), Bool(p.is_online), Bool(p.is_res), p.eff, p.conversion, p.load_min, p.load_max, p.start_cost, p.min_online, p.min_offline, p.initial_state)
+        if p.conversion == 1
+            processes[p.process] = AbstractModel.Process(p.process)
+        elseif p.conversion == 2
+            processes[p.process] = AbstractModel.TransferProcess(p.process)
+        elseif p.conversion == 3
+            processes[p.process] = AbstractModel.MarketProcess(p.process)
+        end
+        AbstractModel.add_load_limits(processes[p.process], Float64(p.load_min), Float64(p.load_max))
+        AbstractModel.add_eff(processes[p.process], Float64(p.eff))
         if Bool(p.is_cf)
             for s in keys(scenarios)
                 timesteps = timeseries_data["scenarios"][s]["cf"].t
@@ -105,7 +122,7 @@ function main()
                     tup = (timesteps[i], cf[i],)
                     push!(ts.series, tup)
                 end
-                push!(processes[p.process].cf, ts)
+                AbstractModel.add_cf(processes[p.process], ts, Bool(p.is_cf_fix))
                 append!(dates, timesteps)
             end
         end
@@ -123,20 +140,27 @@ function main()
         end
         if p.conversion == 1
             for so in sources
-                push!(processes[p.process].topos, AbstractModel.Topology(so[1], p.process, so[2], so[3], so[4], so[5]))
+                AbstractModel.add_topology(processes[p.process], AbstractModel.Topology(so[1], p.process, Float64(so[2]), Float64(so[3]), Float64(so[4]), Float64(so[5])))
             end
             for si in sinks
-                push!(processes[p.process].topos, AbstractModel.Topology(p.process, si[1], si[2], si[3], si[4], si[5]))
+                AbstractModel.add_topology(processes[p.process], AbstractModel.Topology(p.process, si[1], Float64(si[2]), Float64(si[3]), Float64(si[4]), Float64(si[5])))
             end
         elseif p.conversion == 2
             for so in sources, si in sinks
-                push!(processes[p.process].topos, AbstractModel.Topology(so[1], si[1], min(so[2], si[2]), si[3], si[4], si[5]))
+                AbstractModel.add_topology(processes[p.process], AbstractModel.Topology(so[1], si[1], Float64(min(so[2], si[2])), Float64(si[3]), Float64(si[4]), Float64(si[5])))
             end
         elseif p.conversion == 3
             for so in sources, si in sinks
-                push!(processes[p.process].topos, AbstractModel.Topology(so[1], si[1], min(so[2], si[2]), si[3], si[4], si[5]))
-                push!(processes[p.process].topos, AbstractModel.Topology(si[1], so[1], min(so[2], si[2]), si[3], si[4], si[5]))
+                AbstractModel.add_topology(processes[p.process], AbstractModel.Topology(so[1], si[1], Float64(min(so[2], si[2])), Float64(si[3]), Float64(si[4]), Float64(si[5])))
+                AbstractModel.add_topology(processes[p.process], AbstractModel.Topology(si[1], so[1], Float64(min(so[2], si[2])), Float64(si[3]), Float64(si[4]), Float64(si[5])))
+
             end
+        end
+        if Bool(p.is_res)
+            AbstractModel.add_process_to_reserve(processes[p.process])
+        end
+        if Bool(p.is_online)
+            AbstractModel.add_online(processes[p.process], Float64(p.start_cost), Float64(p.min_online), Float64(p.min_offline), Bool(p.initial_state))
         end
     end
     #return system_data["efficiencies"]
