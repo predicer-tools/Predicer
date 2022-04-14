@@ -37,5 +37,6 @@ module Predicer
         AbstractModel.write_bid_matrix(mc,input_data)
     end
 
-
+    # Add function used to define the path of the input data?
+    
 end # module

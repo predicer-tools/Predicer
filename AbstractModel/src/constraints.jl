@@ -237,7 +237,7 @@ function setup_process_balance(model_contents::OrderedDict, input_data::OrderedD
         end
         sources = filter(x -> (x[1] == tup[1] && x[3] == tup[1] && x[4] == tup[2] && x[5] == tup[3]), process_tuple)
         sinks = filter(x -> (x[1] == tup[1] && x[2] == tup[1] && x[4] == tup[2] && x[5] == tup[3]), process_tuple)
-        nod_eff[tup] = sum(v_flow[sinks]) - eff * sum(v_flow[sources])
+        nod_eff[tup] = sum(v_flow[sinks]) - (length(sources) > 0 ? eff * sum(v_flow[sources]) : 0)
     end
 
     process_bal_eq = @constraint(model, process_bal_eq[tup in proc_balance_tuple], nod_eff[tup] == 0)
