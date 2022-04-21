@@ -21,6 +21,7 @@ function create_constraints(model_contents::OrderedDict, input_data::OrderedDict
     setup_bidding_constraints(model_contents, input_data)
     setup_generic_constraints(model_contents, input_data)
     setup_cost_calculations(model_contents, input_data)
+    setup_cvar_element(model_contents, input_data)
     setup_objective_function(model_contents, input_data)
 end
 
@@ -813,7 +814,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Ordere
     # Process balance dummy variables?
     for s in scenarios
         dummy_costs[s] = AffExpr(0.0)
-        for tup in node_balance_tuple
+        for tup in filter(x->x[2]==s,node_balance_tuple)
             add_to_expression!(dummy_costs[s], sum(vq_state_up[tup])*p + sum(vq_state_dw[tup])*p)
         end
     end
@@ -826,6 +827,34 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Ordere
     end
 end
 
+
+"""
+    setup_cvar_element(model_contents::OrderedDict, input_data::OrderedDict)
+
+Setup expressions used for calculating the cvar in the model. 
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+"""
+function setup_cvar_element(model_contents::OrderedDict, input_data::OrderedDict)
+    model = model_contents["model"]
+    total_costs = model_contents["expression"]["total_costs"]
+    v_var = model_contents["variable"]["v_var"]
+    v_cvar_z = model_contents["variable"]["v_cvar_z"]
+    scenarios = collect(keys(input_data["scenarios"]))
+    scen_p = collect(values(input_data["scenarios"]))
+    alfa = input_data["risk"]["alfa"]
+    const_cvar = model_contents["constraint"]["cvar_constraint"] = OrderedDict()
+    expr_cvar = model_contents["expression"]["cvar"] = AffExpr(0.0)
+    for s in scenarios
+        const_cvar[s] = @constraint(model, v_cvar_z[s] >= total_costs[s]-v_var)
+    end
+    add_to_expression!(expr_cvar,v_var+(1/(1-alfa))*sum(values(scen_p).*v_cvar_z[scenarios]))
+
+end
+
+
 """
     setup_objective_function(model_contents::OrderedDict, input_data::OrderedDict)
 
@@ -835,5 +864,7 @@ function setup_objective_function(model_contents::OrderedDict, input_data::Order
     model = model_contents["model"]
     total_costs = model_contents["expression"]["total_costs"]
     scen_p = collect(values(input_data["scenarios"]))
-    @objective(model, Min, sum(values(scen_p).*values(total_costs)))
+    beta = input_data["risk"]["beta"]
+    cvar = model_contents["expression"]["cvar"]
+    @objective(model, Min, (1-beta)*sum(values(scen_p).*values(total_costs))+beta*cvar)
 end

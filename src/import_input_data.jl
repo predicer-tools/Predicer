@@ -4,7 +4,7 @@ using DataStructures
 import AbstractModel
 
 function main()
-    sheetnames_system = ["nodes", "processes", "process_topology", "markets","scenarios","efficiencies", "reserve_type"]#, "energy_market", "reserve_market"]
+    sheetnames_system = ["nodes", "processes", "process_topology", "markets","scenarios","efficiencies", "reserve_type","risk"]#, "energy_market", "reserve_market"]
     sheetnames_timeseries = ["cf", "inflow", "market_prices", "price","eff_ts"]
     # Assuming this file is under \predicer\model
     wd = split(string(@__DIR__), "src")[1]
@@ -17,6 +17,7 @@ function main()
 
     scenarios = OrderedDict()
     reserve_type = OrderedDict()
+    risk = OrderedDict()
 
     for sn in sheetnames_system
         system_data[sn] = DataFrame(XLSX.readtable(input_data_path, sn)...)
@@ -35,6 +36,11 @@ function main()
     for i in 1:nrow(system_data["scenarios"])
         scenarios[system_data["scenarios"][i,1]] = system_data["scenarios"][i,2]
     end
+
+    for i in 1:nrow(system_data["risk"])
+        risk[system_data["risk"][i,1]] = system_data["risk"][i,2]
+    end
+    
 
     # Divide timeseries data per scenario.
     for k in keys(timeseries_data)
@@ -302,6 +308,7 @@ function main()
     imported_input_data = OrderedDict()
     imported_input_data["temporals"] = unique(dates)
     imported_input_data["scenarios"] = scenarios
+    imported_input_data["risk"] = risk
     imported_input_data["nodes"] =nodes
     imported_input_data["processes"] = processes
     imported_input_data["markets"] = markets
