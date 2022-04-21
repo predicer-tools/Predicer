@@ -31,6 +31,7 @@ function create_tuples(model_contents::OrderedDict, input_data::OrderedDict)
     create_res_final_tuple(model_contents::OrderedDict, input_data::OrderedDict)
     create_fixed_value_tuple(model_contents::OrderedDict, input_data::OrderedDict)
     create_ramp_tuple(model_contents::OrderedDict, input_data::OrderedDict)
+    create_risk_tuple(model_contents::OrderedDict, input_data::OrderedDict)
 end
 
 
@@ -446,4 +447,16 @@ function create_ramp_tuple(model_contents::OrderedDict, input_data::OrderedDict)
         end
     end
     model_contents["tuple"]["ramp_tuple"] = ramp_tuple
+end
+
+
+"""
+    create_risk_tuple(model_contents::OrderedDict, input_data::OrderedDict::OrderedDict)
+
+Creates tuple containing scenarios for risk variable. Form: (s).
+"""
+function create_risk_tuple(model_contents::OrderedDict, input_data::OrderedDict)
+    scenarios = collect(keys(input_data["scenarios"]))
+    risk_tuple = scenarios
+    model_contents["tuple"]["risk_tuple"] = risk_tuple
 end

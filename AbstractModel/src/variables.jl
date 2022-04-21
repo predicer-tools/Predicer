@@ -15,6 +15,7 @@ function create_variables(model_contents::OrderedDict)
     create_v_reserve(model_contents)
     create_v_state(model_contents)
     create_v_flow_op(model_contents)
+    create_v_risk(model_contents)
 end
 
 
@@ -130,4 +131,22 @@ function create_v_flow_op(model_contents::OrderedDict)
     model_contents["variable"]["v_flow_op_in"] = v_flow_op_in
     model_contents["variable"]["v_flow_op_out"] = v_flow_op_out
     model_contents["variable"]["v_flow_op_bin"] = v_flow_op_bin
+end
+
+
+"""
+    create_v_risk(model_contents::OrderedDict)
+
+Sets up variables for risk element.
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+"""
+function create_v_risk(model_contents::OrderedDict)
+    model = model_contents["model"]
+    risk_tuple = model_contents["tuple"]["risk_tuple"]
+    v_var = @variable(model,v_var)
+    v_cvar_z = @variable(model,v_cvar_z[tup in risk_tuple] >= 0)
+    model_contents["variable"]["v_var"] = v_var
+    model_contents["variable"]["v_cvar_z"] = v_cvar_z
 end
