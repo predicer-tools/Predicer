@@ -845,13 +845,10 @@ function setup_cvar_element(model_contents::OrderedDict, input_data::OrderedDict
     scenarios = collect(keys(input_data["scenarios"]))
     scen_p = collect(values(input_data["scenarios"]))
     alfa = input_data["risk"]["alfa"]
-    const_cvar = model_contents["constraint"]["cvar_constraint"] = OrderedDict()
-    expr_cvar = model_contents["expression"]["cvar"] = AffExpr(0.0)
-    for s in scenarios
-        const_cvar[s] = @constraint(model, v_cvar_z[s] >= total_costs[s]-v_var)
-    end
-    add_to_expression!(expr_cvar,v_var+(1/(1-alfa))*sum(values(scen_p).*v_cvar_z[scenarios]))
-
+    
+    cvar_constraint = @constraint(model, cvar_constraint[s in scenarios], v_cvar_z[s] >= total_costs[s]-v_var)
+    model_contents["constraint"]["cvar_constraint"] = cvar_constraint
+    model_contents["expression"]["cvar"] = @expression(model, sum(v_var)+(1/(1-alfa))*sum(values(scen_p).*v_cvar_z[scenarios]))
 end
 
 
