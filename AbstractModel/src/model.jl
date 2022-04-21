@@ -239,13 +239,23 @@ function export_model_contents(model_contents::OrderedDict, results::Bool)
             elseif key1 == "expression"
                 for (colnr, key2) in enumerate(collect(keys(model_contents[key1])))
                     xf[key_index+1][XLSX.CellRef(1, colnr)] = string(key2)
-                    for (i, (key3, val3)) in enumerate(zip(keys(model_contents[key1][key2]), values(model_contents[key1][key2])))
+                    if typeof(model_contents[key1][key2]) == OrderedDict{Any, Any}
+                        for (i, (key3, val3)) in enumerate(zip(keys(model_contents[key1][key2]), values(model_contents[key1][key2])))
+                            if results
+                                output = string(key3) * " : " * string(JuMP.value.(val3))
+                                xf[key_index+1][XLSX.CellRef(i+1, colnr)] = first(output, 32000)
+                            else
+                                output = string(key3)*" : "*string(val3)
+                                xf[key_index+1][XLSX.CellRef(i+1, colnr)] = first(output, 32000)
+                            end
+                        end
+                    else
                         if results
-                            output = string(key3) * " : " * string(JuMP.value.(val3))
-                            xf[key_index+1][XLSX.CellRef(i+1, colnr)] = first(output, 32000)
+                            output = string(key2) * " : " * string(JuMP.value.(model_contents[key1][key2]))
+                            xf[key_index+1][XLSX.CellRef(1, colnr)] = first(output, 32000)
                         else
-                            output = string(key3)*" : "*string(val3)
-                            xf[key_index+1][XLSX.CellRef(i+1, colnr)] = first(output, 32000)
+                            output = string(key2) * " : " * string(model_contents[key1][key2])
+                            xf[key_index+1][XLSX.CellRef(1, colnr)] = first(output, 32000)
                         end
                     end
                 end
