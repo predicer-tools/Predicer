@@ -16,9 +16,13 @@ function main()
     timeseries_data = OrderedDict()
     timeseries_data["scenarios"] = OrderedDict()
 
-    scenarios = OrderedDict()
-    reserve_type = OrderedDict()
-    risk = OrderedDict()
+    processes = OrderedDict{String, AbstractModel.Process}()
+    nodes = OrderedDict{String, AbstractModel.Node}()
+    markets = OrderedDict{String, AbstractModel.Market}()
+    scenarios = OrderedDict{String, Float64}()
+    reserve_type = OrderedDict{String, Float64}()
+    risk = OrderedDict{String, Float64}()
+    gen_constraints = OrderedDict{String, AbstractModel.GenConstraint}()
 
     for sn in sheetnames_system
         system_data[sn] = DataFrame(XLSX.readtable(input_data_path, sn)...)
@@ -32,7 +36,7 @@ function main()
     cap_ts = DataFrame(XLSX.readtable(input_data_path, "cap_ts")...)    
     constraint_data = DataFrame(XLSX.readtable(input_data_path, "gen_constraint")...) 
     constraint_type = DataFrame(XLSX.readtable(input_data_path, "constraints")...)
-    gen_constraints = OrderedDict()
+
 
     for i in 1:nrow(system_data["scenarios"])
         scenarios[system_data["scenarios"][i,1]] = system_data["scenarios"][i,2]
@@ -42,6 +46,7 @@ function main()
         risk[system_data["risk"][i,1]] = system_data["risk"][i,2]
     end
     
+
 
     # Divide timeseries data per scenario.
     for k in keys(timeseries_data)
@@ -63,9 +68,8 @@ function main()
         end
     end
 
-    dates = []
+    dates = TimeZones.ZonedDateTime[]
 
-    nodes = OrderedDict()
     for i in 1:nrow(system_data["nodes"])
         n = system_data["nodes"][i, :]
         nodes[n.node] = AbstractModel.Node(n.node)
@@ -106,7 +110,7 @@ function main()
         end
     end
     
-    processes = OrderedDict()
+
     for i in 1:nrow(system_data["processes"])
         p = system_data["processes"][i, :]
         if p.conversion == 1
@@ -239,10 +243,9 @@ function main()
 
     #-----------------------------------------------
    
-    markets = OrderedDict()
     for i in 1:nrow(system_data["markets"])
         mm = system_data["markets"][i, :]
-        markets[mm.market] = AbstractModel.Market(mm.market, mm.type, mm.node, mm.direction, mm.realisation, mm.reserve_type)
+        markets[mm.market] = AbstractModel.Market(mm.market, mm.type, mm.node, mm.direction, mm.realisation, mm.reserve_type, mm.is_bid)
         #
         for s in keys(scenarios)
             timesteps = map(t-> ZonedDateTime(t, tz"Europe/Helsinki"), timeseries_data["scenarios"][s]["market_prices"].t)
@@ -304,54 +307,6 @@ function main()
         push!(gen_constraints[k[1]].factors,con_fac)
     end
 
-    imported_input_data = OrderedDict()
-    imported_input_data["temporals"] = unique(dates)
-    imported_input_data["scenarios"] = scenarios
-    imported_input_data["risk"] = risk
-    imported_input_data["nodes"] =nodes
-    imported_input_data["processes"] = processes
-    imported_input_data["markets"] = markets
-    imported_input_data["reserve_type"] = reserve_type
-    imported_input_data["gen_constraints"] = gen_constraints
-
-    return imported_input_data
+    
+    return  AbstractModel.InputData(AbstractModel.Temporals(unique(dates)), processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
 end
-
-
-
-
-#=
-
-function import_node(node_data)
-    #Create node object
-end
-
-function import_process(process_data)
-    #create process_objhect
-end
-
-function create_reserves(nodes, processes, reserves, everything_which_is_needed)
-    #for n in nodes
-    # if n.is_res:
-    # create n_res node/find the linked reserve
-    # connect n_res with each process which is_res
-    # v_flow["process"_res_up, "process", n-res] and v_flow["process"_res_down, "process", n-res]
-    # Check the type of reserve fast/slow?
-    # in case of slower reserves(?) set the bounds as (v_flow[process, process, elc] +/- ramp)
-    # for producers or alternatively (v_flow[process, elc, process] +/- ramp) for consumers
-    # set the bounds as GenericConstraints
-    # For fast reserves, 
-end
-
-function initialize_states()
-    # create new storage nodes for nodes_with state
-    # create node with state, remove state from old node
-    # create transfer processes between node and storage node
-end
-
-function create_generic_constraint()
-    # called by other functions or based on input data
-    # generate generic_constraint, which is fed to model. 
-    return 0
-end
-=#

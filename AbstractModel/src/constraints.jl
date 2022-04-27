@@ -2,7 +2,7 @@ using DataStructures
 using JuMP
 
 """
-    create_constraints(model_contents::OrderedDict, input_data::OrderedDict)
+    create_constraints(model_contents::OrderedDict, input_data::AbstractModel.InputData)
 
 Create all constraints used in the model.
 
@@ -10,7 +10,7 @@ Create all constraints used in the model.
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function create_constraints(model_contents::OrderedDict, input_data::OrderedDict)
+function create_constraints(model_contents::OrderedDict, input_data::AbstractModel.InputData)
     setup_node_balance(model_contents, input_data)
     setup_process_online_balance(model_contents, input_data)
     setup_process_balance(model_contents, input_data)
@@ -27,7 +27,7 @@ end
 
 
 """
-    setup_node_balance(model_contents::OrderedDict, input_data::OrderedDict)
+    setup_node_balance(model_contents::OrderedDict, input_data::AbstractModel.InputData)
 
 Setup node balance constraints used in the model.
 
@@ -35,7 +35,7 @@ Setup node balance constraints used in the model.
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function setup_node_balance(model_contents::OrderedDict, input_data::OrderedDict)
+function setup_node_balance(model_contents::OrderedDict, input_data::AbstractModel.InputData)
     model = model_contents["model"]
     process_tuple = model_contents["tuple"]["process_tuple"]
     res_dir = model_contents["res_dir"]
@@ -46,9 +46,9 @@ function setup_node_balance(model_contents::OrderedDict, input_data::OrderedDict
     v_flow = model_contents["variable"]["v_flow"]
     vq_state_up = model_contents["variable"]["vq_state_up"]
     vq_state_dw = model_contents["variable"]["vq_state_dw"]
-    temporals = input_data["temporals"]  
-    nodes = input_data["nodes"]
-    markets = input_data["markets"]
+    temporals = input_data.temporals  
+    nodes = input_data.nodes
+    markets = input_data.markets
 
     # Balance constraints
     # gather data in dicts, e_prod, etc, now point to a Dict()
@@ -110,7 +110,7 @@ function setup_node_balance(model_contents::OrderedDict, input_data::OrderedDict
             end
         end
         if nodes[tu[1]].is_state
-            if tu[3] == temporals[1]
+            if tu[3] == temporals.t[1]
                 state_expr = @expression(model, v_state[tu] - (1-nodes[tu[1]].state.state_loss)*nodes[tu[1]].state.initial_state)
             else
                 state_expr = @expression(model, v_state[tu] - (1-nodes[tu[1]].state.state_loss)*v_state[node_balance_tuple[i-1]])
@@ -136,7 +136,7 @@ end
 
 
 """
-    setup_process_online_balance(model_contents::OrderedDict, input_data::OrderedDict)
+    setup_process_online_balance(model_contents::OrderedDict, input_data::AbstractModel.InputData)
 
 Setup necessary functionalities for processes with binary online variables.
 
@@ -144,20 +144,20 @@ Setup necessary functionalities for processes with binary online variables.
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function setup_process_online_balance(model_contents::OrderedDict, input_data::OrderedDict)
+function setup_process_online_balance(model_contents::OrderedDict, input_data::AbstractModel.InputData)
     model = model_contents["model"]
     v_start = model_contents["variable"]["v_start"]
     v_stop = model_contents["variable"]["v_stop"]
     v_online = model_contents["variable"]["v_online"]
     proc_online_tuple = model_contents["tuple"]["proc_online_tuple"]
-    processes = input_data["processes"]
-    scenarios = collect(keys(input_data["scenarios"]))
-    temporals = input_data["temporals"]
+    processes = input_data.processes
+    scenarios = collect(keys(input_data.scenarios))
+    temporals = input_data.temporals
 
     # Dynamic equations for start/stop online variables
     online_expr = model_contents["expression"]["online_expr"] = OrderedDict()
     for (i,tup) in enumerate(proc_online_tuple)
-        if tup[3] == temporals[1]
+        if tup[3] == temporals.t[1]
             # Note - initial online state is assumed 1!
             online_expr[tup] = @expression(model,v_start[tup]-v_stop[tup]-v_online[tup] + Int(processes[tup[1]].initial_state))
         else
@@ -177,9 +177,9 @@ function setup_process_online_balance(model_contents::OrderedDict, input_data::O
             min_online = processes[p].min_online
             min_offline = processes[p].min_offline
             for s in scenarios
-                for t in temporals
-                    on_hours = filter(x->0<=Dates.value(convert(Dates.Hour,x-t))<=min_online,temporals)
-                    off_hours = filter(x->0<=Dates.value(convert(Dates.Hour,x-t))<=min_offline,temporals)
+                for t in temporals.t
+                    on_hours = filter(x->0<=Dates.value(convert(Dates.Hour,x-t))<=min_online,temporals.t)
+                    off_hours = filter(x->0<=Dates.value(convert(Dates.Hour,x-t))<=min_offline,temporals.t)
                     for h in on_hours
                         min_online_rhs[(p, s, t, h)] = v_start[(p,s,t)]
                         min_online_lhs[(p, s, t, h)] = v_online[(p,s,h)]
@@ -203,7 +203,7 @@ end
 
 
 """
-    setup_process_balance(model_contents::OrderedDict, input_data::OrderedDict)
+    setup_process_balance(model_contents::OrderedDict, input_data::AbstractModel.InputData)
 
 Setup constraints used in process balance calculations. 
 
@@ -211,7 +211,7 @@ Setup constraints used in process balance calculations.
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function setup_process_balance(model_contents::OrderedDict, input_data::OrderedDict)
+function setup_process_balance(model_contents::OrderedDict, input_data::AbstractModel.InputData)
     model = model_contents["model"]
     proc_balance_tuple = model_contents["tuple"]["proc_balance_tuple"]
     process_tuple = model_contents["tuple"]["process_tuple"]
@@ -224,7 +224,7 @@ function setup_process_balance(model_contents::OrderedDict, input_data::OrderedD
     v_flow_op_out = model_contents["variable"]["v_flow_op_out"]
     v_flow_op_in = model_contents["variable"]["v_flow_op_in"]
     v_flow_op_bin = model_contents["variable"]["v_flow_op_bin"]
-    processes = input_data["processes"]
+    processes = input_data.processes
 
     # Fixed efficiency case:
     nod_eff = OrderedDict()
@@ -281,7 +281,7 @@ end
 
 
 """
-    setup_processes_limits(model_contents::OrderedDict, input_data::OrderedDict)
+    setup_processes_limits(model_contents::OrderedDict, input_data::AbstractModel.InputData)
 
 Setup constraints used for process limitations, such as min/max loads, unit starts and participation in reserves.
 
@@ -289,7 +289,7 @@ Setup constraints used for process limitations, such as min/max loads, unit star
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function setup_processes_limits(model_contents::OrderedDict, input_data::OrderedDict)
+function setup_processes_limits(model_contents::OrderedDict, input_data::AbstractModel.InputData)
     model = model_contents["model"]
     trans_tuple = model_contents["tuple"]["trans_tuple"]
     lim_tuple = model_contents["tuple"]["lim_tuple"]
@@ -299,8 +299,8 @@ function setup_processes_limits(model_contents::OrderedDict, input_data::Ordered
     v_flow = model_contents["variable"]["v_flow"]
     v_reserve = model_contents["variable"]["v_reserve"]
     v_online = model_contents["variable"]["v_online"]
-    processes = input_data["processes"]
-    res_typ = collect(keys(input_data["reserve_type"]))
+    processes = input_data.processes
+    res_typ = collect(keys(input_data.reserve_type))
     res_dir = model_contents["res_dir"]
 
     # Transport processes
@@ -395,7 +395,7 @@ end
 
 
 """
-    setup_reserve_balances(model_contents::OrderedDict, input_data::OrderedDict)
+    setup_reserve_balances(model_contents::OrderedDict, input_data::AbstractModel.InputData)
 
 Setup constraints for reserves. 
 
@@ -403,7 +403,7 @@ Setup constraints for reserves.
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function setup_reserve_balances(model_contents::OrderedDict, input_data::OrderedDict)
+function setup_reserve_balances(model_contents::OrderedDict, input_data::AbstractModel.InputData)
     model = model_contents["model"]
     res_eq_tuple = model_contents["tuple"]["res_eq_tuple"]
     res_eq_updn_tuple = model_contents["tuple"]["res_eq_updn_tuple"]
@@ -411,11 +411,11 @@ function setup_reserve_balances(model_contents::OrderedDict, input_data::Ordered
     res_tuple = model_contents["tuple"]["res_tuple"]
     res_final_tuple = model_contents["tuple"]["res_final_tuple"]
     res_nodes_tuple = model_contents["tuple"]["res_nodes_tuple"]
-    res_typ = collect(keys(input_data["reserve_type"]))
+    res_typ = collect(keys(input_data.reserve_type))
     res_dir = model_contents["res_dir"]
-    scenarios = collect(keys(input_data["scenarios"]))
-    temporals = input_data["temporals"]
-    markets = input_data["markets"]
+    scenarios = collect(keys(input_data.scenarios))
+    temporals = input_data.temporals
+    markets = input_data.markets
     v_reserve = model_contents["variable"]["v_reserve"]
     v_res = model_contents["variable"]["v_res"]
     v_res_final = model_contents["variable"]["v_res_final"]
@@ -423,7 +423,7 @@ function setup_reserve_balances(model_contents::OrderedDict, input_data::Ordered
     # Reserve balances (from reserve potential to reserve product):
     e_res_bal_up = model_contents["expression"]["e_res_bal_up"] = OrderedDict()
     e_res_bal_dn = model_contents["expression"]["e_res_bal_up"] = OrderedDict()
-    for n in res_nodes_tuple, r in res_typ, s in scenarios, t in temporals
+    for n in res_nodes_tuple, r in res_typ, s in scenarios, t in temporals.t
         tup = (n, r, s, t) # same as res_eq_tuple
         e_res_bal_up[tup] = AffExpr(0.0)
         e_res_bal_dn[tup] = AffExpr(0.0)
@@ -473,7 +473,7 @@ end
 
 
 """
-    setup_ramp_constraints(model_contents::OrderedDict, input_data::OrderedDict)
+    setup_ramp_constraints(model_contents::OrderedDict, input_data::AbstractModel.InputData)
 
 Setup process ramp constraints, based on ramp limits defined in input data and participation in reserves.  
 
@@ -481,7 +481,7 @@ Setup process ramp constraints, based on ramp limits defined in input data and p
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function setup_ramp_constraints(model_contents::OrderedDict, input_data::OrderedDict)
+function setup_ramp_constraints(model_contents::OrderedDict, input_data::AbstractModel.InputData)
     model = model_contents["model"]
     ramp_tuple = model_contents["tuple"]["ramp_tuple"]
     process_tuple = model_contents["tuple"]["process_tuple"]
@@ -493,10 +493,10 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Ordered
     v_flow = model_contents["variable"]["v_flow"]
 
     res_dir = model_contents["res_dir"]
-    reserve_types = input_data["reserve_type"]
+    reserve_types = input_data.reserve_type
    
-    processes = input_data["processes"]
-    temporals = input_data["temporals"]
+    processes = input_data.processes
+    temporals = input_data.temporals
 
 
     ramp_expr_up = model_contents["expression"]["ramp_expr_up"] = OrderedDict()
@@ -505,7 +505,7 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Ordered
 
     for tup in process_tuple
         if processes[tup[1]].conversion == 1 && !processes[tup[1]].is_cf
-            if tup[5] != temporals[1]
+            if tup[5] != temporals.t[1]
                 ramp_expr_up[tup] = AffExpr(0.0)
                 ramp_expr_down[tup] = AffExpr(0.0)        
                 topo = filter(x -> x.source == tup[2] && x.sink == tup[3], processes[tup[1]].topos)[1]
@@ -562,7 +562,7 @@ end
 
 
 """
-    setup_fixed_values(model_contents::OrderedDict, input_data::OrderedDict)
+    setup_fixed_values(model_contents::OrderedDict, input_data::AbstractModel.InputData)
 
 Setup constraints for setting fixed process values at certain timesteps.   
 
@@ -570,15 +570,15 @@ Setup constraints for setting fixed process values at certain timesteps.
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function setup_fixed_values(model_contents::OrderedDict, input_data::OrderedDict)
+function setup_fixed_values(model_contents::OrderedDict, input_data::AbstractModel.InputData)
     model = model_contents["model"]
     
     process_tuple = model_contents["tuple"]["process_tuple"]
     fixed_value_tuple = model_contents["tuple"]["fixed_value_tuple"]
     v_flow = model_contents["variable"]["v_flow"]
     v_res_final = model_contents["variable"]["v_res_final"]
-    markets = input_data["markets"]
-    scenarios = collect(keys(input_data["scenarios"]))
+    markets = input_data.markets
+    scenarios = collect(keys(input_data.scenarios))
     
     fix_expr = model_contents["expression"]["fix_expr"] = OrderedDict()
     for m in keys(markets)
@@ -609,7 +609,7 @@ end
 
 
 """
-    setup_bidding_constraints(model_contents::OrderedDict, input_data::OrderedDict)
+    setup_bidding_constraints(model_contents::OrderedDict, input_data::AbstractModel.InputData)
 
 Setup constraints for market bidding.   
 
@@ -617,11 +617,11 @@ Setup constraints for market bidding.
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function setup_bidding_constraints(model_contents::OrderedDict, input_data::OrderedDict)
+function setup_bidding_constraints(model_contents::OrderedDict, input_data::AbstractModel.InputData)
     model = model_contents["model"]
-    markets = input_data["markets"]
-    scenarios = collect(keys(input_data["scenarios"]))
-    temporals = input_data["temporals"]
+    markets = input_data.markets
+    scenarios = collect(keys(input_data.scenarios))
+    temporals = input_data.temporals
 
     process_tuple = model_contents["tuple"]["process_tuple"]
     v_res_final = model_contents["variable"]["v_res_final"]
@@ -629,36 +629,40 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Orde
     
     price_matr = OrderedDict()
     for m in keys(markets)
-        for (i,s) in enumerate(scenarios)
-            vec = map(x->x[2],filter(x->x.scenario == s, markets[m].price)[1].series)
-            if i == 1
-                price_matr[m] = vec
-            else
-                price_matr[m] = hcat(price_matr[m],vec)
+        if markets[m].is_bid
+            for (i,s) in enumerate(scenarios)
+                vec = map(x->x[2],filter(x->x.scenario == s, markets[m].price)[1].series)
+                if i == 1
+                    price_matr[m] = vec
+                else
+                    price_matr[m] = hcat(price_matr[m],vec)
+                end
             end
         end
     end
     for m in keys(markets)
-        for (i,t) in enumerate(temporals)
-            s_indx = sortperm((price_matr[m][i,:]))
-            if markets[m].type == "energy"
-                for k in 2:length(s_indx)
-                    if price_matr[m][s_indx[k]] == price_matr[m][s_indx[k-1]]
-                        @constraint(model, v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]] == 
-                            v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]])
-                    else
-                        @constraint(model, v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]] >= 
-                            v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]])
+        if markets[m].is_bid
+            for (i,t) in enumerate(temporals.t)
+                s_indx = sortperm((price_matr[m][i,:]))
+                if markets[m].type == "energy"
+                    for k in 2:length(s_indx)
+                        if price_matr[m][s_indx[k]] == price_matr[m][s_indx[k-1]]
+                            @constraint(model, v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]] == 
+                                v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]])
+                        else
+                            @constraint(model, v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]] >= 
+                                v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]])
+                        end
                     end
-                end
-            elseif markets[m].type == "reserve"
-                for k in 2:length(s_indx)
-                    if price_matr[m][s_indx[k]] == price_matr[m][s_indx[k-1]]
-                        @constraint(model, v_res_final[(m,scenarios[s_indx[k]],t)] == v_res_final[(m,scenarios[s_indx[k-1]],t)])
-                    else
-                        @constraint(model, v_res_final[(m,scenarios[s_indx[k]],t)] >= v_res_final[(m,scenarios[s_indx[k-1]],t)])
-                    end
+                elseif markets[m].type == "reserve"
+                    for k in 2:length(s_indx)
+                        if price_matr[m][s_indx[k]] == price_matr[m][s_indx[k-1]]
+                            @constraint(model, v_res_final[(m,scenarios[s_indx[k]],t)] == v_res_final[(m,scenarios[s_indx[k-1]],t)])
+                        else
+                            @constraint(model, v_res_final[(m,scenarios[s_indx[k]],t)] >= v_res_final[(m,scenarios[s_indx[k-1]],t)])
+                        end
 
+                    end
                 end
             end
         end
@@ -667,7 +671,7 @@ end
 
 
 """
-    setup_generic_constraints(model_contents::OrderedDict, input_data::OrderedDict)
+    setup_generic_constraints(model_contents::OrderedDict, input_data::AbstractModel.InputData)
 
 Setup generic constraints. 
 
@@ -675,24 +679,24 @@ Setup generic constraints.
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function setup_generic_constraints(model_contents::OrderedDict, input_data::OrderedDict)
+function setup_generic_constraints(model_contents::OrderedDict, input_data::AbstractModel.InputData)
     model = model_contents["model"]
     process_tuple = model_contents["tuple"]["process_tuple"]
     v_flow = model_contents["variable"]["v_flow"]
 
-    scenarios = collect(keys(input_data["scenarios"]))
-    temporals = input_data["temporals"]
-    gen_constraints = input_data["gen_constraints"]
+    scenarios = collect(keys(input_data.scenarios))
+    temporals = input_data.temporals
+    gen_constraints = input_data.gen_constraints
 
     const_expr = model_contents["gen_expression"] = OrderedDict()
     const_dict = model_contents["gen_constraint"] = OrderedDict()
 
     for c in keys(gen_constraints)
-        const_expr[c] = OrderedDict((s,t) => AffExpr(0.0) for s in scenarios, t in temporals)
+        const_expr[c] = OrderedDict((s,t) => AffExpr(0.0) for s in scenarios, t in temporals.t)
         facs = gen_constraints[c].factors
         consta = gen_constraints[c].constant
         eq_dir = gen_constraints[c].type
-        for s in scenarios, t in temporals
+        for s in scenarios, t in temporals.t
             add_to_expression!(const_expr[c][(s,t)],filter(x->x[1] == t,filter(x->x.scenario == s,consta)[1].series)[1][2])
 
             for f in facs
@@ -703,18 +707,18 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Orde
             end
         end 
         if eq_dir == "eq"
-            const_dict[c] = @constraint(model,[s in scenarios,t in temporals],const_expr[c][(s,t)]==0.0)
+            const_dict[c] = @constraint(model,[s in scenarios,t in temporals.t],const_expr[c][(s,t)]==0.0)
         elseif eq_dir == "gt"
-            const_dict[c] = @constraint(model,[s in scenarios,t in temporals],const_expr[c][(s,t)]>=0.0)
+            const_dict[c] = @constraint(model,[s in scenarios,t in temporals.t],const_expr[c][(s,t)]>=0.0)
         else
-            const_dict[c] = @constraint(model,[s in scenarios,t in temporals],const_expr[c][(s,t)]<=0.0)
+            const_dict[c] = @constraint(model,[s in scenarios,t in temporals.t],const_expr[c][(s,t)]<=0.0)
         end
     end
 end
 
 
 """
-    setup_cost_calculations(model_contents::OrderedDict, input_data::OrderedDict)
+    setup_cost_calculations(model_contents::OrderedDict, input_data::AbstractModel.InputData)
 
 Setup expressions used for calculating the costs in the model. 
 
@@ -722,7 +726,7 @@ Setup expressions used for calculating the costs in the model.
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function setup_cost_calculations(model_contents::OrderedDict, input_data::OrderedDict)
+function setup_cost_calculations(model_contents::OrderedDict, input_data::AbstractModel.InputData)
     model = model_contents["model"]
     process_tuple = model_contents["tuple"]["process_tuple"]
     proc_online_tuple = model_contents["tuple"]["proc_online_tuple"]
@@ -734,12 +738,13 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Ordere
     vq_state_up = model_contents["variable"]["vq_state_up"]
     vq_state_dw = model_contents["variable"]["vq_state_dw"]
 
-    scenarios = collect(keys(input_data["scenarios"]))
-    nodes = input_data["nodes"]
-    markets = input_data["markets"]
-    processes = input_data["processes"]
+    scenarios = collect(keys(input_data.scenarios))
+    nodes = input_data.nodes
+    markets = input_data.markets
+    processes = input_data.processes
+    temporals = input_data.temporals
 
-    # Commodity costs and marklet costs
+    # Commodity costs and market costs
     commodity_costs = model_contents["expression"]["commodity_costs"] = OrderedDict()
     market_costs = model_contents["expression"]["market_costs"] = OrderedDict()
     for s in scenarios
@@ -829,7 +834,7 @@ end
 
 
 """
-    setup_cvar_element(model_contents::OrderedDict, input_data::OrderedDict)
+    setup_cvar_element(model_contents::OrderedDict, input_data::AbstractModel.InputData)
 
 Setup expressions used for calculating the cvar in the model. 
 
@@ -837,14 +842,14 @@ Setup expressions used for calculating the cvar in the model.
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function setup_cvar_element(model_contents::OrderedDict, input_data::OrderedDict)
+function setup_cvar_element(model_contents::OrderedDict, input_data::AbstractModel.InputData)
     model = model_contents["model"]
     total_costs = model_contents["expression"]["total_costs"]
     v_var = model_contents["variable"]["v_var"]
     v_cvar_z = model_contents["variable"]["v_cvar_z"]
-    scenarios = collect(keys(input_data["scenarios"]))
-    scen_p = collect(values(input_data["scenarios"]))
-    alfa = input_data["risk"]["alfa"]
+    scenarios = collect(keys(input_data.scenarios))
+    scen_p = collect(values(input_data.scenarios))
+    alfa = input_data.risk["alfa"]
     
     cvar_constraint = @constraint(model, cvar_constraint[s in scenarios], v_cvar_z[s] >= total_costs[s]-v_var)
     model_contents["constraint"]["cvar_constraint"] = cvar_constraint
@@ -853,15 +858,15 @@ end
 
 
 """
-    setup_objective_function(model_contents::OrderedDict, input_data::OrderedDict)
+    setup_objective_function(model_contents::OrderedDict, input_data::AbstractModel.InputData)
 
 Sets up the objective function, which in this model aims to minimize the costs.
 """
-function setup_objective_function(model_contents::OrderedDict, input_data::OrderedDict)
+function setup_objective_function(model_contents::OrderedDict, input_data::AbstractModel.InputData)
     model = model_contents["model"]
     total_costs = model_contents["expression"]["total_costs"]
-    scen_p = collect(values(input_data["scenarios"]))
-    beta = input_data["risk"]["beta"]
+    scen_p = collect(values(input_data.scenarios))
+    beta = input_data.risk["beta"]
     cvar = model_contents["expression"]["cvar"]
     @objective(model, Min, (1-beta)*sum(values(scen_p).*values(total_costs))+beta*cvar)
 end
