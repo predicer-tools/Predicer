@@ -1,12 +1,56 @@
+using DataStructures
+using TimeZones
+
 abstract type AbstractNode end
 abstract type AbstractProcess end
 
-#= struct AbstractModel
-    model::Union{JuMP.model, Nothing}
-    is_built::Bool
-    contents::OrderedDict
-    
-end =#
+"""
+    mutable struct Temporals
+        t::Vector{TimeZones.ZonedDateTime}
+        dtf::Float64
+        is_variable_dt::Bool
+        variable_dt::Vector{Float64}
+    end
+
+Struct used for storing information about the timesteps in the model.
+#Fields
+- `t::Vector{TimeZones.ZonedDateTime}`: Vector containing the timesteps. 
+- `dtf::Float64`: The timestep used in the model, if the length of the timesteps don't vary. dt = (t2-t1)/(1 hour)
+- `is_variable_dt::Bool`: FLag indicating whether the timesteps vary in length. Default false. 
+- `variable_dt::Vector{Float64}`: Vector containing the length between timesteps compared to one hour. The first element is the length between t_1 and t_2.
+"""
+mutable struct Temporals
+    t::Vector{TimeZones.ZonedDateTime}
+    dtf::Float64
+    is_variable_dt::Bool
+    variable_dt::OrderedDict{TimeZones.ZonedDateTime, Float64}
+end
+
+
+"""
+    function Temporals(ts::Vector{TimeZones.ZonedDateTime})
+
+Constructor for the Temporals struct.
+"""
+function Temporals(ts::Vector{TimeZones.ZonedDateTime})
+    dts = OrderedDict()
+    for i in 1:(length(ts)-1)
+        dts[ts[i]] = Dates.Minute(ts[i+1] - ts[i])/Dates.Minute(60)
+    end
+    if length(unique(values(dts))) == 1
+        return Temporals(ts, collect(values(dts))[1], false, OrderedDict())
+    elseif length(unique(values(dts))) > 1
+        return Temporals(ts, 0.0, true, dts)
+    end
+end
+
+function get_dtf(t::Temporals, ts::ZonedDateTime)
+    if t.is_variable_dt
+        return t.dtf[ts]
+    else
+        return t.dtf
+    end
+end
 
 """
     struct State
@@ -519,10 +563,11 @@ end
         direction::String
         realisation::Float64
         reserve_type::String
+        is_bid::Bool
         price::Vector{TimeSeries}
         fixed::Vector{Tuple{Any,Any}}
-        function Market(name, type, node, direction, realisation, reserve_type)
-            return new(name, type, node, direction, realisation, reserve_type, [], [])
+        function Market(name, type, node, direction, realisation, reserve_type, is_bid)
+            return new(name, type, node, direction, realisation, reserve_type, is_bid, [], [])
         end
     end
 
@@ -534,6 +579,7 @@ A struct for markets.
 - `direction::String`: Direction of the market (up/down/updown).
 - `realisation::Float64`: Realisation probability.
 - `reserve_type::String`: Type of the reserve market. 
+- `is_bid::Bool`: Is the market biddable. 
 - `price::Vector{TimeSeries}`: Vector containing TimeSeries of the market price in different scenarios. 
 - `fixed::Vector{Tuple{Any,Any}}`: Vector containing information on the market being fixed. 
 """
@@ -544,10 +590,11 @@ struct Market
     direction::String
     realisation::Float64
     reserve_type::String
+    is_bid::Bool
     price::Vector{TimeSeries}
     fixed::Vector{Tuple{Any,Any}}
-    function Market(name, type, node, direction, realisation, reserve_type)
-        return new(name, type, node, direction, realisation, reserve_type, [], [])
+    function Market(name, type, node, direction, realisation, reserve_type, is_bid)
+        return new(name, type, node, direction, realisation, reserve_type, is_bid, [], [])
     end
 end
 
@@ -602,5 +649,33 @@ struct GenConstraint
     constant::Vector{TimeSeries}
     function GenConstraint(name,type)
         return new(name,type,[],[])
+    end
+end
+
+"""
+    mutable struct InputData
+        temporals::Temporals
+        processes::Vector{Process}
+        nodes::Vector{Node}
+        scenarios::OrderedDict{String, Float64}
+        markets::Vector{Market}
+        reserve_type::OrderedDict{String, Float64}
+        risk::OrderedDict{String, Float64}
+        gen_constraints::OrderedDict{String, GenConstraint}
+    end
+
+Struct containing the imported input data, based on which the AbstractModel is built. 
+"""
+mutable struct InputData
+    temporals::Temporals
+    processes::OrderedDict{String, Process}
+    nodes::OrderedDict{String, Node}
+    markets::OrderedDict{String, Market}
+    scenarios::OrderedDict{String, Float64}
+    reserve_type::OrderedDict{String, Float64}
+    risk::OrderedDict{String, Float64}
+    gen_constraints::OrderedDict{String, GenConstraint}
+    function InputData(temporals, processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
+        return new(temporals, processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
     end
 end

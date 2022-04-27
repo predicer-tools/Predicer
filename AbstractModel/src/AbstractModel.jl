@@ -1,9 +1,11 @@
 module AbstractModel
+    include("structures.jl")
+    include("model.jl")
     include("tuples.jl")
     include("variables.jl")
     include("constraints.jl")
-    include("model.jl")
-    include("structures.jl")
+    
+    
 
     export Initialize,
     solve_model,
@@ -18,7 +20,9 @@ module AbstractModel
     Market,
     Topology,
     ConFactor,
-    GenConstraint
+    GenConstraint,
+    InputData,
+    Temporals
 
     export add_inflow,
     add_state, 
