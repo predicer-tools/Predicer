@@ -54,7 +54,7 @@ function setup_node_balance(model_contents::OrderedDict, input_data::AbstractMod
     # gather data in dicts, e_prod, etc, now point to a Dict()
     e_prod = model_contents["expression"]["e_prod"] = OrderedDict()
     e_cons = model_contents["expression"]["e_cons"] = OrderedDict()
-    e_state = model_contents["expression"]["e_state"] = OrderedDict() 
+    e_state = model_contents["expression"]["e_state"] = OrderedDict()
     
     for (i, tu) in enumerate(node_balance_tuple)
         # tu of form (node, scenario, t)
@@ -77,7 +77,7 @@ function setup_node_balance(model_contents::OrderedDict, input_data::AbstractMod
         end
         # Check inflow for node
         if nodes[tu[1]].is_inflow
-            inflow_val = filter(x->x[1] == tu[3], filter(x->x.scenario == tu[2],nodes[tu[1]].inflow)[1].series)[1][2]
+            inflow_val = filter(x->x.scenario == tu[2],nodes[tu[1]].inflow)[1](tu[3])
         else
             inflow_val = 0.0
         end
@@ -111,9 +111,9 @@ function setup_node_balance(model_contents::OrderedDict, input_data::AbstractMod
         end
         if nodes[tu[1]].is_state
             if tu[3] == temporals.t[1]
-                state_expr = @expression(model, v_state[tu] - (1-nodes[tu[1]].state.state_loss)*nodes[tu[1]].state.initial_state)
+                state_expr = @expression(model, v_state[tu] - (1-nodes[tu[1]].state.state_loss*temporals(tu[3]))*nodes[tu[1]].state.initial_state)
             else
-                state_expr = @expression(model, v_state[tu] - (1-nodes[tu[1]].state.state_loss)*v_state[node_balance_tuple[i-1]])
+                state_expr = @expression(model, v_state[tu] - (1-nodes[tu[1]].state.state_loss*temporals(tu[3]))*v_state[node_balance_tuple[i-1]])
             end
         else
             state_expr = 0
@@ -123,9 +123,9 @@ function setup_node_balance(model_contents::OrderedDict, input_data::AbstractMod
         e_cons[tu] = cons_expr
         e_state[tu] = state_expr
     end
-    node_bal_eq = @constraint(model, node_bal_eq[tup in node_balance_tuple], e_prod[tup] + e_cons[tup] == e_state[tup])
-    node_state_max_up = @constraint(model, node_state_max_up[tup in node_state_tuple], e_state[tup] <= nodes[tup[1]].state.in_max)
-    node_state_max_dw = @constraint(model, node_state_max_dw[tup in node_state_tuple], -e_state[tup] <= nodes[tup[1]].state.out_max)  
+    node_bal_eq = @constraint(model, node_bal_eq[tup in node_balance_tuple], temporals(tup[3]) * (e_prod[tup] + e_cons[tup]) == e_state[tup])
+    node_state_max_up = @constraint(model, node_state_max_up[tup in node_state_tuple], e_state[tup] <= nodes[tup[1]].state.in_max * temporals(tup[3]))
+    node_state_max_dw = @constraint(model, node_state_max_dw[tup in node_state_tuple], -e_state[tup] <= nodes[tup[1]].state.out_max * temporals(tup[3]))  
     model_contents["constraint"]["node_bal_eq"] = node_bal_eq
     model_contents["constraint"]["node_state_max_up"] = node_state_max_up
     model_contents["constraint"]["node_state_max_dw"] = node_state_max_dw
@@ -145,60 +145,63 @@ Setup necessary functionalities for processes with binary online variables.
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
 function setup_process_online_balance(model_contents::OrderedDict, input_data::AbstractModel.InputData)
-    model = model_contents["model"]
-    v_start = model_contents["variable"]["v_start"]
-    v_stop = model_contents["variable"]["v_stop"]
-    v_online = model_contents["variable"]["v_online"]
     proc_online_tuple = model_contents["tuple"]["proc_online_tuple"]
-    processes = input_data.processes
-    scenarios = collect(keys(input_data.scenarios))
-    temporals = input_data.temporals
-
-    # Dynamic equations for start/stop online variables
-    online_expr = model_contents["expression"]["online_expr"] = OrderedDict()
-    for (i,tup) in enumerate(proc_online_tuple)
-        if tup[3] == temporals.t[1]
-            # Note - initial online state is assumed 1!
-            online_expr[tup] = @expression(model,v_start[tup]-v_stop[tup]-v_online[tup] + Int(processes[tup[1]].initial_state))
-        else
-            online_expr[tup] = @expression(model,v_start[tup]-v_stop[tup]-v_online[tup]+v_online[proc_online_tuple[i-1]])
+    if !isempty(proc_online_tuple)
+        model = model_contents["model"]
+        v_start = model_contents["variable"]["v_start"]
+        v_stop = model_contents["variable"]["v_stop"]
+        v_online = model_contents["variable"]["v_online"]
+        
+        processes = input_data.processes
+        scenarios = collect(keys(input_data.scenarios))
+        temporals = input_data.temporals
+        # Dynamic equations for start/stop online variables
+        online_expr = model_contents["expression"]["online_expr"] = OrderedDict()
+        for (i,tup) in enumerate(proc_online_tuple)
+            if tup[3] == temporals.t[1]
+                # Note - initial online state is assumed 1!
+                online_expr[tup] = @expression(model,v_start[tup]-v_stop[tup]-v_online[tup] + Int(processes[tup[1]].initial_state))
+            else
+                online_expr[tup] = @expression(model,v_start[tup]-v_stop[tup]-v_online[tup]+v_online[proc_online_tuple[i-1]])
+            end
         end
-    end
-    online_dyn_eq =  @constraint(model,online_dyn_eq[tup in proc_online_tuple], online_expr[tup] == 0)
-    model_contents["constraint"]["online_dyn_eq"] = online_dyn_eq
+        online_dyn_eq =  @constraint(model,online_dyn_eq[tup in proc_online_tuple], online_expr[tup] == 0)
+        model_contents["constraint"]["online_dyn_eq"] = online_dyn_eq
 
-    # Minimum online and offline periods
-    min_online_rhs = OrderedDict()
-    min_online_lhs = OrderedDict()
-    min_offline_rhs = OrderedDict()
-    min_offline_lhs = OrderedDict()
-    for p in keys(processes)
-        if processes[p].is_online
-            min_online = processes[p].min_online
-            min_offline = processes[p].min_offline
-            for s in scenarios
-                for t in temporals.t
-                    on_hours = filter(x->0<=Dates.value(convert(Dates.Hour,x-t))<=min_online,temporals.t)
-                    off_hours = filter(x->0<=Dates.value(convert(Dates.Hour,x-t))<=min_offline,temporals.t)
-                    for h in on_hours
-                        min_online_rhs[(p, s, t, h)] = v_start[(p,s,t)]
-                        min_online_lhs[(p, s, t, h)] = v_online[(p,s,h)]
-                    end
-                    for h in off_hours
-                        min_offline_rhs[(p, s, t, h)] = (1-v_stop[(p,s,t)])
-                        min_offline_lhs[(p, s, t, h)] = v_online[(p,s,h)]
+        # Minimum online and offline periods
+        min_online_rhs = OrderedDict()
+        min_online_lhs = OrderedDict()
+        min_offline_rhs = OrderedDict()
+        min_offline_lhs = OrderedDict()
+        for p in keys(processes)
+            if processes[p].is_online
+                min_online = processes[p].min_online * Dates.Minute(60)
+                min_offline = processes[p].min_offline * Dates.Minute(60)
+                for s in scenarios
+                    for t in temporals.t
+                        # get all timesteps that are within min_online/min_offline after t. 
+                        on_hours = filter(x-> Dates.Minute(0) <= x - t <= min_online, temporals.t)
+                        off_hours = filter(x-> Dates.Minute(0) <= x - t <= min_offline, temporals.t)
+
+                        for h in on_hours
+                            min_online_rhs[(p, s, t, h)] = v_start[(p,s,t)]
+                            min_online_lhs[(p, s, t, h)] = v_online[(p,s,h)]
+                        end
+                        for h in off_hours
+                            min_offline_rhs[(p, s, t, h)] = (1-v_stop[(p,s,t)])
+                            min_offline_lhs[(p, s, t, h)] = v_online[(p,s,h)]
+                        end
                     end
                 end
             end
         end
+
+        min_online_con = @constraint(model, min_online_con[tup in keys(min_online_lhs)], min_online_lhs[tup] >= min_online_rhs[tup])
+        min_offline_con = @constraint(model, min_offline_con[tup in keys(min_offline_lhs)], min_offline_lhs[tup] <= min_offline_rhs[tup])
+
+        model_contents["constraint"]["min_online_con"] = min_online_con
+        model_contents["constraint"]["min_offline_con"] = min_offline_con
     end
-
-    min_online_con = @constraint(model, min_online_con[tup in keys(min_online_lhs)], min_online_lhs[tup] >= min_online_rhs[tup])
-    min_offline_con = @constraint(model, min_offline_con[tup in keys(min_offline_lhs)], min_offline_lhs[tup] <= min_offline_rhs[tup])
-
-    model_contents["constraint"]["min_online_con"] = min_online_con
-    model_contents["constraint"]["min_offline_con"] = min_offline_con
-
 end
 
 
@@ -234,7 +237,7 @@ function setup_process_balance(model_contents::OrderedDict, input_data::Abstract
             eff = processes[tup[1]].eff
         # timeseries based eff
         else
-            eff = filter(x->x[1] == tup[3],filter(x->x.scenario == tup[2],processes[tup[1]].eff_ts)[1].series)[1][2]
+            eff = filter(x->x.scenario == tup[2],processes[tup[1]].eff_ts)[1](tup[3])
         end
         sources = filter(x -> (x[1] == tup[1] && x[3] == tup[1] && x[4] == tup[2] && x[5] == tup[3]), process_tuple)
         sinks = filter(x -> (x[1] == tup[1] && x[2] == tup[1] && x[4] == tup[2] && x[5] == tup[3]), process_tuple)
@@ -296,9 +299,10 @@ function setup_processes_limits(model_contents::OrderedDict, input_data::Abstrac
     cf_balance_tuple = model_contents["tuple"]["cf_balance_tuple"]
     res_pot_cons_tuple = model_contents["tuple"]["res_pot_cons_tuple"]
     res_pot_prod_tuple = model_contents["tuple"]["res_pot_prod_tuple"]
+    proc_online_tuple = model_contents["tuple"]["proc_online_tuple"]
     v_flow = model_contents["variable"]["v_flow"]
     v_reserve = model_contents["variable"]["v_reserve"]
-    v_online = model_contents["variable"]["v_online"]
+    
     processes = input_data.processes
     res_typ = collect(keys(input_data.reserve_type))
     res_dir = model_contents["res_dir"]
@@ -312,7 +316,7 @@ function setup_processes_limits(model_contents::OrderedDict, input_data::Abstrac
     cf_fac_fix = model_contents["expression"]["cf_fac_fix"] = OrderedDict()
     cf_fac_up = model_contents["expression"]["cf_fac_up"] = OrderedDict()
     for tup in cf_balance_tuple
-        cf_val = filter(x->x[1] ==  tup[5], filter(x->x.scenario == tup[4],processes[tup[1]].cf)[1].series)[1][2]
+        cf_val = filter(x->x.scenario == tup[4],processes[tup[1]].cf)[1](tup[5])
         cap = filter(x -> (x.sink == tup[3]), processes[tup[1]].topos)[1].capacity
         if processes[tup[1]].is_cf_fix
             cf_fac_fix[tup] = @expression(model, sum(v_flow[tup]) - cf_val * cap)
@@ -331,8 +335,6 @@ function setup_processes_limits(model_contents::OrderedDict, input_data::Abstrac
     p_offline = filter(x -> !(processes[x[1]].is_online), lim_tuple)
     p_reserve_cons = filter(x -> (res_dir[1], res_typ[1], x...) in res_pot_cons_tuple, lim_tuple)
     p_reserve_prod = filter(x -> (res_dir[1], res_typ[1], x...) in res_pot_prod_tuple, lim_tuple)
-    p_noreserve = filter(x -> !(x in p_reserve_cons) && !(x in p_reserve_cons), lim_tuple)
-    p_all = filter(x -> x in p_online || x in p_reserve_cons || x in p_reserve_prod, lim_tuple)
 
     # Base expressions as Dict:
     e_lim_max = model_contents["expression"]["e_lim_max"] = OrderedDict()
@@ -357,30 +359,33 @@ function setup_processes_limits(model_contents::OrderedDict, input_data::Abstrac
         add_to_expression!(e_lim_min[tup], -sum(v_reserve[(res_down_tup)]))
     end
 
-    for tup in p_online
-        topo = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1]
-        if isempty(topo.cap_ts)
-            cap = topo.capacity
-        else
-            cap = filter(x->x[1]==tup[5],filter(x->x.scenario==tup[4],topo.cap_ts)[1].series)[1][2]
+    if !isempty(proc_online_tuple)
+        v_online = model_contents["variable"]["v_online"]
+        for tup in p_online
+            topo = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1]
+            if isempty(topo.cap_ts)
+                cap = topo.capacity
+            else
+                cap = filter(x->x.scenario==tup[4],topo.cap_ts)[1](tup[5])
+            end
+            #cap = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1].capacity
+            add_to_expression!(e_lim_max[tup], -processes[tup[1]].load_max * cap * v_online[(tup[1], tup[4], tup[5])])
+            add_to_expression!(e_lim_min[tup], -processes[tup[1]].load_min * cap * v_online[(tup[1], tup[4], tup[5])])
         end
-        #cap = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1].capacity
-        add_to_expression!(e_lim_max[tup], -processes[tup[1]].load_max * cap * v_online[(tup[1], tup[4], tup[5])])
-        add_to_expression!(e_lim_min[tup], -processes[tup[1]].load_min * cap * v_online[(tup[1], tup[4], tup[5])])
-    end
 
-    for tup in p_offline
-        topo = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1]
-        if isempty(topo.cap_ts)
-            cap = topo.capacity
-        else
-            cap = filter(x->x[1]==tup[5],filter(x->x.scenario==tup[4],topo.cap_ts)[1].series)[1][2]
-        end
-        #cap = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1].capacity
-        if tup in p_reserve_prod || tup in p_reserve_cons
-            add_to_expression!(e_lim_max[tup], -cap)
-        else
-            set_upper_bound(v_flow[tup], cap)
+        for tup in p_offline
+            topo = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1]
+            if isempty(topo.cap_ts)
+                cap = topo.capacity
+            else
+                cap = filter(x->x.scenario==tup[4],topo.cap_ts)[1](tup[5])
+            end
+            #cap = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1].capacity
+            if tup in p_reserve_prod || tup in p_reserve_cons
+                add_to_expression!(e_lim_max[tup], -cap)
+            else
+                set_upper_bound(v_flow[tup], cap)
+            end
         end
     end
 
@@ -488,8 +493,7 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Abstrac
     res_nodes_tuple = model_contents["tuple"]["res_nodes_tuple"]
     res_potential_tuple = model_contents["tuple"]["res_potential_tuple"]
     v_reserve = model_contents["variable"]["v_reserve"]
-    v_start = model_contents["variable"]["v_start"]
-    v_stop = model_contents["variable"]["v_stop"]
+    
     v_flow = model_contents["variable"]["v_flow"]
 
     res_dir = model_contents["res_dir"]
@@ -509,11 +513,13 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Abstrac
                 ramp_expr_up[tup] = AffExpr(0.0)
                 ramp_expr_down[tup] = AffExpr(0.0)        
                 topo = filter(x -> x.source == tup[2] && x.sink == tup[3], processes[tup[1]].topos)[1]
-                ramp_up_cap = topo.ramp_up * topo.capacity
-                ramp_dw_cap = topo.ramp_down * topo.capacity
+                ramp_up_cap = topo.ramp_up * topo.capacity * temporals(tup[5])
+                ramp_dw_cap = topo.ramp_down * topo.capacity * temporals(tup[5])
                 start_cap = max(0,processes[tup[1]].load_min-topo.ramp_up)*topo.capacity
                 stop_cap = max(0,processes[tup[1]].load_min-topo.ramp_down)*topo.capacity
                 if processes[tup[1]].is_online
+                    v_start = model_contents["variable"]["v_start"]
+                    v_stop = model_contents["variable"]["v_stop"]
                     if processes[tup[1]].is_res
                         res_tup_up = filter(x->x[1]==res_dir[1] && x[3:end]==tup,res_potential_tuple)
                         res_tup_down = filter(x->x[1]==res_dir[2] && x[3:end]==tup,res_potential_tuple)
@@ -697,12 +703,11 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Abst
         consta = gen_constraints[c].constant
         eq_dir = gen_constraints[c].type
         for s in scenarios, t in temporals.t
-            add_to_expression!(const_expr[c][(s,t)],filter(x->x[1] == t,filter(x->x.scenario == s,consta)[1].series)[1][2])
-
+            add_to_expression!(const_expr[c][(s,t)],filter(x->x.scenario == s,consta)[1](t))
             for f in facs
                 p_flow = f.flow
                 tup = filter(x->x[1]==p_flow[1] && (x[2]==p_flow[2] || x[3]==p_flow[2]) && x[4]==s && x[5]==t,process_tuple)[1]
-                fac_data = filter(x->x[1] == t,filter(x->x.scenario == s,f.data)[1].series)[1][2]
+                fac_data = filter(x->x.scenario == s,f.data)[1](t)
                 add_to_expression!(const_expr[c][(s,t)],fac_data,v_flow[tup])
             end
         end 
@@ -733,7 +738,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Abstra
     res_final_tuple = model_contents["tuple"]["res_final_tuple"]
     node_balance_tuple = model_contents["tuple"]["node_balance_tuple"]
     v_flow = model_contents["variable"]["v_flow"]
-    v_start = model_contents["variable"]["v_start"]
+
     v_res_final = model_contents["variable"]["v_res_final"]
     vq_state_up = model_contents["variable"]["vq_state_up"]
     vq_state_dw = model_contents["variable"]["vq_state_dw"]
@@ -754,23 +759,24 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Abstra
             #Commodity costs:
             if nodes[n].is_commodity
                 flow_tups = filter(x -> x[2] == n && x[4] == s, process_tuple)
-                cost_series = filter(x->x.scenario == s,nodes[n].cost)[1].series
+                cost_ts = filter(x->x.scenario == s, nodes[n].cost)[1]
                 # Add to expression for each t found in series
-                for cost in cost_series
-                    flow = filter(x -> x[5] == cost[1], flow_tups)
-                    add_to_expression!(commodity_costs[s], sum(v_flow[flow]) * cost[2])
+                for tup in flow_tups
+                    add_to_expression!(commodity_costs[s], sum(v_flow[tup]) * cost_ts(tup[5]) * temporals(tup[5]))
                 end
             end
             # Spot-Market costs and profits
             if nodes[n].is_market
                 flow_out = filter(x -> x[2] == n && x[4] == s, process_tuple)
                 flow_in = filter(x -> x[3] == n && x[4] == s, process_tuple)
-                price_series = filter(x->x.scenario == s, markets[n].price)[1].series
-                for price in price_series
-                    out = filter(x -> x[5] == price[1], flow_out)
-                    in = filter(x -> x[5] == price[1], flow_in)
-                    # Assuming what goes into the node is sold and has a negatuive cost
-                    add_to_expression!(market_costs[s], sum(v_flow[out]) * price[2] - sum(v_flow[in]) * price[2])
+                price_ts = filter(x->x.scenario == s, markets[n].price)[1]
+
+                for tup in flow_out
+                    add_to_expression!(market_costs[s], sum(v_flow[tup]) * price_ts(tup[5]) * temporals(tup[5]))
+                end
+                # Assuming what goes into the node is sold and has a negatuive cost
+                for tup in flow_in
+                    add_to_expression!(market_costs[s],  - sum(v_flow[tup]) * price_ts(tup[5]) * temporals(tup[5]))
                 end
             end
         end
@@ -784,7 +790,9 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Abstra
             vom = filter(x->x.source == tup[2] && x.sink == tup[3], processes[tup[1]].topos)[1].VOM_cost
             if vom != 0
                 flows = filter(x -> x[1:3] == tup && x[4] == s, process_tuple)
-                add_to_expression!(vom_costs[s], sum(v_flow[flows]) * vom)
+                for f in flows
+                    add_to_expression!(vom_costs[s], sum(v_flow[f]) * vom * temporals(f[5]))
+                end
             end
         end
     end
@@ -796,6 +804,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Abstra
         for p in keys(processes)
             start_tup = filter(x->x[1] == p && x[2]==s,proc_online_tuple)
             if !isempty(start_tup)
+                v_start = model_contents["variable"]["v_start"]
                 cost = processes[p].start_cost
                 add_to_expression!(start_costs[s], sum(v_start[start_tup]) * cost)
             end
@@ -807,7 +816,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Abstra
     for s in scenarios
         reserve_costs[s] = AffExpr(0.0)
         for tup in filter(x -> x[2] == s, res_final_tuple)
-            price = filter(x->x[1] == tup[3],filter(x->x.scenario == s, markets[tup[1]].price)[1].series)[1][2]
+            price = filter(x->x.scenario == s, markets[tup[1]].price)[1](tup[3])
             add_to_expression!(reserve_costs[s],-price*v_res_final[tup])
         end
     end

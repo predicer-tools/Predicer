@@ -15,7 +15,7 @@ abstract type AbstractProcess end
 Struct used for storing information about the timesteps in the model.
 #Fields
 - `t::Vector{TimeZones.ZonedDateTime}`: Vector containing the timesteps. 
-- `dtf::Float64`: The timestep used in the model, if the length of the timesteps don't vary. dt = (t2-t1)/(1 hour)
+- `dtf::Float64`: The length between timesteps compared to one hour, if the length of the timesteps don't vary. dt = (t2-t1)/(1 hour)
 - `is_variable_dt::Bool`: FLag indicating whether the timesteps vary in length. Default false. 
 - `variable_dt::Vector{Float64}`: Vector containing the length between timesteps compared to one hour. The first element is the length between t_1 and t_2.
 """
@@ -23,7 +23,7 @@ mutable struct Temporals
     t::Vector{TimeZones.ZonedDateTime}
     dtf::Float64
     is_variable_dt::Bool
-    variable_dt::OrderedDict{TimeZones.ZonedDateTime, Float64}
+    variable_dt::Vector{Tuple{ZonedDateTime, Float64}}
 end
 
 
@@ -33,24 +33,31 @@ end
 Constructor for the Temporals struct.
 """
 function Temporals(ts::Vector{TimeZones.ZonedDateTime})
-    dts = OrderedDict()
+    dts = []
     for i in 1:(length(ts)-1)
-        dts[ts[i]] = Dates.Minute(ts[i+1] - ts[i])/Dates.Minute(60)
+        push!(dts, (ts[i], Dates.Minute(ts[i+1] - ts[i])/Dates.Minute(60)))
     end
-    if length(unique(values(dts))) == 1
-        return Temporals(ts, collect(values(dts))[1], false, OrderedDict())
-    elseif length(unique(values(dts))) > 1
+    if length(unique(map(t -> t[2], dts))) == 1
+        return Temporals(ts, dts[1][2], false, [])
+    elseif length(unique(map(t -> t[2], dts))) > 1
         return Temporals(ts, 0.0, true, dts)
     end
 end
 
-function get_dtf(t::Temporals, ts::ZonedDateTime)
+
+"""
+    function (t::Temporals)(ts::ZonedDateTime)
+
+Returns the length of the timesteps between t and t+1 as a measure how many can fit into 60 minutes.
+"""
+function (t::Temporals)(ts::ZonedDateTime)
     if t.is_variable_dt
-        return t.dtf[ts]
+        return filter(x -> x[1] == ts, t.variable_dt)[1][2]
     else
         return t.dtf
     end
 end
+
 
 """
     struct State
@@ -112,6 +119,37 @@ struct TimeSeries
         else
             return new(scenario, [])
         end
+    end
+end
+
+
+"""
+    function (ts::TimeSeries)(t::ZonedDateTime)
+
+Returns the value of the TimeSeries at the given timestep. If the exact timestep is not defined, retrieve the value corresponding to the closest previous timestep, or alternatively the first timestep. 
+
+# Examples
+```julia-repl
+julia> timeseries(timestep)
+    value
+```
+"""
+function (ts::TimeSeries)(t::ZonedDateTime)
+    if t in map(x -> x[1], ts.series)
+        return filter(x -> x[1] == t, ts.series)[1][2]
+    else
+        i = 1
+        low = 0
+        high = length(ts.series)
+        while high - low > 1
+            i = Int(ceil((high-low)/2) + low)
+            if ts.series[i][1] < t
+                low = i
+            elseif ts.series[i][1] > t
+                high = i
+            end
+        end
+        return ts.series[low][2]
     end
 end
 
