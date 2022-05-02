@@ -224,15 +224,17 @@ function main()
     end
 
     for s in keys(scenarios)
-        timesteps = map(t-> ZonedDateTime(t, tz"Europe/Helsinki"), timeseries_data["scenarios"][s]["eff_ts"].t)
-        for n in names(timeseries_data["scenarios"][s]["eff_ts"])[2:end]
-            mps = timeseries_data["scenarios"][s]["eff_ts"][!,n]
-            ts = AbstractModel.TimeSeries(s)
-            for i in 1:length(timesteps)
-                tup = (timesteps[i], mps[i],)
-                push!(ts.series, tup)
+        if "eff_ts" in collect(keys(timeseries_data["scenarios"][s]))
+            timesteps = map(t-> ZonedDateTime(t, tz"Europe/Helsinki"), timeseries_data["scenarios"][s]["eff_ts"].t)
+            for n in names(timeseries_data["scenarios"][s]["eff_ts"])[2:end]
+                mps = timeseries_data["scenarios"][s]["eff_ts"][!,n]
+                ts = AbstractModel.TimeSeries(s)
+                for i in 1:length(timesteps)
+                    tup = (timesteps[i], mps[i],)
+                    push!(ts.series, tup)
+                end
+                push!(processes[n].eff_ts,ts)
             end
-            push!(processes[n].eff_ts,ts)
         end
     end
 
