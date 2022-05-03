@@ -180,8 +180,8 @@ function setup_process_online_balance(model_contents::OrderedDict, input_data::A
                 for s in scenarios
                     for t in temporals.t
                         # get all timesteps that are within min_online/min_offline after t. 
-                        on_hours = filter(x-> Dates.Minute(0) <= x - t <= min_online, temporals.t)
-                        off_hours = filter(x-> Dates.Minute(0) <= x - t <= min_offline, temporals.t)
+                        on_hours = filter(x-> Dates.Minute(0) <= ZonedDateTime(x, "yyyy-mm-ddTHH:MM:SSzzzz") - ZonedDateTime(t, "yyyy-mm-ddTHH:MM:SSzzzz") <= min_online, temporals.t)
+                        off_hours = filter(x-> Dates.Minute(0) <= ZonedDateTime(x, "yyyy-mm-ddTHH:MM:SSzzzz") - ZonedDateTime(t, "yyyy-mm-ddTHH:MM:SSzzzz") <= min_offline, temporals.t)
 
                         for h in on_hours
                             min_online_rhs[(p, s, t, h)] = v_start[(p,s,t)]
