@@ -186,7 +186,7 @@ function main()
             for i in 1:length(timesteps)
                 push!(ts.series,(timesteps[i],data[i]))
             end
-            push!(filter(x->x.source==nod || x.sink==nod,processes[proc].topos)[1].cap_ts,ts)
+            push!(filter(x->x.source==nod || x.sink==nod,processes[proc].topos)[1].cap_ts.ts_data, ts)
         end
     end
 
@@ -233,7 +233,7 @@ function main()
                     tup = (timesteps[i], mps[i],)
                     push!(ts.series, tup)
                 end
-                push!(processes[n].eff_ts,ts)
+                push!(processes[n].eff_ts.ts_data,ts)
             end
         end
     end
@@ -257,7 +257,7 @@ function main()
                 tup = (timesteps[i], mps[i],)
                 push!(ts.series, tup)
             end
-            push!(markets[mm.market].price, ts)
+            push!(markets[mm.market].price.ts_data, ts)
             append!(dates, timesteps)
         end
         if mm.market in names(fixed_data)
@@ -299,16 +299,16 @@ function main()
                     push!(con_vecs[tup],ts)
                 end
             else
-                push!(gen_constraints[constr].constant,ts)
+                push!(gen_constraints[constr].constant.ts_data,ts)
             end
         end
     end
 
     for k in keys(con_vecs)
-        con_fac = AbstractModel.ConFactor((k[2],k[3]),con_vecs[k])
+        con_fac = AbstractModel.ConFactor((k[2],k[3]))
+        append!(con_fac.data.ts_data, con_vecs[k])
         push!(gen_constraints[k[1]].factors,con_fac)
     end
-
     
     return  AbstractModel.InputData(AbstractModel.Temporals(unique(dates)), processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
 end

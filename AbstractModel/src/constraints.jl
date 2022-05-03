@@ -77,7 +77,7 @@ function setup_node_balance(model_contents::OrderedDict, input_data::AbstractMod
         end
         # Check inflow for node
         if nodes[tu[1]].is_inflow
-            inflow_val = filter(x->x.scenario == tu[2],nodes[tu[1]].inflow)[1](tu[3])
+            inflow_val = nodes[tu[1]].inflow(tu[2], tu[3])
         else
             inflow_val = 0.0
         end
@@ -237,7 +237,7 @@ function setup_process_balance(model_contents::OrderedDict, input_data::Abstract
             eff = processes[tup[1]].eff
         # timeseries based eff
         else
-            eff = filter(x->x.scenario == tup[2],processes[tup[1]].eff_ts)[1](tup[3])
+            eff = processes[tup[1]].eff_ts(tup[2], tup[3])
         end
         sources = filter(x -> (x[1] == tup[1] && x[3] == tup[1] && x[4] == tup[2] && x[5] == tup[3]), process_tuple)
         sinks = filter(x -> (x[1] == tup[1] && x[2] == tup[1] && x[4] == tup[2] && x[5] == tup[3]), process_tuple)
@@ -316,7 +316,8 @@ function setup_processes_limits(model_contents::OrderedDict, input_data::Abstrac
     cf_fac_fix = model_contents["expression"]["cf_fac_fix"] = OrderedDict()
     cf_fac_up = model_contents["expression"]["cf_fac_up"] = OrderedDict()
     for tup in cf_balance_tuple
-        cf_val = filter(x->x.scenario == tup[4],processes[tup[1]].cf)[1](tup[5])
+
+        cf_val = processes[tup[1]].cf(tup[4], tup[5])
         cap = filter(x -> (x.sink == tup[3]), processes[tup[1]].topos)[1].capacity
         if processes[tup[1]].is_cf_fix
             cf_fac_fix[tup] = @expression(model, sum(v_flow[tup]) - cf_val * cap)
@@ -366,7 +367,7 @@ function setup_processes_limits(model_contents::OrderedDict, input_data::Abstrac
             if isempty(topo.cap_ts)
                 cap = topo.capacity
             else
-                cap = filter(x->x.scenario==tup[4],topo.cap_ts)[1](tup[5])
+                cap = topo.cap_ts(tup[4], tup[5])
             end
             #cap = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1].capacity
             add_to_expression!(e_lim_max[tup], -processes[tup[1]].load_max * cap * v_online[(tup[1], tup[4], tup[5])])
@@ -378,7 +379,7 @@ function setup_processes_limits(model_contents::OrderedDict, input_data::Abstrac
             if isempty(topo.cap_ts)
                 cap = topo.capacity
             else
-                cap = filter(x->x.scenario==tup[4],topo.cap_ts)[1](tup[5])
+                cap = topo.cap_ts(tup[4], tup[5])
             end
             #cap = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1].capacity
             if tup in p_reserve_prod || tup in p_reserve_cons
@@ -637,7 +638,7 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Abst
     for m in keys(markets)
         if markets[m].is_bid
             for (i,s) in enumerate(scenarios)
-                vec = map(x->x[2],filter(x->x.scenario == s, markets[m].price)[1].series)
+                vec = map(x -> x[2], markets[m].price(s).series)
                 if i == 1
                     price_matr[m] = vec
                 else
@@ -703,11 +704,12 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Abst
         consta = gen_constraints[c].constant
         eq_dir = gen_constraints[c].type
         for s in scenarios, t in temporals.t
-            add_to_expression!(const_expr[c][(s,t)],filter(x->x.scenario == s,consta)[1](t))
+            add_to_expression!(const_expr[c][(s,t)], consta(s, t))
+            #add_to_expression!(const_expr[c][(s,t)],filter(x->x.scenario == s,consta)[1](t))
             for f in facs
                 p_flow = f.flow
                 tup = filter(x->x[1]==p_flow[1] && (x[2]==p_flow[2] || x[3]==p_flow[2]) && x[4]==s && x[5]==t,process_tuple)[1]
-                fac_data = filter(x->x.scenario == s,f.data)[1](t)
+                fac_data = f.data(s, t)
                 add_to_expression!(const_expr[c][(s,t)],fac_data,v_flow[tup])
             end
         end 
@@ -759,7 +761,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Abstra
             #Commodity costs:
             if nodes[n].is_commodity
                 flow_tups = filter(x -> x[2] == n && x[4] == s, process_tuple)
-                cost_ts = filter(x->x.scenario == s, nodes[n].cost)[1]
+                cost_ts = nodes[n].cost(s)
                 # Add to expression for each t found in series
                 for tup in flow_tups
                     add_to_expression!(commodity_costs[s], sum(v_flow[tup]) * cost_ts(tup[5]) * temporals(tup[5]))
@@ -769,7 +771,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Abstra
             if nodes[n].is_market
                 flow_out = filter(x -> x[2] == n && x[4] == s, process_tuple)
                 flow_in = filter(x -> x[3] == n && x[4] == s, process_tuple)
-                price_ts = filter(x->x.scenario == s, markets[n].price)[1]
+                price_ts = markets[n].price(s)
 
                 for tup in flow_out
                     add_to_expression!(market_costs[s], sum(v_flow[tup]) * price_ts(tup[5]) * temporals(tup[5]))
@@ -816,7 +818,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Abstra
     for s in scenarios
         reserve_costs[s] = AffExpr(0.0)
         for tup in filter(x -> x[2] == s, res_final_tuple)
-            price = filter(x->x.scenario == s, markets[tup[1]].price)[1](tup[3])
+            price = markets[tup[1]].price(s, tup[3])
             add_to_expression!(reserve_costs[s],-price*v_res_final[tup])
         end
     end
