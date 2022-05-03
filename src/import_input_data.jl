@@ -68,7 +68,7 @@ function main()
         end
     end
 
-    dates = TimeZones.ZonedDateTime[]
+    dates = String[]
 
     for i in 1:nrow(system_data["nodes"])
         n = system_data["nodes"][i, :]
@@ -76,7 +76,7 @@ function main()
         if Bool(n.is_commodity)
             AbstractModel.convert_to_commodity(nodes[n.node])
             for s in keys(scenarios)
-                timesteps = map(t-> ZonedDateTime(t, tz"Europe/Helsinki"), timeseries_data["scenarios"][s]["price"].t)
+                timesteps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), timeseries_data["scenarios"][s]["price"].t)
                 prices = timeseries_data["scenarios"][s]["price"][!, n.node]
                 ts = AbstractModel.TimeSeries(s)
                 for i in 1:length(timesteps)
@@ -91,7 +91,7 @@ function main()
         end
         if Bool(n.is_inflow)
             for s in keys(scenarios)
-                timesteps = map(t-> ZonedDateTime(t, tz"Europe/Helsinki"), timeseries_data["scenarios"][s]["inflow"].t)
+                timesteps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), timeseries_data["scenarios"][s]["inflow"].t)
                 flows = timeseries_data["scenarios"][s]["inflow"][!, n.node]
                 ts = AbstractModel.TimeSeries(s)
                 for i in 1:length(timesteps)
@@ -124,7 +124,7 @@ function main()
         AbstractModel.add_eff(processes[p.process], Float64(p.eff))
         if Bool(p.is_cf)
             for s in keys(scenarios)
-                timesteps = map(t-> ZonedDateTime(t, tz"Europe/Helsinki"), timeseries_data["scenarios"][s]["cf"].t)
+                timesteps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), timeseries_data["scenarios"][s]["cf"].t)
                 cf = timeseries_data["scenarios"][s]["cf"][!, p.process]
                 ts = AbstractModel.TimeSeries(s)
                 for i in 1:length(timesteps)
@@ -175,7 +175,7 @@ function main()
     #return system_data["efficiencies"]
     
     for n in names(cap_ts)
-        timesteps = map(t-> ZonedDateTime(t, tz"Europe/Helsinki"), cap_ts.t)
+        timesteps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), cap_ts.t)
         if n != "t"
             col = split(n,",")
             proc = col[1]
@@ -225,7 +225,7 @@ function main()
 
     for s in keys(scenarios)
         if "eff_ts" in collect(keys(timeseries_data["scenarios"][s]))
-            timesteps = map(t-> ZonedDateTime(t, tz"Europe/Helsinki"), timeseries_data["scenarios"][s]["eff_ts"].t)
+            timesteps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), timeseries_data["scenarios"][s]["eff_ts"].t)
             for n in names(timeseries_data["scenarios"][s]["eff_ts"])[2:end]
                 mps = timeseries_data["scenarios"][s]["eff_ts"][!,n]
                 ts = AbstractModel.TimeSeries(s)
@@ -250,7 +250,7 @@ function main()
         markets[mm.market] = AbstractModel.Market(mm.market, mm.type, mm.node, mm.direction, mm.realisation, mm.reserve_type, mm.is_bid)
         #
         for s in keys(scenarios)
-            timesteps = map(t-> ZonedDateTime(t, tz"Europe/Helsinki"), timeseries_data["scenarios"][s]["market_prices"].t)
+            timesteps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), timeseries_data["scenarios"][s]["market_prices"].t)
             mps = timeseries_data["scenarios"][s]["market_prices"][!, mm.market]
             ts = AbstractModel.TimeSeries(s)
             for i in 1:length(timesteps)
@@ -261,7 +261,7 @@ function main()
             append!(dates, timesteps)
         end
         if mm.market in names(fixed_data)
-            timestamps = map(t-> ZonedDateTime(t, tz"Europe/Helsinki"), fixed_data.t)
+            timestamps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), fixed_data.t)
             data = fixed_data[!,mm.market]
             for i in 1:length(timestamps)
                 if !ismissing(data[i])
@@ -280,7 +280,7 @@ function main()
 
     con_vecs = OrderedDict()
     for n in names(constraint_data)
-        timesteps = map(t-> ZonedDateTime(t, tz"Europe/Helsinki"), constraint_data.t)
+        timesteps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), constraint_data.t)
         if n != "t"
             col = split(n,",")
             constr = col[1]
