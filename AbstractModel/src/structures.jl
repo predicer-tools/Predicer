@@ -189,6 +189,70 @@ function (ts::TimeSeries)(t::String)
 end
 
 
+"""
+    struct TimeSeriesData
+        ts_data::Vector{TimeSeries}
+        function TimeSeriesData()
+            return new([])
+        end
+    end
+
+A struct for storing TimeSeries for different scenarios. 
+"""
+struct TimeSeriesData
+    ts_data::Vector{TimeSeries}
+    function TimeSeriesData()
+        return new([])
+    end
+end
+
+
+"""
+    function (tsd::TimeSeriesData)(s::String, t::String)
+
+Returns the value of the TimeSeries for scenario s and timestep t.
+"""
+function (tsd::TimeSeriesData)(s::String, t::String)
+    # Return the value of the timeseries for scenario s at timestep t. 
+    series = filter(ts -> ts.scenario == s, tsd.ts_data)[1]
+    return series(t)
+end
+
+
+"""
+    function (tsd::TimeSeriesData)(s::String, t::TimeZones.ZonedDateTime)
+
+Returns the value of the TimeSeries for scenario s and timestep t.
+"""
+function (tsd::TimeSeriesData)(s::String, t::TimeZones.ZonedDateTime)
+    # Return the value of the timeseries for scenario s at timestep t. 
+    series = filter(ts -> ts.scenario == s, tsd.ts_data)[1]
+    return series(t)
+end
+
+
+"""
+    function (tsd::TimeSeriesData)(s::String)
+
+Returns the TimeSeries for scenario s.
+"""
+function (tsd::TimeSeriesData)(s::String)
+    # Return the timeseries for scenario s. 
+    series = filter(ts -> ts.scenario == s, tsd.ts_data)[1]
+    return series
+end
+
+
+"""
+    function Base.:isempty(tsd::TimeSeriesData)
+
+Extends the Base.isempty() function. Returns true if the TimeSeriesData is empty, and false if TimeSeriesData.ts_data contains something.
+"""
+function Base.:isempty(tsd::TimeSeriesData)
+    return isempty(tsd.ts_data)
+end
+
+
 # --- Node ---
 """
     mutable struct Node <: AbstractNode
@@ -199,8 +263,8 @@ end
         is_res::Bool
         is_inflow::Bool
         state::Union{State, Nothing}
-        cost::Vector{TimeSeries}
-        inflow::Vector{TimeSeries}
+        cost::TimeSeriesData
+        inflow::TimeSeriesData
     end
 
 A struct for nodes.
@@ -212,8 +276,8 @@ A struct for nodes.
 - `is_res::Bool`: Flag indicating of the node participates as a reserve.
 - `is_inflow::Bool`: Flag indicating of the node has a inflow. 
 - `state::Union{State, Nothing}`: The state of the node. 
-- `cost::Vector{TimeSeries}`: Vector containing TimeSeries with the costs for each scenario. 
-- `inflow::Vector{TimeSeries}`: Vector contining TimeSeries with the inflows for each scenario. 
+- `cost::TimeSeriesData`: Vector containing TimeSeries with the costs for each scenario. 
+- `inflow::TimeSeriesData`: Vector contining TimeSeries with the inflows for each scenario. 
 """
 mutable struct Node <: AbstractNode
     name::String
@@ -223,8 +287,8 @@ mutable struct Node <: AbstractNode
     is_res::Bool
     is_inflow::Bool
     state::Union{State, Nothing}
-    cost::Vector{TimeSeries}
-    inflow::Vector{TimeSeries}
+    cost::TimeSeriesData
+    inflow::TimeSeriesData
 end
 
 
@@ -253,7 +317,7 @@ function Node(name::String, is_commodity::Bool=false, is_market::Bool=false)
     if is_commodity == true && is_market == true
         error("A Node cannot be a commodity and a market at the same time!")
     else
-        return Node(name, is_commodity, is_market, false, false, false, nothing, [], [])
+        return Node(name, is_commodity, is_market, false, false, false, nothing, TimeSeriesData(), TimeSeriesData())
     end
 end
 
@@ -270,7 +334,7 @@ function add_inflow(n::Node, ts::TimeSeries)
         error("A market Node cannot have an inflow.")
     else
         n.is_inflow = true
-        push!(n.inflow, ts)
+        push!(n.inflow.ts_data, ts)
     end
 end
 
@@ -355,7 +419,7 @@ Adds a cost TimeSeries to a Node with is_commodity==true. Returns an error if is
 """
 function add_cost(n::Node, ts::TimeSeries)
     if n.is_commodity
-        push!(n.cost, ts)
+        push!(n.cost.ts_data, ts)
     else
         error("Can only add a cost TimeSeries to a commodity Node!")
     end
@@ -371,8 +435,9 @@ end
         VOM_cost::Float64
         ramp_up::Float64
         ramp_down::Float64
+        cap_ts::TimeSeriesData
         function Topology(source, sink, capacity, VOM_cost, ramp_up, ramp_down)
-            return new(source, sink, capacity, VOM_cost, ramp_up, ramp_down)
+            return new(source, sink, capacity, VOM_cost, ramp_up, ramp_down, TimeSeriesData())
         end
     end
 
@@ -383,7 +448,8 @@ A struct for a process topology, signifying the connection between flows in a pr
 - `capacity::Float64`: Upper limit of the flow variable for the topology. 
 - `VOM_cost::Float64`: VOM cost of using this connection. 
 - `ramp_up::Float64`: Maximum allowed increase of the linked flow variable value between timesteps. Min 0.0 max 1.0. 
-- `ramp_down::Float64`: Minimum allowed increase of the linked flow variable value between timesteps. Min 0.0 max 1.0. 
+- `ramp_down::Float64`: Minimum allowed increase of the linked flow variable value between timesteps. Min 0.0 max 1.0.
+- `cap_ts::TimeSeriesData`: TimeSeriesStruct
 """
 struct Topology
     source::String
@@ -392,9 +458,9 @@ struct Topology
     VOM_cost::Float64
     ramp_up::Float64
     ramp_down::Float64
-    cap_ts::Vector{TimeSeries}
+    cap_ts::TimeSeriesData
     function Topology(source::String, sink::String, capacity::Float64, VOM_cost::Float64, ramp_up::Float64, ramp_down::Float64)
-        return new(source, sink, capacity, VOM_cost, ramp_up, ramp_down, [])
+        return new(source, sink, capacity, VOM_cost, ramp_up, ramp_down, TimeSeriesData())
     end
 end
 
@@ -416,8 +482,8 @@ end
         min_offline::Int64
         initial_state::Bool
         topos::Vector{Topology}
-        cf::Vector{TimeSeries}
-        eff_ts::Vector{TimeSeries}
+        cf::TimeSeriesData
+        eff_ts::TimeSeriesData
         eff_ops::Vector{Any}
         eff_fun::Vector{Tuple{Any,Any}}
         function Process(name, is_cf, is_cf_fix, is_online, is_res, eff, conversion, load_min, load_max, start_cost, min_online, min_offline, initial_state)
@@ -441,8 +507,8 @@ A struct for a process (unit).
 - `min_offline::Int64`: Minimum time the process has to be offline after start.
 - `initial_state::Bool`: Initial state (on/off) of the process at the start of simulation.
 - `topos::Vector{Topology}`: Vector containing the topologies of the process.
-- `cf::Vector{TimeSeries}`: Vector containing TimeSeries limiting a cf process.
-- `eff_ts::Vector{TimeSeries}`: Vector of TimeSeries containing information on efficiency depending on time.
+- `cf::TimeSeriesData`: Vector containing TimeSeries limiting a cf process.
+- `eff_ts::TimeSeriesData`: Vector of TimeSeries containing information on efficiency depending on time.
 - `eff_ops::Vector{Any}`: Vector containing operating points for a piecewise efficiency function.
 - `eff_fun::Vector{Tuple{Any,Any}}`: Vector containing efficiencies for a piecewise efficiency function.
 """
@@ -461,8 +527,8 @@ mutable struct Process <: AbstractProcess
     min_offline::Int64
     initial_state::Bool
     topos::Vector{Topology}
-    cf::Vector{TimeSeries}
-    eff_ts::Vector{TimeSeries}
+    cf::TimeSeriesData
+    eff_ts::TimeSeriesData
     eff_ops::Vector{Any}
     eff_fun::Vector{Tuple{Any,Any}}
 end
@@ -478,7 +544,7 @@ The constructor for the Process struct.
 - `conversion::Int`: Used to differentiate between types of process. 1 = unit based, 2 = transfer process, 3 = market process.
 """
 function Process(name::String, conversion::Int=1)
-    return Process(name, conversion, false, false, false, false, -1.0, 0.0, 1.0, 0.0, 0, 0, true, [], [], [], [], [])
+    return Process(name, conversion, false, false, false, false, -1.0, 0.0, 1.0, 0.0, 0, 0, true, [], TimeSeriesData(), TimeSeriesData(), [], [])
 end
 
 
@@ -508,7 +574,7 @@ end
 Adds a time-dependent value for the efficiency of the process. 
 """
 function add_fixed_eff(p::Process, ts::TimeSeries)
-    push!(p.eff_ts, ts)
+    push!(p.eff_ts.ts_data, ts)
 end
 
 
@@ -572,7 +638,7 @@ function add_cf(p::Process, ts::TimeSeries, is_fixed::Bool=false)
     if !p.is_online
         p.is_cf = true
         p.is_cf_fix = is_fixed
-        push!(p.cf, ts)
+        push!(p.cf.ts_data, ts)
     else
         return error("Cannot add cf functionality to a process with online functionality.")
     end
@@ -637,7 +703,7 @@ end
         realisation::Float64
         reserve_type::String
         is_bid::Bool
-        price::Vector{TimeSeries}
+        price::TimeSeriesData
         fixed::Vector{Tuple{Any,Any}}
         function Market(name, type, node, direction, realisation, reserve_type, is_bid)
             return new(name, type, node, direction, realisation, reserve_type, is_bid, [], [])
@@ -653,7 +719,7 @@ A struct for markets.
 - `realisation::Float64`: Realisation probability.
 - `reserve_type::String`: Type of the reserve market. 
 - `is_bid::Bool`: Is the market biddable. 
-- `price::Vector{TimeSeries}`: Vector containing TimeSeries of the market price in different scenarios. 
+- `price::TimeSeriesData`: Vector containing TimeSeries of the market price in different scenarios. 
 - `fixed::Vector{Tuple{Any,Any}}`: Vector containing information on the market being fixed. 
 """
 struct Market
@@ -664,10 +730,10 @@ struct Market
     realisation::Float64
     reserve_type::String
     is_bid::Bool
-    price::Vector{TimeSeries}
+    price::TimeSeriesData
     fixed::Vector{Tuple{Any,Any}}
     function Market(name, type, node, direction, realisation, reserve_type, is_bid)
-        return new(name, type, node, direction, realisation, reserve_type, is_bid, [], [])
+        return new(name, type, node, direction, realisation, reserve_type, is_bid, TimeSeriesData(), [])
     end
 end
 
@@ -676,7 +742,7 @@ end
 """
     struct ConFactor
         flow::Tuple{Any,Any}
-        data::Vector{TimeSeries}
+        data::TimeSeriesData
         function ConFactor(flow,data)
             return new(flow,data)
         end
@@ -685,13 +751,13 @@ end
 Struct for general constraints factors.
 # Fields
 - `flow::Tuple{Any,Any}`: ??
-- `data::Vector{TimeSeries}`: ??    
+- `data::TimeSeriesData`: ??    
 """
 struct ConFactor
     flow::Tuple{Any,Any}
-    data::Vector{TimeSeries}
-    function ConFactor(flow,data)
-        return new(flow,data)
+    data::TimeSeriesData
+    function ConFactor(flow)
+        return new(flow,TimeSeriesData())
     end
 end
 
@@ -702,7 +768,7 @@ end
         name::String
         type::String
         factors::Vector{ConFactor}
-        constant::Vector{TimeSeries}
+        constant::TimeSeriesData
         function GenConstraint(name,type)
             return new(name,type,[],[])
         end
@@ -713,15 +779,15 @@ Struct for general constraints.
 - `name::String`: Name of the generic constraint. 
 - `type::String`: Type of the generic constraint. 
 - `factors::Vector{ConFactor}`: Vector of ConFactors. 
-- `constant::Vector{TimeSeries}`: TimeSeries?
+- `constant::TimeSeriesData`: TimeSeries?
 """
 struct GenConstraint
     name::String
     type::String
     factors::Vector{ConFactor}
-    constant::Vector{TimeSeries}
+    constant::TimeSeriesData
     function GenConstraint(name,type)
-        return new(name,type,[],[])
+        return new(name,type,[], TimeSeriesData())
     end
 end
 
@@ -737,7 +803,16 @@ end
         gen_constraints::OrderedDict{String, GenConstraint}
     end
 
-Struct containing the imported input data, based on which the AbstractModel is built. 
+Struct containing the imported input data, based on which the AbstractModel is built.
+# Fields
+- `temporals::Temporals`: The timesteps in the model as a Temporals struct.
+- `processes::OrderedDict{String, Process}`: A dict containing the data relevant for processes.
+- `nodes::OrderedDict{String, Node}`: A dict containing the data relevant for nodes.
+- `markets::OrderedDict{String, Market}`: A dict containing the data relevant for markets.
+- `scenarios::OrderedDict{String, Float64}`:  A dict containing the data relevant for scenarios, with scenario name as key and probability as value.
+- `reserve_type::OrderedDict{String, Float64}`:  A dict containing the reserve types, with reserve name as key and ramp rate(speed) as value: 1 = 1 hour reaction time, 4 = 15 minutes reaction time, etc. 
+- `risk::OrderedDict{String, Float64}`:  A dict containing the data on risk for the cvar calculations, with the risk parameter as key and risk value as value. 
+- `gen_constraints::OrderedDict{String, GenConstraint}`:  A dict containing the genconstraints.
 """
 mutable struct InputData
     temporals::Temporals
