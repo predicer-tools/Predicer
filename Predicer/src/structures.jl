@@ -8,14 +8,14 @@ abstract type AbstractProcess end
 
 """
 
-mutable struct AbstractModelCore
+mutable struct PredicerCore
     threads::Int
     model_contents::OrderedDict
     temporals::Temporals
     input_data::InputData
 end
 
-function AbstractModelCore()
+function PredicerCore()
     return 0
 end
 """
@@ -821,7 +821,7 @@ end
         gen_constraints::OrderedDict{String, GenConstraint}
     end
 
-Struct containing the imported input data, based on which the AbstractModel is built.
+Struct containing the imported input data, based on which the Predicer is built.
 # Fields
 - `temporals::Temporals`: The timesteps in the model as a Temporals struct.
 - `processes::OrderedDict{String, Process}`: A dict containing the data relevant for processes.

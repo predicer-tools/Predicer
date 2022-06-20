@@ -2,7 +2,7 @@ using DataStructures
 using JuMP
 
 """
-    create_constraints(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+    create_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
 
 Create all constraints used in the model.
 
@@ -10,7 +10,7 @@ Create all constraints used in the model.
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function create_constraints(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+function create_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
     setup_node_balance(model_contents, input_data)
     setup_process_online_balance(model_contents, input_data)
     setup_process_balance(model_contents, input_data)
@@ -27,7 +27,7 @@ end
 
 
 """
-    setup_node_balance(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+    setup_node_balance(model_contents::OrderedDict, input_data::Predicer.InputData)
 
 Setup node balance constraints used in the model.
 
@@ -35,7 +35,7 @@ Setup node balance constraints used in the model.
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function setup_node_balance(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
     process_tuple = model_contents["tuple"]["process_tuple"]
     res_dir = model_contents["res_dir"]
@@ -136,7 +136,7 @@ end
 
 
 """
-    setup_process_online_balance(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+    setup_process_online_balance(model_contents::OrderedDict, input_data::Predicer.InputData)
 
 Setup necessary functionalities for processes with binary online variables.
 
@@ -144,7 +144,7 @@ Setup necessary functionalities for processes with binary online variables.
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function setup_process_online_balance(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+function setup_process_online_balance(model_contents::OrderedDict, input_data::Predicer.InputData)
     proc_online_tuple = model_contents["tuple"]["proc_online_tuple"]
     if !isempty(proc_online_tuple)
         model = model_contents["model"]
@@ -206,7 +206,7 @@ end
 
 
 """
-    setup_process_balance(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+    setup_process_balance(model_contents::OrderedDict, input_data::Predicer.InputData)
 
 Setup constraints used in process balance calculations. 
 
@@ -214,7 +214,7 @@ Setup constraints used in process balance calculations.
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function setup_process_balance(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+function setup_process_balance(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
     proc_balance_tuple = model_contents["tuple"]["proc_balance_tuple"]
     process_tuple = model_contents["tuple"]["process_tuple"]
@@ -284,7 +284,7 @@ end
 
 
 """
-    setup_processes_limits(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+    setup_processes_limits(model_contents::OrderedDict, input_data::Predicer.InputData)
 
 Setup constraints used for process limitations, such as min/max loads, unit starts and participation in reserves.
 
@@ -292,7 +292,7 @@ Setup constraints used for process limitations, such as min/max loads, unit star
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function setup_processes_limits(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+function setup_processes_limits(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
     trans_tuple = model_contents["tuple"]["trans_tuple"]
     lim_tuple = model_contents["tuple"]["lim_tuple"]
@@ -401,7 +401,7 @@ end
 
 
 """
-    setup_reserve_balances(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+    setup_reserve_balances(model_contents::OrderedDict, input_data::Predicer.InputData)
 
 Setup constraints for reserves. 
 
@@ -409,7 +409,7 @@ Setup constraints for reserves.
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function setup_reserve_balances(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+function setup_reserve_balances(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
     res_eq_tuple = model_contents["tuple"]["res_eq_tuple"]
     res_eq_updn_tuple = model_contents["tuple"]["res_eq_updn_tuple"]
@@ -479,7 +479,7 @@ end
 
 
 """
-    setup_ramp_constraints(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+    setup_ramp_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
 
 Setup process ramp constraints, based on ramp limits defined in input data and participation in reserves.  
 
@@ -487,7 +487,7 @@ Setup process ramp constraints, based on ramp limits defined in input data and p
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function setup_ramp_constraints(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
     ramp_tuple = model_contents["tuple"]["ramp_tuple"]
     process_tuple = model_contents["tuple"]["process_tuple"]
@@ -569,7 +569,7 @@ end
 
 
 """
-    setup_fixed_values(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+    setup_fixed_values(model_contents::OrderedDict, input_data::Predicer.InputData)
 
 Setup constraints for setting fixed process values at certain timesteps.   
 
@@ -577,7 +577,7 @@ Setup constraints for setting fixed process values at certain timesteps.
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function setup_fixed_values(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+function setup_fixed_values(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
     
     process_tuple = model_contents["tuple"]["process_tuple"]
@@ -616,7 +616,7 @@ end
 
 
 """
-    setup_bidding_constraints(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+    setup_bidding_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
 
 Setup constraints for market bidding.   
 
@@ -624,7 +624,7 @@ Setup constraints for market bidding.
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function setup_bidding_constraints(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+function setup_bidding_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
     markets = input_data.markets
     scenarios = collect(keys(input_data.scenarios))
@@ -678,7 +678,7 @@ end
 
 
 """
-    setup_generic_constraints(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+    setup_generic_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
 
 Setup generic constraints. 
 
@@ -686,7 +686,7 @@ Setup generic constraints.
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function setup_generic_constraints(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+function setup_generic_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
     process_tuple = model_contents["tuple"]["process_tuple"]
     v_flow = model_contents["variable"]["v_flow"]
@@ -725,7 +725,7 @@ end
 
 
 """
-    setup_cost_calculations(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+    setup_cost_calculations(model_contents::OrderedDict, input_data::Predicer.InputData)
 
 Setup expressions used for calculating the costs in the model. 
 
@@ -733,7 +733,7 @@ Setup expressions used for calculating the costs in the model.
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function setup_cost_calculations(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+function setup_cost_calculations(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
     process_tuple = model_contents["tuple"]["process_tuple"]
     proc_online_tuple = model_contents["tuple"]["proc_online_tuple"]
@@ -845,7 +845,7 @@ end
 
 
 """
-    setup_cvar_element(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+    setup_cvar_element(model_contents::OrderedDict, input_data::Predicer.InputData)
 
 Setup expressions used for calculating the cvar in the model. 
 
@@ -853,7 +853,7 @@ Setup expressions used for calculating the cvar in the model.
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function setup_cvar_element(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+function setup_cvar_element(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
     total_costs = model_contents["expression"]["total_costs"]
     v_var = model_contents["variable"]["v_var"]
@@ -869,11 +869,11 @@ end
 
 
 """
-    setup_objective_function(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+    setup_objective_function(model_contents::OrderedDict, input_data::Predicer.InputData)
 
 Sets up the objective function, which in this model aims to minimize the costs.
 """
-function setup_objective_function(model_contents::OrderedDict, input_data::AbstractModel.InputData)
+function setup_objective_function(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
     total_costs = model_contents["expression"]["total_costs"]
     scen_p = collect(values(input_data.scenarios))

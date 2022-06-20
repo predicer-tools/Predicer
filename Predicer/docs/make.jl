@@ -1,13 +1,13 @@
 using Documenter
-using AbstractModel
+using Predicer
 
 Documenter.makedocs(build = "build",
     clean = true,
     doctest = false,
-    modules = Module[AbstractModel],
+    modules = Module[Predicer],
     repo = "",
     highlightsig = true,
-    sitename = "AbstractModel documentation",
+    sitename = "Predicer documentation",
     expandfirst = [],
     pages = [
             "Index" => "index.md"
