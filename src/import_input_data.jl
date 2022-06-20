@@ -310,5 +310,5 @@ function main()
         push!(gen_constraints[k[1]].factors,con_fac)
     end
     
-    return  AbstractModel.InputData(AbstractModel.Temporals(unique(dates)), processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
+    return  AbstractModel.InputData(AbstractModel.Temporals(unique(sort(dates))), processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
 end
