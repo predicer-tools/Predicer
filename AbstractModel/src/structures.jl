@@ -4,6 +4,25 @@ using TimeZones
 abstract type AbstractNode end
 abstract type AbstractProcess end
 
+
+
+"""
+
+mutable struct AbstractModelCore
+    threads::Int
+    model_contents::OrderedDict
+    temporals::Temporals
+    input_data::InputData
+end
+
+function AbstractModelCore()
+    return 0
+end
+"""
+
+
+
+
 """
     mutable struct Temporals
         t::Vector{String}
@@ -24,6 +43,7 @@ mutable struct Temporals
     dtf::Float64
     is_variable_dt::Bool
     variable_dt::Vector{Tuple{String, Float64}}
+    ts_format::String
 end
 
 
@@ -32,16 +52,16 @@ end
 
 Constructor for the Temporals struct.
 """
-function Temporals(ts::Vector{String})
+function Temporals(ts::Vector{String}, ts_format="yyyy-mm-ddTHH:MM:SSzzzz")
     dts = []
-    zdt_ts = map(x -> ZonedDateTime(x, "yyyy-mm-ddTHH:MM:SSzzzz"), ts)
+    zdt_ts = map(x -> ZonedDateTime(x, ts_format), ts)
     for i in 1:(length(zdt_ts)-1)
         push!(dts, (ts[i], Dates.Minute(zdt_ts[i+1] - zdt_ts[i])/Dates.Minute(60)))
     end
     if length(unique(map(t -> t[2], dts))) == 1
-        return Temporals(ts, dts[1][2], false, [])
+        return Temporals(ts, dts[1][2], false, [], ts_format)
     elseif length(unique(map(t -> t[2], dts))) > 1
-        return Temporals(ts, 0.0, true, dts)
+        return Temporals(ts, 0.0, true, dts, ts_format)
     end
 end
 
@@ -213,9 +233,7 @@ end
 Returns the value of the TimeSeries for scenario s and timestep t.
 """
 function (tsd::TimeSeriesData)(s::String, t::String)
-    # Return the value of the timeseries for scenario s at timestep t. 
-    series = filter(ts -> ts.scenario == s, tsd.ts_data)[1]
-    return series(t)
+    return tsd(s)(t)
 end
 
 
@@ -225,28 +243,28 @@ end
 Returns the value of the TimeSeries for scenario s and timestep t.
 """
 function (tsd::TimeSeriesData)(s::String, t::TimeZones.ZonedDateTime)
-    # Return the value of the timeseries for scenario s at timestep t. 
-    series = filter(ts -> ts.scenario == s, tsd.ts_data)[1]
-    return series(t)
+    return tsd(s)(t)
 end
 
 
 """
     function (tsd::TimeSeriesData)(s::String)
 
-Returns the TimeSeries for scenario s.
+Returns the TimeSeries for scenario s. If the scenario is not found, return TimeSeries for the first scenario
 """
 function (tsd::TimeSeriesData)(s::String)
-    # Return the timeseries for scenario s. 
-    series = filter(ts -> ts.scenario == s, tsd.ts_data)[1]
-    return series
+    if s in map(x -> x.scenario, tsd.ts_data)
+        return filter(ts -> ts.scenario == s, tsd.ts_data)[1]
+    else
+        return tsd.ts_data[1] # is this a "risky" approach, leading to unwanted and difficult to detect errors?
+    end
 end
 
 
 """
     function Base.:isempty(tsd::TimeSeriesData)
 
-Extends the Base.isempty() function. Returns true if the TimeSeriesData is empty, and false if TimeSeriesData.ts_data contains something.
+Extends the Base.isempty() function for the TimeSeriesData struct. Returns true if the TimeSeriesData is empty, and false otherwise. 
 """
 function Base.:isempty(tsd::TimeSeriesData)
     return isempty(tsd.ts_data)
@@ -827,3 +845,4 @@ mutable struct InputData
         return new(temporals, processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
     end
 end
+
