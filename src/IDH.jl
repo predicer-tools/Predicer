@@ -6,8 +6,10 @@ module IDH # InputDataHandler
     export init_model
     export solve_model
 
+    include(joinpath(@__DIR__, ".\\import_input_data.jl"))
+
     function get_data()
-        return include(".\\src\\import_input_data.jl")()
+        return import_input_data()
     end
 
     function export_model_contents_dict(mc, results=false)
@@ -19,7 +21,7 @@ module IDH # InputDataHandler
 
     function init_model()
     # Import data using descriptive layer translating the input data to an abstract format
-        imported_data = include(".\\src\\import_input_data.jl")()
+        imported_data = import_input_data()
         model_contents = Predicer.Initialize(imported_data)
         return model_contents
     end
