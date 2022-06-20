@@ -1,4 +1,4 @@
-module AbstractModel
+module Predicer
     include("structures.jl")
     include("model.jl")
     include("tuples.jl")
