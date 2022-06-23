@@ -41,15 +41,16 @@ end
 Creates the tuple containing all the nodes which have a reserve. Form: (node).
 """
 function create_res_nodes_tuple(model_contents::OrderedDict, input_data::InputData)
-    res_nodes_tuple = []
-    markets = input_data.markets
-    for m in keys(markets)
-        if markets[m].type == "reserve"
-            push!(res_nodes_tuple, markets[m].node)
+    reserve_nodes = []
+
+    for n in values(input_data.nodes)
+        if n.is_res
+            push!(reserve_nodes, n.name)
         end
     end
-    model_contents["tuple"]["res_nodes_tuple"] = unique(res_nodes_tuple)
+    model_contents["tuple"]["res_nodes_tuple"] = reserve_nodes
 end
+
 
 
 """
