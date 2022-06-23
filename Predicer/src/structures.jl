@@ -812,10 +812,10 @@ end
 """
     mutable struct InputData
         temporals::Temporals
-        processes::Vector{Process}
-        nodes::Vector{Node}
+        processes::OrderedDict{String, Process}
+        nodes::OrderedDict{String, Node}
+        markets::OrderedDict{String, Market}
         scenarios::OrderedDict{String, Float64}
-        markets::Vector{Market}
         reserve_type::OrderedDict{String, Float64}
         risk::OrderedDict{String, Float64}
         gen_constraints::OrderedDict{String, GenConstraint}
