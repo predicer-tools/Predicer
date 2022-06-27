@@ -64,15 +64,15 @@ function create_res_tuple(model_contents::OrderedDict, input_data::InputData)
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
     res_dir = model_contents["res_dir"]
-    for m in keys(markets)
-        if markets[m].type == "reserve"
-            if markets[m].direction in res_dir
+    for m in values(markets)
+        if m.type == "reserve"
+            if m.direction in res_dir
                 for s in scenarios, t in temporals.t
-                    push!(res_tuple, (m, markets[m].node, markets[m].direction, s, t))
+                    push!(reserve_market_tuple, (m.name, m.node, m.direction, s, t))
                 end
             else
-                for rd in res_dir, s in scenarios, t in temporals.t
-                    push!(res_tuple, (m, markets[m].node, rd, s, t))
+                for d in res_dir, s in scenarios, t in temporals.t
+                    push!(reserve_market_tuple, (m.name, m.node, d, s, t))
                 end
             end
         end
@@ -91,10 +91,10 @@ function create_process_tuple(model_contents::OrderedDict, input_data::InputData
     processes = input_data.processes
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
-    for p in keys(processes), s in scenarios
-        for topo in processes[p].topos
+    for p in values(processes), s in scenarios
+        for topo in p.topos
             for t in temporals.t
-                push!(process_tuple, (p, topo.source, topo.sink, s, t))
+                push!(process_tuple, (p.name, topo.source, topo.sink, s, t))
             end
         end
     end
@@ -112,10 +112,10 @@ function create_proc_online_tuple(model_contents::OrderedDict, input_data::Input
     processes = input_data.processes
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
-    for p in keys(processes)
-        if processes[p].is_online
+    for p in values(processes)
+        if p.is_online
             for s in scenarios, t in temporals.t
-                push!(proc_online_tuple, (p, s, t))
+                push!(proc_online_tuple, (p.name, s, t))
             end
         end
     end
@@ -152,17 +152,17 @@ end
 """
     create_node_state_tuple(model_contents::OrderedDict, input_data::InputData)
 
-Creates tuple containing each node with a state (reserve) for each timestep. Form: (n, s, t).
+Creates tuple containing each node with a state (storage) for each timestep. Form: (n, s, t).
 """
 function create_node_state_tuple(model_contents::OrderedDict, input_data::InputData)
     node_state_tuple = []
     nodes = input_data.nodes
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
-    for n in keys(nodes)
-        if !(nodes[n].is_commodity) & !(nodes[n].is_market) & nodes[n].is_state
+    for n in values(nodes)
+        if !(n.is_commodity) & !(n.is_market) & n.is_state
             for s in scenarios, t in temporals.t
-                push!(node_state_tuple, (n, s, t))
+                push!(node_state_tuple, (n.name, s, t))
             end
         end
     end
@@ -180,10 +180,10 @@ function create_node_balance_tuple(model_contents::OrderedDict, input_data::Inpu
     nodes = input_data.nodes
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
-    for n in keys(nodes)
-        if !(nodes[n].is_commodity) & !(nodes[n].is_market)
+    for n in values(nodes)
+        if !(n.is_commodity) & !(n.is_market)
             for s in scenarios, t in temporals.t
-                push!(node_balance_tuple, (n, s, t))
+                push!(node_balance_tuple, (n.name, s, t))
             end
         end
     end
@@ -202,12 +202,14 @@ function create_res_potential_tuple(model_contents::OrderedDict, input_data::Inp
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
     res_nodes_tuple = model_contents["tuple"]["res_nodes_tuple"]
-    res_typ = collect(keys(input_data.reserve_type))
-    for p in keys(processes), s in scenarios, t in temporals.t
-        for topo in processes[p].topos
-            if (topo.source in res_nodes_tuple|| topo.sink in res_nodes_tuple) && processes[p].is_res
-                for r in model_contents["res_dir"], rt in res_typ
-                    push!(res_potential_tuple, (r, rt, p, topo.source, topo.sink, s, t))
+    res_type = collect(keys(input_data.reserve_type))
+    res_dir = model_contents["res_dir"]
+
+    for p in values(processes), s in scenarios, t in temporals.t
+        for topo in p.topos
+            if (topo.source in res_nodes_tuple|| topo.sink in res_nodes_tuple) && p.is_res
+                for r in res_dir, rt in res_type
+                    push!(res_potential_tuple, (r, rt, p.name, topo.source, topo.sink, s, t))
                 end
             end
         end
@@ -223,17 +225,18 @@ Creates tuple containing information on potential reserve participation per unit
 """
 function create_proc_potential_tuple(model_contents::OrderedDict, input_data::InputData)
     res_potential_tuple = []
-    res_dir = ["res_up", "res_down"]
+    res_dir = model_contents["res_dir"]
     processes = input_data.processes
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
     res_nodes_tuple = model_contents["tuple"]["res_nodes_tuple"]
-    res_typ = collect(keys(input_data.reserve_type))
-    for p in keys(processes), s in scenarios, t in temporals.t
-        for topo in processes[p].topos
-            if (topo.source in res_nodes_tuple|| topo.sink in res_nodes_tuple) && processes[p].is_res
-                for r in res_dir, rt in res_typ
-                    push!(res_potential_tuple, (r, rt, p, topo.source, topo.sink, s, t))
+    res_type = collect(keys(input_data.reserve_type))
+
+    for p in values(processes), s in scenarios, t in temporals.t
+        for topo in p.topos
+            if (topo.source in res_nodes_tuple|| topo.sink in res_nodes_tuple) && p.is_res
+                for r in res_dir, rt in res_type
+                    push!(res_potential_tuple, (r, rt, p.name, topo.source, topo.sink, s, t))
                 end
             end
         end
@@ -252,11 +255,11 @@ function create_proc_balance_tuple(model_contents::OrderedDict, input_data::Inpu
     processes = input_data.processes
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
-    for p in keys(processes)
-        if processes[p].conversion == 1 && !processes[p].is_cf
-            if isempty(processes[p].eff_fun)
+    for p in values(processes)
+        if p.conversion == 1 && !p.is_cf
+            if isempty(p.eff_fun)
                 for s in scenarios, t in temporals.t
-                    push!(proc_balance_tuple, (p, s, t))
+                    push!(proc_balance_tuple, (p.name, s, t))
                 end
             end
         end
@@ -275,11 +278,11 @@ function create_proc_op_balance_tuple(model_contents::OrderedDict, input_data::I
     processes = input_data.processes
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
-    for p in keys(processes)
-        if processes[p].conversion == 1 && !processes[p].is_cf
-            if !isempty(processes[p].eff_fun)
-                for s in scenarios, t in temporals.t, o in processes[p].eff_ops
-                    push!(proc_op_balance_tuple, (p, s, t, o))
+    for p in values(processes)
+        if p.conversion == 1 && !p.is_cf
+            if !isempty(p.eff_fun)
+                for s in scenarios, t in temporals.t, o in p.eff_ops
+                    push!(proc_op_balance_tuple, (p.name, s, t, o))
                 end
             end
         end
@@ -307,9 +310,10 @@ Creates tuple containing information on processes with an capacity factor, for e
 function create_cf_balance_tuple(model_contents::OrderedDict, input_data::InputData)
     cf_balance_tuple = []
     processes = input_data.processes
-    for p in keys(processes)
-        if processes[p].is_cf
-            push!(cf_balance_tuple, filter(x -> (x[1] == p), model_contents["tuple"]["process_tuple"])...)
+    process_tuple = model_contents["tuple"]["process_tuple"]
+    for p in values(processes)
+        if p.is_cf
+            push!(cf_balance_tuple, filter(x -> (x[1] == p.name), process_tuple)...)
         end
     end
     model_contents["tuple"]["cf_balance_tuple"] = cf_balance_tuple
@@ -325,9 +329,9 @@ function create_lim_tuple(model_contents::OrderedDict, input_data::InputData)
     processes = input_data.processes
     process_tuple = model_contents["tuple"]["process_tuple"]
     res_nodes_tuple = model_contents["tuple"]["res_nodes_tuple"]
-    for p in keys(processes)
-        if !processes[p].is_cf && (processes[p].conversion == 1)
-            push!(lim_tuple, filter(x -> x[1] == p && (x[2] == p || x[2] in res_nodes_tuple), process_tuple)...)
+    for p in values(processes)
+        if !p.is_cf && (p.conversion == 1)
+            push!(lim_tuple, filter(x -> x[1] == p.name && (x[2] == p.name || x[2] in res_nodes_tuple), process_tuple)...)
         end
     end
     model_contents["tuple"]["lim_tuple"] = lim_tuple
@@ -343,9 +347,9 @@ function create_trans_tuple(model_contents::OrderedDict, input_data::InputData)
     trans_tuple = []
     processes = input_data.processes
     process_tuple = model_contents["tuple"]["process_tuple"]
-    for p in keys(processes)
-        if !processes[p].is_cf && processes[p].conversion == 2
-            push!(trans_tuple, filter(x -> x[1] == p, process_tuple)...)
+    for p in values(processes)
+        if !p.is_cf && p.conversion == 2
+            push!(trans_tuple, filter(x -> x[1] == p.name, process_tuple)...)
         end
     end
     model_contents["tuple"]["trans_tuple"] = trans_tuple
@@ -362,8 +366,8 @@ function create_res_eq_tuple(model_contents::OrderedDict, input_data::InputData)
     res_nodes_tuple = model_contents["tuple"]["res_nodes_tuple"]
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
-    res_typ = collect(keys(input_data.reserve_type))
-    for n in res_nodes_tuple, r in res_typ, s in scenarios, t in temporals.t
+    res_type = collect(keys(input_data.reserve_type))
+    for n in res_nodes_tuple, r in res_type, s in scenarios, t in temporals.t
         push!(res_eq_tuple, (n, r, s, t))
     end
     model_contents["tuple"]["res_eq_tuple"] = res_eq_tuple
@@ -380,9 +384,9 @@ function create_res_eq_updn_tuple(model_contents::OrderedDict, input_data::Input
     markets = input_data.markets
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
-    for m in keys(markets), s in scenarios, t in temporals.t
-        if markets[m].direction == "up_down"
-            push!(res_eq_updn_tuple, (m, s, t))
+    for m in values(markets), s in scenarios, t in temporals.t
+        if m.direction == "up_down"
+            push!(res_eq_updn_tuple, (m.name, s, t))
         end
     end
     model_contents["tuple"]["res_eq_updn_tuple"] = res_eq_updn_tuple
@@ -399,10 +403,10 @@ function create_res_final_tuple(model_contents::OrderedDict, input_data::InputDa
     markets = input_data.markets
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
-    for m in keys(markets)
-        if markets[m].type == "reserve"
+    for m in values(markets)
+        if m.type == "reserve"
             for s in scenarios, t in temporals.t
-                push!(res_final_tuple, (m, s, t))
+                push!(res_final_tuple, (m.name, s, t))
             end
         end
     end
@@ -419,11 +423,11 @@ function create_fixed_value_tuple(model_contents::OrderedDict, input_data::Input
     fixed_value_tuple = []
     markets = input_data.markets
     scenarios = collect(keys(input_data.scenarios))
-    for m in keys(markets)
-        if !isempty(markets[m].fixed) && markets[m].type == "energy"
-            temps = map(x->x[1],markets[m].fixed)
+    for m in values(markets)
+        if !isempty(m.fixed) && m.type == "energy"
+            temps = map(x->x[1], m.fixed)
             for s in scenarios, t in temps
-                push!(fixed_value_tuple, (m, s, t))
+                push!(fixed_value_tuple, (m.name, s, t))
             end
         end
     end
@@ -440,10 +444,11 @@ function create_ramp_tuple(model_contents::OrderedDict, input_data::InputData)
     ramp_tuple = []
     processes = input_data.processes
     temporals = input_data.temporals
-    for tup in model_contents["tuple"]["process_tuple"]
-        if processes[tup[1]].conversion == 1 && !processes[tup[1]].is_cf
-            if tup[5] != temporals.t[1]
-                push!(ramp_tuple,tup)
+    process_tuples = model_contents["tuple"]["process_tuple"]
+    for (name, source, sink, s, t) in process_tuples
+        if processes[name].conversion == 1 && !processes[name].is_cf
+            if t != temporals.t[1]
+                push!(ramp_tuple, (name, source, sink, s, t))
             end
         end
     end
