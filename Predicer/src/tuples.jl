@@ -217,34 +217,6 @@ function create_res_potential_tuple(model_contents::OrderedDict, input_data::Inp
     model_contents["tuple"]["res_potential_tuple"] = res_potential_tuple
 end
 
-
-"""
-    create_proc_potential_tuple(model_contents::OrderedDict, input_data::InputData)
-
-Creates tuple containing information on potential reserve participation per unit for each timestep. Form: (rd, rt, p, so, si, s, t).
-"""
-function create_proc_potential_tuple(model_contents::OrderedDict, input_data::InputData)
-    res_potential_tuple = []
-    res_dir = model_contents["res_dir"]
-    processes = input_data.processes
-    scenarios = collect(keys(input_data.scenarios))
-    temporals = input_data.temporals
-    res_nodes_tuple = model_contents["tuple"]["res_nodes_tuple"]
-    res_type = collect(keys(input_data.reserve_type))
-
-    for p in values(processes), s in scenarios, t in temporals.t
-        for topo in p.topos
-            if (topo.source in res_nodes_tuple|| topo.sink in res_nodes_tuple) && p.is_res
-                for r in res_dir, rt in res_type
-                    push!(res_potential_tuple, (r, rt, p.name, topo.source, topo.sink, s, t))
-                end
-            end
-        end
-    end
-    model_contents["tuple"]["res_potential_tuple"] = res_potential_tuple
-end
-
-
 """
     create_proc_balance_tuple(model_contents::OrderedDict, input_data::InputData)
 
