@@ -11,12 +11,12 @@ Create all tuples used in the model, and save them in the model_contents dict.
 """
 function create_tuples(model_contents::OrderedDict, input_data::InputData)
     model_contents["tuple"]["res_nodes_tuple"] = reserve_nodes(input_data)
-    model_contents["tuple"]["res_tuple"] = reserve_market_directional_tuples(model_contents, input_data)
+    model_contents["tuple"]["res_tuple"] = reserve_market_directional_tuples(input_data)
     model_contents["tuple"]["process_tuple"] = process_topology_tuples(input_data)
     model_contents["tuple"]["proc_online_tuple"] = online_process_tuples(input_data)
-    model_contents["tuple"]["res_potential_tuple"] = reserve_process_tuples(model_contents, input_data)
-    model_contents["tuple"]["res_pot_prod_tuple"] = producer_reserve_process_tuples(input_data, model_contents)
-    model_contents["tuple"]["res_pot_cons_tuple"] = consumer_reserve_process_tuples(input_data, model_contents)
+    model_contents["tuple"]["res_potential_tuple"] = reserve_process_tuples(input_data)
+    model_contents["tuple"]["res_pot_prod_tuple"] = producer_reserve_process_tuples(input_data)
+    model_contents["tuple"]["res_pot_cons_tuple"] = consumer_reserve_process_tuples(input_data)
     model_contents["tuple"]["node_state_tuple"] = state_node_tuples(input_data)
     model_contents["tuple"]["node_balance_tuple"] = balance_node_tuples(input_data)
     model_contents["tuple"]["proc_balance_tuple"] = balance_process_tuples(input_data)
@@ -53,16 +53,16 @@ end
 
 
 """
-    reserve_market_directional_tuples(model_contents::OrderedDict, input_data::InputData)
+    reserve_market_directional_tuples(input_data::InputData)
 
 Return tuples identifying each reserve market with its node and directions in each time step and scenario. Form: (r, n, d, s, t).
 """
-function reserve_market_directional_tuples(model_contents::OrderedDict, input_data::InputData)
+function reserve_market_directional_tuples(input_data::InputData)
     reserve_market_directional_tuples = []
     markets = input_data.markets
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
-    res_dir = model_contents["res_dir"]
+    res_dir = ["res_up", "res_down"]
     for m in values(markets)
         if m.type == "reserve"
             if m.direction in res_dir
@@ -123,13 +123,13 @@ end
 
 
 """
-    producer_reserve_process_tuples(model_contents::OrderedDict)
+    producer_reserve_process_tuples(input_data::InputData)
 
 Return tuples containing information on 'producer' process topologies with reserve potential for every time step and scenario. Form: (d, rt, p, so, si, s, t).
 """
-function producer_reserve_process_tuples(input_data::InputData, model_contents::OrderedDict)
+function producer_reserve_process_tuples(input_data::InputData)
     res_nodes = reserve_nodes(input_data)
-    res_process_tuples = reserve_process_tuples(model_contents, input_data)
+    res_process_tuples = reserve_process_tuples(input_data)
 
     # filter those processes that have a reserve node as a sink
     producer_reserve_process_tuples = filter(x -> x[5] in res_nodes, res_process_tuples)
@@ -138,13 +138,13 @@ end
 
 
 """
-    consumer_reserve_process_tuples(model_contents::OrderedDict)
+    consumer_reserve_process_tuples(input_data::InputData)
 
 Return tuples containing information on 'consumer' process topologies with reserve potential for every time step and scenario. Form: (d, rt, p, so, si, s, t).
 """
-function consumer_reserve_process_tuples(input_data::InputData, model_contents::OrderedDict)
+function consumer_reserve_process_tuples(input_data::InputData)
     res_nodes = reserve_nodes(input_data)
-    res_process_tuples = reserve_process_tuples(model_contents, input_data)
+    res_process_tuples = reserve_process_tuples(input_data)
 
     # filter those processes that have a reserve node as a source
     consumer_reserve_process_tuples = filter(x -> x[4] in res_nodes, res_process_tuples)
@@ -195,18 +195,18 @@ end
 
 
 """
-    reserve_process_tuples(model_contents::OrderedDict, input_data::InputData)
+    reserve_process_tuples(input_data::InputData)
 
 Return tuples containing information on process topologies with reserve potential for every time step and scenario. Form: (d, rt, p, so, si, s, t).
 """
-function reserve_process_tuples(model_contents::OrderedDict, input_data::InputData)
+function reserve_process_tuples(input_data::InputData)
     reserve_process_tuples = []
     processes = input_data.processes
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
     res_nodes = reserve_nodes(input_data)
     res_type = collect(keys(input_data.reserve_type))
-    res_dir = model_contents["res_dir"]
+    res_dir = ["res_up", "res_down"]
 
     for p in values(processes), s in scenarios, t in temporals.t
         for topo in p.topos
