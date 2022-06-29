@@ -37,11 +37,11 @@ Setup node balance constraints used in the model.
 """
 function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
-    process_tuple = model_contents["tuple"]["process_tuple"]
+    process_tuple = process_topology_tuples(input_data)
     res_dir = model_contents["res_dir"]
-    node_state_tuple = model_contents["tuple"]["node_state_tuple"]
-    node_balance_tuple = model_contents["tuple"]["node_balance_tuple"]
-    res_tuple = model_contents["tuple"]["res_tuple"]
+    node_state_tuple = state_node_tuples(input_data)
+    node_balance_tuple = balance_node_tuples(input_data)
+    res_tuple = reserve_market_directional_tuples(input_data)
     v_state = model_contents["variable"]["v_state"]
     v_flow = model_contents["variable"]["v_flow"]
     vq_state_up = model_contents["variable"]["vq_state_up"]
@@ -145,7 +145,7 @@ Setup necessary functionalities for processes with binary online variables.
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
 function setup_process_online_balance(model_contents::OrderedDict, input_data::Predicer.InputData)
-    proc_online_tuple = model_contents["tuple"]["proc_online_tuple"]
+    proc_online_tuple = online_process_tuples(input_data)
     if !isempty(proc_online_tuple)
         model = model_contents["model"]
         v_start = model_contents["variable"]["v_start"]
@@ -216,10 +216,10 @@ Setup constraints used in process balance calculations.
 """
 function setup_process_balance(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
-    proc_balance_tuple = model_contents["tuple"]["proc_balance_tuple"]
-    process_tuple = model_contents["tuple"]["process_tuple"]
-    proc_op_tuple = model_contents["tuple"]["proc_op_tuple"]
-    proc_op_balance_tuple = model_contents["tuple"]["proc_op_balance_tuple"]
+    proc_balance_tuple = balance_process_tuples(input_data)
+    process_tuple = process_topology_tuples(input_data)
+    proc_op_tuple = piecewise_efficiency_process_tuples(input_data)
+    proc_op_balance_tuple = operative_slot_process_tuples(input_data)
     v_flow = model_contents["variable"]["v_flow"]
     #vq_flow_up = model_contents["variable"]["vq_flow_up"]
     #vq_flow_down = model_contents["variable"]["vq_flow_down"]
@@ -294,12 +294,12 @@ Setup constraints used for process limitations, such as min/max loads, unit star
 """
 function setup_processes_limits(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
-    trans_tuple = model_contents["tuple"]["trans_tuple"]
-    lim_tuple = model_contents["tuple"]["lim_tuple"]
-    cf_balance_tuple = model_contents["tuple"]["cf_balance_tuple"]
-    res_pot_cons_tuple = model_contents["tuple"]["res_pot_cons_tuple"]
-    res_pot_prod_tuple = model_contents["tuple"]["res_pot_prod_tuple"]
-    proc_online_tuple = model_contents["tuple"]["proc_online_tuple"]
+    trans_tuple = transport_process_topology_tuples(input_data)
+    lim_tuple = fixed_limit_process_topology_tuples(input_data)
+    cf_balance_tuple = cf_process_topology_tuples(input_data)
+    res_pot_cons_tuple = consumer_reserve_process_tuples(input_data)
+    res_pot_prod_tuple = producer_reserve_process_tuples(input_data)
+    proc_online_tuple = online_process_tuples(input_data)
     v_flow = model_contents["variable"]["v_flow"]
     v_reserve = model_contents["variable"]["v_reserve"]
     
@@ -411,12 +411,12 @@ Setup constraints for reserves.
 """
 function setup_reserve_balances(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
-    res_eq_tuple = model_contents["tuple"]["res_eq_tuple"]
-    res_eq_updn_tuple = model_contents["tuple"]["res_eq_updn_tuple"]
-    res_potential_tuple = model_contents["tuple"]["res_potential_tuple"]
-    res_tuple = model_contents["tuple"]["res_tuple"]
-    res_final_tuple = model_contents["tuple"]["res_final_tuple"]
-    res_nodes_tuple = model_contents["tuple"]["res_nodes_tuple"]
+    res_eq_tuple = reserve_node_tuples(input_data)
+    res_eq_updn_tuple = up_down_reserve_market_tuples(input_data)
+    res_potential_tuple = reserve_process_tuples(input_data)
+    res_tuple = reserve_market_directional_tuples(input_data)
+    res_final_tuple = reserve_market_tuples(input_data)
+    res_nodes_tuple = reserve_nodes(input_data)
     res_typ = collect(keys(input_data.reserve_type))
     res_dir = model_contents["res_dir"]
     scenarios = collect(keys(input_data.scenarios))
@@ -489,10 +489,10 @@ Setup process ramp constraints, based on ramp limits defined in input data and p
 """
 function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
-    ramp_tuple = model_contents["tuple"]["ramp_tuple"]
-    process_tuple = model_contents["tuple"]["process_tuple"]
-    res_nodes_tuple = model_contents["tuple"]["res_nodes_tuple"]
-    res_potential_tuple = model_contents["tuple"]["res_potential_tuple"]
+    ramp_tuple = ramp_times_process_topology_tuples(input_data)
+    process_tuple = process_topology_tuples(input_data)
+    res_nodes_tuple = reserve_nodes(input_data)
+    res_potential_tuple = reserve_process_tuples(input_data)
     v_reserve = model_contents["variable"]["v_reserve"]
     
     v_flow = model_contents["variable"]["v_flow"]
@@ -580,8 +580,8 @@ Setup constraints for setting fixed process values at certain timesteps.
 function setup_fixed_values(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
     
-    process_tuple = model_contents["tuple"]["process_tuple"]
-    fixed_value_tuple = model_contents["tuple"]["fixed_value_tuple"]
+    process_tuple = process_topology_tuples(input_data)
+    fixed_value_tuple = fixed_market_tuples(input_data)
     v_flow = model_contents["variable"]["v_flow"]
     v_res_final = model_contents["variable"]["v_res_final"]
     markets = input_data.markets
@@ -630,7 +630,7 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
 
-    process_tuple = model_contents["tuple"]["process_tuple"]
+    process_tuple = process_topology_tuples(input_data)
     v_res_final = model_contents["variable"]["v_res_final"]
     v_flow = model_contents["variable"]["v_flow"]
     
@@ -688,7 +688,7 @@ Setup generic constraints.
 """
 function setup_generic_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
-    process_tuple = model_contents["tuple"]["process_tuple"]
+    process_tuple = process_topology_tuples(input_data)
     v_flow = model_contents["variable"]["v_flow"]
 
     scenarios = collect(keys(input_data.scenarios))
@@ -735,10 +735,10 @@ Setup expressions used for calculating the costs in the model.
 """
 function setup_cost_calculations(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
-    process_tuple = model_contents["tuple"]["process_tuple"]
-    proc_online_tuple = model_contents["tuple"]["proc_online_tuple"]
-    res_final_tuple = model_contents["tuple"]["res_final_tuple"]
-    node_balance_tuple = model_contents["tuple"]["node_balance_tuple"]
+    process_tuple = process_topology_tuples(input_data)
+    proc_online_tuple = online_process_tuples(input_data)
+    res_final_tuple = reserve_market_tuples(input_data)
+    node_balance_tuple = balance_node_tuples(input_data)
     v_flow = model_contents["variable"]["v_flow"]
 
     v_res_final = model_contents["variable"]["v_res_final"]
