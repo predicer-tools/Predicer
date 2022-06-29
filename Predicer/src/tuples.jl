@@ -39,7 +39,7 @@ end
 
 Return nodes which have a reserve. Form: (n).
 """
-function reserve_nodes(input_data::InputData)
+function reserve_nodes(input_data::InputData) # original name: create_res_nodes_tuple()
     reserve_nodes = []
 
     for n in values(input_data.nodes)
@@ -60,7 +60,7 @@ Return tuples identifying each reserve market with its node and directions in ea
 !!! note
     This function assumes that reserve markets' market type is formatted "reserve" and that the up and down reserve market directions are "res_up" and "res_down".
 """
-function reserve_market_directional_tuples(input_data::InputData)
+function reserve_market_directional_tuples(input_data::InputData) # original name: create_res_tuple()
     reserve_market_directional_tuples = []
     markets = input_data.markets
     scenarios = collect(keys(input_data.scenarios))
@@ -88,7 +88,7 @@ end
 
 Return tuples identifying each process topology (flow) for each time step and scenario. Form: (p, so, si, s, t).
 """
-function process_topology_tuples(input_data::InputData)
+function process_topology_tuples(input_data::InputData) # original name: create_process_tuple()
     process_topology_tuples = []
     processes = input_data.processes
     scenarios = collect(keys(input_data.scenarios))
@@ -109,7 +109,7 @@ end
 
 Return tuples for each process with online variables for every time step and scenario. Form: (p, s, t).
 """
-function online_process_tuples(input_data::InputData)
+function online_process_tuples(input_data::InputData) # original name: create_proc_online_tuple()
     online_process_tuples = []
     processes = input_data.processes
     scenarios = collect(keys(input_data.scenarios))
@@ -130,7 +130,7 @@ end
 
 Return tuples containing information on 'producer' process topologies with reserve potential for every time step and scenario. Form: (d, rt, p, so, si, s, t).
 """
-function producer_reserve_process_tuples(input_data::InputData)
+function producer_reserve_process_tuples(input_data::InputData) # original name: create_res_pot_prod_tuple()
     res_nodes = reserve_nodes(input_data)
     res_process_tuples = reserve_process_tuples(input_data)
 
@@ -145,7 +145,7 @@ end
 
 Return tuples containing information on 'consumer' process topologies with reserve potential for every time step and scenario. Form: (d, rt, p, so, si, s, t).
 """
-function consumer_reserve_process_tuples(input_data::InputData)
+function consumer_reserve_process_tuples(input_data::InputData) # original name: create_res_pot_cons_tuple()
     res_nodes = reserve_nodes(input_data)
     res_process_tuples = reserve_process_tuples(input_data)
 
@@ -160,7 +160,7 @@ end
 
 Return tuples for each node with a state (storage) for every time step and scenario. Form: (n, s, t).
 """
-function state_node_tuples(input_data::InputData)
+function state_node_tuples(input_data::InputData) # original name: create_node_state_tuple()
     state_node_tuples = []
     nodes = input_data.nodes
     scenarios = collect(keys(input_data.scenarios))
@@ -181,7 +181,7 @@ end
 
 Return tuples for each node over which balance should be maintained for every time step and scenario. Form: (n s, t).
 """
-function balance_node_tuples(input_data::InputData)
+function balance_node_tuples(input_data::InputData) # original name: create_node_balance_tuple()
     balance_node_tuples = []
     nodes = input_data.nodes
     scenarios = collect(keys(input_data.scenarios))
@@ -205,7 +205,7 @@ Return tuples containing information on process topologies with reserve potentia
 !!! note 
     This function assumes that the up and down reserve market directions are "res_up" and "res_down".
 """
-function reserve_process_tuples(input_data::InputData)
+function reserve_process_tuples(input_data::InputData) # original name: create_res_potential_tuple(), duplicate existed: create_proc_potential_tuple()
     reserve_process_tuples = []
     processes = input_data.processes
     scenarios = collect(keys(input_data.scenarios))
@@ -231,7 +231,7 @@ end
 
 Return tuples for each process over which balance is to be maintained for every time step and scenario. Form: (p, s, t).
 """
-function balance_process_tuples(input_data::InputData)
+function balance_process_tuples(input_data::InputData) # orignal name: create_proc_balance_tuple()
     balance_process_tuples = []
     processes = input_data.processes
     scenarios = collect(keys(input_data.scenarios))
@@ -254,7 +254,7 @@ end
 
 Return tuples identifying processes with piecewise efficiency for each of their operative slots (o), and every time step and scenario. Form: (p, s, t, o).
 """
-function operative_slot_process_tuples(input_data::InputData)
+function operative_slot_process_tuples(input_data::InputData) # original name: create_proc_op_balance_tuple()
     operative_slot_process_tuples = []
     processes = input_data.processes
     scenarios = collect(keys(input_data.scenarios))
@@ -277,7 +277,7 @@ end
 
 Return tuples identifying processes with piecewise efficiency for each time step and scenario. Form: (p, s, t).
 """
-function piecewise_efficiency_process_tuples(input_data::InputData)
+function piecewise_efficiency_process_tuples(input_data::InputData) # original name: create_proc_op_tuple()
     piecewise_efficiency_process_tuples = []
     processes = input_data.processes
     scenarios = collect(keys(input_data.scenarios))
@@ -300,7 +300,7 @@ end
 
 Return tuples identifying process topologies with a capacity factor for every time step and scenario. Form: (p, so, si, s, t).
 """
-function cf_process_topology_tuples(input_data::InputData)
+function cf_process_topology_tuples(input_data::InputData) # original name: create_cf_balance_tuple()
     cf_process_topology_tuples = []
     processes = input_data.processes
     process_tuples = process_topology_tuples(input_data)
@@ -317,7 +317,7 @@ end
 
 ??Return tuples containing information on process topologies with fixed limit on flow capacity. Form: (p, so, si, s, t).
 """
-function fixed_limit_process_topology_tuples( input_data::InputData)
+function fixed_limit_process_topology_tuples( input_data::InputData) # original name: create_lim_tuple()
     fixed_limit_process_topology_tuples = []
     processes = input_data.processes
     process_tuples = process_topology_tuples(input_data)
@@ -336,7 +336,7 @@ end
 
 Return tuples identifying transport process topologies for each time step and scenario. Form: (p, so, si, s, t).
 """
-function transport_process_topology_tuples(input_data::InputData)
+function transport_process_topology_tuples(input_data::InputData) # original name. create_trans_tuple()
     transport_process_topology_tuples = []
     processes = input_data.processes
     process_tuples = process_topology_tuples(input_data)
@@ -354,7 +354,7 @@ end
 
 Return tuples for each node with reserves for each relevant reserve type, all time steps and scenarios. Form: (n, rt, s, t).
 """
-function reserve_node_tuples(input_data::InputData)
+function reserve_node_tuples(input_data::InputData) # original name: create_res_eq_tuple()
     reserve_node_tuples = []
     res_nodes = reserve_nodes(input_data)
     scenarios = collect(keys(input_data.scenarios))
@@ -375,7 +375,7 @@ Return tuples for each reserve market with an 'up_down' direction for all time s
 !!! note
     This function assumes that reserve markets with up and down reserve have market direction "up_down".
 """
-function up_down_reserve_market_tuples(input_data::InputData)
+function up_down_reserve_market_tuples(input_data::InputData) # original name: create_res_eq_updn_tuple()
     up_down_reserve_market_tuples = []
     markets = input_data.markets
     scenarios = collect(keys(input_data.scenarios))
@@ -397,7 +397,7 @@ Return tuples for each reserve market for every time step and scenario. Form: (r
 !!! note
     This function assumes that reserve markets' market type is formatted "reserve".
 """
-function reserve_market_tuples(input_data::InputData)
+function reserve_market_tuples(input_data::InputData) # orignal name: create_res_final_tuple()
     reserve_market_tuples = []
     markets = input_data.markets
     scenarios = collect(keys(input_data.scenarios))
@@ -421,7 +421,7 @@ Return tuples containing time steps for energy markets when the market state is 
 !!! note
     This function assumes that energy markets' market type is formatted "energy".
 """
-function fixed_market_tuples(input_data::InputData)
+function fixed_market_tuples(input_data::InputData) # original name: create_fixed_value_tuple()
     fixed_market_tuples = []
     markets = input_data.markets
     scenarios = collect(keys(input_data.scenarios))
@@ -442,7 +442,7 @@ end
 
 Return tuples containing time steps with ramp possibility for each process topology and scenario. Form: (p, so, si, s, t).
 """
-function ramp_times_process_topology_tuples(input_data::InputData)
+function ramp_times_process_topology_tuples(input_data::InputData) # orignal name: create_ramp_tuple()
     ramp_times_process_topology_tuple = []
     processes = input_data.processes
     temporals = input_data.temporals
@@ -462,7 +462,7 @@ end
 
 Return scenarios. Form: (s).
 """
-function scenarios(input_data::InputData)
+function scenarios(input_data::InputData) # original name: create_risk_tuple()
     scenarios = collect(keys(input_data.scenarios))
     return scenarios
 end
