@@ -81,7 +81,7 @@ end
 # aim to do only one thing, such as create a necessary tuple or create a variable base on a tuple.  
 function setup_model(model_contents, input_data)
     create_tuples(model_contents, input_data)
-    create_variables(model_contents)
+    create_variables(model_contents, input_data)
     create_constraints(model_contents, input_data)
 end
 
