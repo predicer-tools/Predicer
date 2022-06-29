@@ -15,21 +15,21 @@ function create_tuples(model_contents::OrderedDict, input_data::InputData)
     model_contents["tuple"]["process_tuple"] = process_topology_tuples(input_data)
     model_contents["tuple"]["proc_online_tuple"] = online_process_tuples(input_data)
     model_contents["tuple"]["res_potential_tuple"] = reserve_process_tuples(model_contents, input_data)
-    model_contents["tuple"]["res_pot_prod_tuple"] = producer_reserve_process_tuples(model_contents)
-    model_contents["tuple"]["res_pot_cons_tuple"] = consumer_reserve_process_tuples(model_contents)
+    model_contents["tuple"]["res_pot_prod_tuple"] = producer_reserve_process_tuples(input_data, model_contents)
+    model_contents["tuple"]["res_pot_cons_tuple"] = consumer_reserve_process_tuples(input_data, model_contents)
     model_contents["tuple"]["node_state_tuple"] = state_node_tuples(input_data)
     model_contents["tuple"]["node_balance_tuple"] = balance_node_tuples(input_data)
     model_contents["tuple"]["proc_balance_tuple"] = balance_process_tuples(input_data)
     model_contents["tuple"]["proc_op_balance_tuple"] = operative_slot_process_tuples(input_data)
-    model_contents["tuple"]["proc_op_tuple"] = piecewise_efficiency_process_tuples(model_contents)
-    model_contents["tuple"]["cf_balance_tuple"] = cf_process_topology_tuples(model_contents, input_data)
-    model_contents["tuple"]["lim_tuple"] = fixed_limit_process_topology_tuples(model_contents, input_data)
-    model_contents["tuple"]["trans_tuple"] = transport_process_topology_tuples(model_contents, input_data)
-    model_contents["tuple"]["res_eq_tuple"] = reserve_node_tuples(model_contents, input_data)
+    model_contents["tuple"]["proc_op_tuple"] = piecewise_efficiency_process_tuples(input_data)
+    model_contents["tuple"]["cf_balance_tuple"] = cf_process_topology_tuples(input_data)
+    model_contents["tuple"]["lim_tuple"] = fixed_limit_process_topology_tuples(input_data)
+    model_contents["tuple"]["trans_tuple"] = transport_process_topology_tuples(input_data)
+    model_contents["tuple"]["res_eq_tuple"] = reserve_node_tuples(input_data)
     model_contents["tuple"]["res_eq_updn_tuple"] = up_down_reserve_market_tuples(input_data)
     model_contents["tuple"]["res_final_tuple"] = reserve_market_tuples(input_data)
     model_contents["tuple"]["fixed_value_tuple"] = fixed_market_tuples(input_data)
-    model_contents["tuple"]["ramp_tuple"] = ramp_times_process_topology_tuples(model_contents, input_data)
+    model_contents["tuple"]["ramp_tuple"] = ramp_times_process_topology_tuples(input_data)
     model_contents["tuple"]["risk_tuple"] = scenarios(input_data)
 end
 
@@ -127,12 +127,12 @@ end
 
 Return tuples containing information on 'producer' process topologies with reserve potential for every time step and scenario. Form: (d, rt, p, so, si, s, t).
 """
-function producer_reserve_process_tuples(model_contents::OrderedDict)
-    res_nodes_tuples = model_contents["tuple"]["res_nodes_tuple"]
-    res_potential_tuples = model_contents["tuple"]["res_potential_tuple"]
+function producer_reserve_process_tuples(input_data::InputData, model_contents::OrderedDict)
+    res_nodes = reserve_nodes(input_data)
+    res_process_tuples = reserve_process_tuples(model_contents, input_data)
 
     # filter those processes that have a reserve node as a sink
-    producer_reserve_process_tuples = filter(x -> x[5] in res_nodes_tuples, res_potential_tuples)
+    producer_reserve_process_tuples = filter(x -> x[5] in res_nodes, res_process_tuples)
     return producer_reserve_process_tuples
 end
 
@@ -142,12 +142,12 @@ end
 
 Return tuples containing information on 'consumer' process topologies with reserve potential for every time step and scenario. Form: (d, rt, p, so, si, s, t).
 """
-function consumer_reserve_process_tuples(model_contents::OrderedDict)
-    res_nodes_tuples = model_contents["tuple"]["res_nodes_tuple"]
-    res_potential_tuples = model_contents["tuple"]["res_potential_tuple"]
+function consumer_reserve_process_tuples(input_data::InputData, model_contents::OrderedDict)
+    res_nodes = reserve_nodes(input_data)
+    res_process_tuples = reserve_process_tuples(model_contents, input_data)
 
     # filter those processes that have a reserve node as a source
-    consumer_reserve_process_tuples = filter(x -> x[4] in res_nodes_tuples, res_potential_tuples)
+    consumer_reserve_process_tuples = filter(x -> x[4] in res_nodes, res_process_tuples)
     return consumer_reserve_process_tuples
 end
 
@@ -204,13 +204,13 @@ function reserve_process_tuples(model_contents::OrderedDict, input_data::InputDa
     processes = input_data.processes
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
-    res_nodes_tuples = model_contents["tuple"]["res_nodes_tuple"]
+    res_nodes = reserve_nodes(input_data)
     res_type = collect(keys(input_data.reserve_type))
     res_dir = model_contents["res_dir"]
 
     for p in values(processes), s in scenarios, t in temporals.t
         for topo in p.topos
-            if (topo.source in res_nodes_tuples|| topo.sink in res_nodes_tuples) && p.is_res
+            if (topo.source in res_nodes|| topo.sink in res_nodes) && p.is_res
                 for d in res_dir, rt in res_type
                     push!(reserve_process_tuples, (d, rt, p.name, topo.source, topo.sink, s, t))
                 end
@@ -267,26 +267,37 @@ end
 
 
 """
-    piecewise_efficiency_process_tuples(model_contents::OrderedDict)
+    piecewise_efficiency_process_tuples(input_data::InputData)
 
 Return tuples identifying processes with piecewise efficiency for each time step and scenario. Form: (p, s, t).
 """
-function piecewise_efficiency_process_tuples(model_contents::OrderedDict)
-    operative_slot_tuples = model_contents["tuple"]["proc_op_balance_tuple"]
-    piecewise_efficiency_process_tuples = unique(map(x->(x[1],x[2],x[3]), operative_slot_tuples))
+function piecewise_efficiency_process_tuples(input_data::InputData)
+    piecewise_efficiency_process_tuples = []
+    processes = input_data.processes
+    scenarios = collect(keys(input_data.scenarios))
+    temporals = input_data.temporals
+    for p in values(processes)
+        if p.conversion == 1 && !p.is_cf
+            if !isempty(p.eff_fun)
+                for s in scenarios, t in temporals.t
+                    push!(piecewise_efficiency_process_tuples, (p.name, s, t))
+                end
+            end
+        end
+    end
     return piecewise_efficiency_process_tuples
 end
 
 
 """
-    cf_process_topology_tuples(model_contents::OrderedDict, input_data::InputData)
+    cf_process_topology_tuples(input_data::InputData)
 
 Return tuples identifying process topologies with a capacity factor for every time step and scenario. Form: (p, so, si, s, t).
 """
-function cf_process_topology_tuples(model_contents::OrderedDict, input_data::InputData)
+function cf_process_topology_tuples(input_data::InputData)
     cf_process_topology_tuples = []
     processes = input_data.processes
-    process_tuples = model_contents["tuple"]["process_tuple"]
+    process_tuples = process_topology_tuples(input_data)
     for p in values(processes)
         if p.is_cf
             push!(cf_process_topology_tuples, filter(x -> (x[1] == p.name), process_tuples)...)
@@ -296,18 +307,18 @@ function cf_process_topology_tuples(model_contents::OrderedDict, input_data::Inp
 end
 
 """
-    fixed_limit_process_topology_tuples(model_contents::OrderedDict, input_data::InputData)
+    fixed_limit_process_topology_tuples(input_data::InputData)
 
 ??Return tuples containing information on process topologies with fixed limit on flow capacity. Form: (p, so, si, s, t).
 """
-function fixed_limit_process_topology_tuples(model_contents::OrderedDict, input_data::InputData)
+function fixed_limit_process_topology_tuples( input_data::InputData)
     fixed_limit_process_topology_tuples = []
     processes = input_data.processes
-    process_tuples = model_contents["tuple"]["process_tuple"]
-    res_nodes_tuples = model_contents["tuple"]["res_nodes_tuple"]
+    process_tuples = process_topology_tuples(input_data)
+    res_nodes = reserve_nodes(input_data)
     for p in values(processes)
         if !p.is_cf && (p.conversion == 1)
-            push!(fixed_limit_process_topology_tuples, filter(x -> x[1] == p.name && (x[2] == p.name || x[2] in res_nodes_tuples), process_tuples)...)
+            push!(fixed_limit_process_topology_tuples, filter(x -> x[1] == p.name && (x[2] == p.name || x[2] in res_nodes), process_tuples)...)
         end
     end
     return fixed_limit_process_topology_tuples
@@ -315,14 +326,14 @@ end
 
 
 """
-    transport_process_topology_tuples(model_contents::OrderedDict, input_data::InputData)
+    transport_process_topology_tuples(input_data::InputData)
 
 Return tuples identifying transport process topologies for each time step and scenario. Form: (p, so, si, s, t).
 """
-function transport_process_topology_tuples(model_contents::OrderedDict, input_data::InputData)
+function transport_process_topology_tuples(input_data::InputData)
     transport_process_topology_tuples = []
     processes = input_data.processes
-    process_tuples = model_contents["tuple"]["process_tuple"]
+    process_tuples = process_topology_tuples(input_data)
     for p in values(processes)
         if !p.is_cf && p.conversion == 2
             push!(transport_process_topology_tuples, filter(x -> x[1] == p.name, process_tuples)...)
@@ -333,17 +344,17 @@ end
 
 
 """
-    reserve_node_tuples(model_contents::OrderedDict, input_data::InputData)
+    reserve_node_tuples(input_data::InputData)
 
 Return tuples for each node with reserves for each relevant reserve type, all time steps and scenarios. Form: (n, rt, s, t).
 """
-function reserve_node_tuples(model_contents::OrderedDict, input_data::InputData)
+function reserve_node_tuples(input_data::InputData)
     reserve_node_tuples = []
-    res_nodes_tuples = model_contents["tuple"]["res_nodes_tuple"]
+    res_nodes = reserve_nodes(input_data)
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
     res_type = collect(keys(input_data.reserve_type))
-    for n in res_nodes_tuples, r in res_type, s in scenarios, t in temporals.t
+    for n in res_nodes, r in res_type, s in scenarios, t in temporals.t
         push!(reserve_node_tuples, (n, r, s, t))
     end
     return reserve_node_tuples
@@ -412,15 +423,15 @@ end
 
 
 """
-    ramp_times_process_topology_tuples(model_contents::OrderedDict, input_data::InputData)
+    ramp_times_process_topology_tuples(input_data::InputData)
 
 Return tuples containing time steps with ramp possibility for each process topology and scenario. Form: (p, so, si, s, t).
 """
-function ramp_times_process_topology_tuples(model_contents::OrderedDict, input_data::InputData)
+function ramp_times_process_topology_tuples(input_data::InputData)
     ramp_times_process_topology_tuple = []
     processes = input_data.processes
     temporals = input_data.temporals
-    process_tuples = model_contents["tuple"]["process_tuple"]
+    process_tuples = process_topology_tuples(input_data)
     for (name, source, sink, s, t) in process_tuples
         if processes[name].conversion == 1 && !processes[name].is_cf
             if t != temporals.t[1]
