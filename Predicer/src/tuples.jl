@@ -29,7 +29,7 @@ function create_tuples(model_contents::OrderedDict, input_data::InputData)
     model_contents["tuple"]["res_eq_updn_tuple"] = up_down_reserve_market_tuples(input_data)
     model_contents["tuple"]["res_final_tuple"] = reserve_market_tuples(input_data)
     model_contents["tuple"]["fixed_value_tuple"] = fixed_market_tuples(input_data)
-    model_contents["tuple"]["ramp_tuple"] = ramp_times_process_topology_tuples(input_data)
+    model_contents["tuple"]["ramp_tuple"] = process_topology_ramp_times_tuples(input_data)
     model_contents["tuple"]["risk_tuple"] = scenarios(input_data)
 end
 
@@ -438,11 +438,11 @@ end
 
 
 """
-    ramp_times_process_topology_tuples(input_data::InputData)
+    process_topology_ramp_times_tuples(input_data::InputData)
 
 Return tuples containing time steps with ramp possibility for each process topology and scenario. Form: (p, so, si, s, t).
 """
-function ramp_times_process_topology_tuples(input_data::InputData) # orignal name: create_ramp_tuple()
+function process_topology_ramp_times_tuples(input_data::InputData) # orignal name: create_ramp_tuple()
     ramp_times_process_topology_tuple = []
     processes = input_data.processes
     temporals = input_data.temporals
