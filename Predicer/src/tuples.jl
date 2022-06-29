@@ -56,6 +56,9 @@ end
     reserve_market_directional_tuples(input_data::InputData)
 
 Return tuples identifying each reserve market with its node and directions in each time step and scenario. Form: (r, n, d, s, t).
+
+!!! note
+    This function assumes that reserve markets' market type is formatted "reserve" and that the up and down reserve market directions are "res_up" and "res_down".
 """
 function reserve_market_directional_tuples(input_data::InputData)
     reserve_market_directional_tuples = []
@@ -198,6 +201,9 @@ end
     reserve_process_tuples(input_data::InputData)
 
 Return tuples containing information on process topologies with reserve potential for every time step and scenario. Form: (d, rt, p, so, si, s, t).
+
+!!! note 
+    This function assumes that the up and down reserve market directions are "res_up" and "res_down".
 """
 function reserve_process_tuples(input_data::InputData)
     reserve_process_tuples = []
@@ -365,6 +371,9 @@ end
     up_down_reserve_market_tuples(input_data::InputData)
 
 Return tuples for each reserve market with an 'up_down' direction for all time steps and scenarios. Form: (r, s, t).
+
+!!! note
+    This function assumes that reserve markets with up and down reserve have market direction "up_down".
 """
 function up_down_reserve_market_tuples(input_data::InputData)
     up_down_reserve_market_tuples = []
@@ -384,6 +393,9 @@ end
     reserve_market_tuples(input_data::InputData)
 
 Return tuples for each reserve market for every time step and scenario. Form: (r, s, t).
+
+!!! note
+    This function assumes that reserve markets' market type is formatted "reserve".
 """
 function reserve_market_tuples(input_data::InputData)
     reserve_market_tuples = []
@@ -405,6 +417,9 @@ end
     fixed_market_tuples(input_data::InputData)
 
 Return tuples containing time steps for energy markets when the market state is fixed in each scenario. Form: (m, s, t).
+
+!!! note
+    This function assumes that energy markets' market type is formatted "energy".
 """
 function fixed_market_tuples(input_data::InputData)
     fixed_market_tuples = []
