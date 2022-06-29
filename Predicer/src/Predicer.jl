@@ -60,7 +60,7 @@ module Predicer
     up_down_reserve_market_tuples,
     reserve_market_tuples,
     fixed_market_tuples,
-    ramp_times_process_topology_tuples,
+    process_topology_ramp_times_tuples,
     scenarios
 
 

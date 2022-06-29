@@ -489,7 +489,7 @@ Setup process ramp constraints, based on ramp limits defined in input data and p
 """
 function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
-    ramp_tuple = ramp_times_process_topology_tuples(input_data)
+    ramp_tuple = process_topology_ramp_times_tuples(input_data)
     process_tuple = process_topology_tuples(input_data)
     res_nodes_tuple = reserve_nodes(input_data)
     res_potential_tuple = reserve_process_tuples(input_data)
