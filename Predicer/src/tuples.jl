@@ -166,7 +166,7 @@ function state_node_tuples(input_data::InputData) # original name: create_node_s
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
     for n in values(nodes)
-        if !(n.is_commodity) & !(n.is_market) & n.is_state
+        if n.is_state
             for s in scenarios, t in temporals.t
                 push!(state_node_tuples, (n.name, s, t))
             end
