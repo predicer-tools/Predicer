@@ -70,7 +70,6 @@ function Initialize_contents()
     model_contents["constraint"] = OrderedDict() #constraints
     model_contents["expression"] = OrderedDict() #expressions?
     model_contents["variable"] = OrderedDict() #variables?
-    model_contents["tuple"] = OrderedDict() #tuples used by variables?
     model_contents["gen_constraint"] = OrderedDict() #GenericConstraints
     model_contents["gen_expression"] = OrderedDict() #GenericConstraints
     model_contents["res_dir"] = ["res_up", "res_down"]
@@ -80,8 +79,7 @@ end
 # Sets up the tuples, variables, constraints, etc used in the model using smaller functions. These functions 
 # aim to do only one thing, such as create a necessary tuple or create a variable base on a tuple.  
 function setup_model(model_contents, input_data)
-    create_tuples(model_contents, input_data)
-    create_variables(model_contents)
+    create_variables(model_contents, input_data)
     create_constraints(model_contents, input_data)
 end
 
