@@ -9,7 +9,7 @@ Create all tuples used in the model, and save them in the model_contents dict.
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::InputData`: Struct containing data used to build the model. 
 """
-function create_tuples(model_contents::OrderedDict, input_data::InputData)
+function create_tuples(model_contents::OrderedDict, input_data::InputData) # unused, should be debricated
     model_contents["tuple"]["res_nodes_tuple"] = reserve_nodes(input_data)
     model_contents["tuple"]["res_tuple"] = reserve_market_directional_tuples(input_data)
     model_contents["tuple"]["process_tuple"] = process_topology_tuples(input_data)
