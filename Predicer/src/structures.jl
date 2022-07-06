@@ -98,12 +98,12 @@ end
     struct State
         in_max::Float64
         out_max::Float64
-        state_loss::Float64
+        state_loss_proportional::Float64
         state_max::Float64
         state_min::Float64
         initial_state::Float64
-        function State(in_max, out_max, state_loss, state_max, state_min=0, initial_state=0)
-            return new(in_max, out_max, state_loss, state_max, state_min, initial_state)
+        function State(in_max, out_max, state_loss_proportional, state_max, state_min=0, initial_state=0)
+            return new(in_max, out_max, state_loss_proportional, state_max, state_min, initial_state)
         end
     end
 
@@ -111,20 +111,21 @@ A struct for node states (storage), holds information on the parameters of the s
 # Fields
 - `in_max::Float64`: Value for maximum increase of state variable value between timesteps. 
 - `out_max::Float64`: Value for maximum decrease of state variable value between timesteps. 
+- `state_loss_proportional`: Losses over time in the state, as a proportion of the value of the state.
 - `state_max::Float64`: Maximum value for state variable. 
 - `state_min::Float64`: Minimum value for state variable. 
 - `initial_state::Float64`: Initial value of the state variable at t = 0.
-- `state_loss`: Losses over time in the state. 
+
 """
 struct State
     in_max::Float64
     out_max::Float64
-    state_loss::Float64
+    state_loss_proportional::Float64
     state_max::Float64
     state_min::Float64
     initial_state::Float64
-    function State(in_max, out_max, state_loss, state_max, state_min=0, initial_state=0)
-        return new(in_max, out_max, state_loss, state_max, state_min, initial_state)
+    function State(in_max, out_max, state_loss_proportional, state_max, state_min=0, initial_state=0)
+        return new(in_max, out_max, state_loss_proportional, state_max, state_min, initial_state)
     end
 end
 

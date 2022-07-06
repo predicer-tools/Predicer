@@ -101,6 +101,7 @@ function import_input_data()
             end
         end
         if Bool(n.is_state)
+            Predicer.add_state(nodes[n.node], Predicer.State(n.in_max, n.out_max, n.state_loss_proportional, n.state_max, 0.0, n.initial_state))
         end
         if Bool(n.is_res)
             Predicer.add_node_to_reserve(nodes[n.node])

@@ -111,9 +111,9 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
         end
         if nodes[tu[1]].is_state
             if tu[3] == temporals.t[1]
-                state_expr = @expression(model, v_state[tu] - (1-nodes[tu[1]].state.state_loss*temporals(tu[3]))*nodes[tu[1]].state.initial_state)
+                state_expr = @expression(model, v_state[tu] - (1-nodes[tu[1]].state.state_loss_proportional*temporals(tu[3]))*nodes[tu[1]].state.initial_state)
             else
-                state_expr = @expression(model, v_state[tu] - (1-nodes[tu[1]].state.state_loss*temporals(tu[3]))*v_state[node_balance_tuple[i-1]])
+                state_expr = @expression(model, v_state[tu] - (1-nodes[tu[1]].state.state_loss_proportional*temporals(tu[3]))*v_state[node_balance_tuple[i-1]])
             end
         else
             state_expr = 0
