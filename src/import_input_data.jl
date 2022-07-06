@@ -32,6 +32,8 @@ function import_input_data()
         timeseries_data[sn] = DataFrame(XLSX.readtable(input_data_path, sn)...)
     end
 
+    temps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), DataFrame(XLSX.readtable(input_data_path, "timeseries")...).t)
+
     fixed_data = DataFrame(XLSX.readtable(input_data_path, "fixed_ts")...)
     cap_ts = DataFrame(XLSX.readtable(input_data_path, "cap_ts")...)    
     constraint_data = DataFrame(XLSX.readtable(input_data_path, "gen_constraint")...) 
@@ -68,8 +70,6 @@ function import_input_data()
         end
     end
 
-    dates = String[]
-
     for i in 1:nrow(system_data["nodes"])
         n = system_data["nodes"][i, :]
         nodes[n.node] = Predicer.Node(n.node)
@@ -84,7 +84,6 @@ function import_input_data()
                     push!(ts.series, tup)
                 end
                 Predicer.add_cost(nodes[n.node], ts)
-                append!(dates, timesteps)
             end
         elseif Bool(n.is_market)
             Predicer.convert_to_market(nodes[n.node])
@@ -99,11 +98,9 @@ function import_input_data()
                     push!(ts.series, tup)
                 end
                 Predicer.add_inflow(nodes[n.node], ts)
-                append!(dates, timesteps)
             end
         end
         if Bool(n.is_state)
-            Predicer.add_state(nodes[n.node], Predicer.State(n.in_max, n.out_max, n.state_loss, n.state_max, 0.0, n.initial_state))
         end
         if Bool(n.is_res)
             Predicer.add_node_to_reserve(nodes[n.node])
@@ -132,7 +129,6 @@ function import_input_data()
                     push!(ts.series, tup)
                 end
                 Predicer.add_cf(processes[p.process], ts, Bool(p.is_cf_fix))
-                append!(dates, timesteps)
             end
         end
         sources = []
@@ -258,7 +254,6 @@ function import_input_data()
                 push!(ts.series, tup)
             end
             push!(markets[mm.market].price.ts_data, ts)
-            append!(dates, timesteps)
         end
         if mm.market in names(fixed_data)
             timestamps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), fixed_data.t)
@@ -310,5 +305,5 @@ function import_input_data()
         push!(gen_constraints[k[1]].factors,con_fac)
     end
     
-    return  Predicer.InputData(Predicer.Temporals(unique(sort(dates))), processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
+    return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
 end
