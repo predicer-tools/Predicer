@@ -56,15 +56,19 @@ function import_input_data()
             for n in names(timeseries_data[k])
                 if n != "t"
                     series = split(n, ",")[1]
-                    scenario = split(n, ",")[2]
-                    #push!(scenarios, scenario)
-                    if !(scenario in keys(timeseries_data["scenarios"]))
-                        timeseries_data["scenarios"][scenario] = OrderedDict()
+                    scens = map(x -> strip(x), split(n, ",")[2:end])
+                    if "ALL" in scens
+                        scens = collect(keys(scenarios))
                     end
-                    if !(k in keys(timeseries_data["scenarios"][scenario]))
-                        timeseries_data["scenarios"][scenario][k] = DataFrame(t=timeseries_data[k].t)
+                    for scenario in scens
+                        if !(scenario in keys(timeseries_data["scenarios"]))
+                            timeseries_data["scenarios"][scenario] = OrderedDict()
+                        end
+                        if !(k in keys(timeseries_data["scenarios"][scenario]))
+                            timeseries_data["scenarios"][scenario][k] = DataFrame(t=timeseries_data[k].t)
+                        end
+                        timeseries_data["scenarios"][scenario][k][!, series] = timeseries_data[k][!, n]
                     end
-                    timeseries_data["scenarios"][scenario][k][!, series] = timeseries_data[k][!, n]
                 end
             end
         end
