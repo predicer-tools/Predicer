@@ -839,7 +839,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     # Total model costs
     total_costs = model_contents["expression"]["total_costs"] = OrderedDict()
     for s in scenarios
-        total_costs[s] = sum(commodity_costs[s] + sum(market_costs[s]) + sum(vom_costs[s]) + sum(reserve_costs[s]) + sum(start_costs[s]) + sum(dummy_costs[s]))
+        total_costs[s] = sum(commodity_costs[s]) + sum(market_costs[s]) + sum(vom_costs[s]) + sum(reserve_costs[s]) + sum(start_costs[s]) + sum(dummy_costs[s])
     end
 end
 
