@@ -1,5 +1,6 @@
 using Dates
 using DataStructures
+using Predicer
 
 
 # The functions of this file are used to check the validity of the imported input data,
@@ -24,13 +25,15 @@ using DataStructures
     # x Check that two entities don't have the same name.
     # Check that state min < max, process min < max, etc. 
 
+    # Check that each node with is_res has a corresponding market.
+    # 
+
     # Check that each of the nodes and processes is valid. 
 
     # Ensure that the min_online and min_offline parameter can be divided with dtf, the time between timesteps. 
     # otherwise a process may need to be online or offline for 1.5 timesteps, which is difficult to solve. 
 
     # In constraints, chekc if e.g. v_start even exists before trying to force start constraints. 
-
 
 
 """
@@ -41,7 +44,8 @@ Checks that each Process is valid, for example a cf process cannot be part of a 
 function validate_processes(error_log::OrderedDict, input_data::Predicer.InputData)
     is_valid = error_log["is_valid"]
     processes = input_data.processes
-    for p in processes
+    for pname in keys(processes)
+
         # conversion and rest match
         # eff < 0
         # !(is_cf && is_res)
@@ -52,19 +56,20 @@ function validate_processes(error_log::OrderedDict, input_data::Predicer.InputDa
         # min_offline >= 0
         # min_online >= 0
 
+        p = processes[pname]
         if 0 > p.eff
             push!(error_log["errors"], "Invalid Process: ", p.name, ". The efficiency of a Process cannot be negative. .\n")
             is_valid = false
         end
-        if !(0 <= p.min_load <= 1)
+        if !(0 <= p.load_min <= 1)
             push!(error_log["errors"], "Invalid Process: ", p.name, ". The min load of a process must be between 0 and 1.\n")
             is_valid = false 
         end
-        if !(0 <= p.max_load <= 1)
+        if !(0 <= p.load_max <= 1)
             push!(error_log["errors"], "Invalid Process: ", p.name, ". The max load of a process must be between 0 and 1.\n")
             is_valid = false 
         end
-        if p.min_load > p.max_load
+        if p.load_min > p.load_max
             push!(error_log["errors"], "Invalid Process: ", p.name, ". The min load of a process must be less or equal to the max load.\n")
             is_valid = false 
         end
@@ -92,27 +97,6 @@ function validate_processes(error_log::OrderedDict, input_data::Predicer.InputDa
         if !isempty(p.eff_ts)
             validate_timeseriesdata(error_log, p.eff_ts, input_data.temporals.ts_format)
         end
-
-
-        #= name::String
-        conversion::Integer # change to string-based: unit_based, market_based, transfer_based
-        is_cf::Bool
-        is_cf_fix::Bool
-        is_online::Bool
-        is_res::Bool
-        eff::Float64
-        load_min::Float64
-        load_max::Float64
-        start_cost::Float64
-        min_online::Int64
-        min_offline::Int64
-        initial_state::Bool
-        topos::Vector{Topology}
-        cf::TimeSeriesData
-        eff_ts::TimeSeriesData
-        eff_ops::Vector{Any}
-        eff_fun::Vector{Tuple{Any,Any}} =#
-
     end
     error_log["is_valid"] = is_valid
 end
@@ -126,7 +110,8 @@ Checks that each Node is valid, for example a commodity node cannot have a state
 function validate_nodes(error_log::OrderedDict, input_data::Predicer.InputData)
     is_valid = error_log["is_valid"]
     nodes = input_data.nodes
-    for n in nodes
+    for nname in keys(nodes)
+        n = nodes[nname]
         if n.is_market && n.is_commodity
             push!(error_log["errors"], "Invalid Node: ", n.name, ". A commodity Node cannot be a market.\n")
             is_valid = false
@@ -169,7 +154,7 @@ function validate_nodes(error_log::OrderedDict, input_data::Predicer.InputData)
         end
         if n.is_state
             if isnothing(n.state)
-                push!(error_log["errors"], "Invalid Node: ", n.name, ". A Node with a state must have a State.\n")
+                push!(error_log["errors"], "Invalid Node: ", n.name, ". A Node defined as having a state must have a State.\n")
                 is_valid = false
             else
                 validate_state(error_log, n.state)
@@ -220,7 +205,7 @@ end
 
 Checks that the TimeSeriesData struct has one timeseries per scenario, and that the timesteps are in chronological order.
 """
-function validate_timeseriesdata(error_log::OrderedDict, tsd::TimeSeriesData, ts_format::String)
+function validate_timeseriesdata(error_log::OrderedDict, tsd::Predicer.TimeSeriesData, ts_format::String)
     is_valid = error_log["is_valid"]
     scenarios = map(x -> x.scenario, tsd.ts_data)
     if scenarios != unique(scenarios)
@@ -230,7 +215,7 @@ function validate_timeseriesdata(error_log::OrderedDict, tsd::TimeSeriesData, ts
         for s in scenarios
             ts = tsd(s)
             for i in 1:length(ts)-1
-                if ZonedDateTime(ts[i+1], temporals.ts_format) - ZonedDateTime(ts[i], ts_format) <= Dates.Minute(0)
+                if ZonedDateTime(ts[i+1][1], ts_format) - ZonedDateTime(ts[i][1], ts_format) <= Dates.Minute(0)
                     push!(error_log["errors"], "Invalid timeseries. Timesteps not in chronological order.\n")
                     is_valid = false
                 end
@@ -244,7 +229,7 @@ end
 """
     validate_temporals(error_log::OrderedDict, input_data::Predicer.InputData)
 
-Checks that the timeseries data in the model is valid. 
+Checks that the time data in the model is valid. 
 """
 function validate_temporals(error_log::OrderedDict, input_data::Predicer.InputData)
     is_valid = error_log["is_valid"]
@@ -339,7 +324,7 @@ function validate_process_topologies(error_log::OrderedDict, input_data::Predice
                 is_valid = false
             end
         elseif processes[p].conversion == 1
-            if !(p in sources) || !(p in sinks)
+            if !(p in map(x -> x.sink, sources) || p in map(x -> x.source, sinks))
                 push!(error_log["errors"], "Invalid topology: Process " * p * ". A process with conversion 1 must have itself as a source or a sink.\n")
                 is_valid = false
             end
@@ -349,16 +334,16 @@ function validate_process_topologies(error_log::OrderedDict, input_data::Predice
 end
 
 
-
 function validate_data(input_data)
-   error_log = Dict()
+    error_log = OrderedDict()
     error_log["is_valid"] = true
     error_log["errors"] = []
     # Call functions validating data
     validate_process_topologies(error_log, input_data)
-    validate_reserves(error_log, input_data)
-
+    validate_processes(error_log, input_data)
+    validate_nodes(error_log, input_data)
+    validate_temporals(error_log, input_data)
+    validate_unique_names(error_log, input_data)
     # Return log. 
     return error_log
-
 end

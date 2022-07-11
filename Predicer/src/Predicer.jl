@@ -4,6 +4,7 @@ module Predicer
     include("tuples.jl")
     include("variables.jl")
     include("constraints.jl")
+    include("validate_data.jl")
     
     
 
@@ -63,10 +64,7 @@ module Predicer
     process_topology_ramp_times_tuples,
     scenarios
 
-
-
-
-    export create_variables,
+        export create_variables,
     create_v_flow,
     create_v_online,
     create_v_reserve,
@@ -85,5 +83,7 @@ module Predicer
     setup_generic_constraints,
     setup_cost_calculations,
     setup_objective_function
+
+    export validate_data
     
 end

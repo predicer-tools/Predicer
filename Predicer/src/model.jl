@@ -34,11 +34,16 @@ OrderedDict{Any, Any} with 8 entries:
 ```
 """
 function Initialize(input_data::Predicer.InputData)
-    model_contents = Initialize_contents()
-    model = init_jump_model(Cbc.Optimizer)
-    model_contents["model"] = model
-    setup_model(model_contents, input_data)
-    return model_contents
+    input_data_check = validate_data(input_data)
+    if input_data_check["is_valid"]
+        model_contents = Initialize_contents()
+        model = init_jump_model(Cbc.Optimizer)
+        model_contents["model"] = model
+        setup_model(model_contents, input_data)
+        return model_contents
+    else
+        return input_data_check["errors"]
+    end
 end
 
 # Function to run the model built based on the given input data. 

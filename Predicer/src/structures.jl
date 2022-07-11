@@ -33,7 +33,7 @@ end
 
 Struct used for storing information about the timesteps in the model.
 #Fields
-- `t::Vector{TimeZones.ZonedDateTime}`: Vector containing the timesteps. 
+- `t::Vector{String}`: Vector containing the timesteps. 
 - `dtf::Float64`: The length between timesteps compared to one hour, if the length of the timesteps don't vary. dt = (t2-t1)/(1 hour)
 - `is_variable_dt::Bool`: FLag indicating whether the timesteps vary in length. Default false. 
 - `variable_dt::Vector{Tuple{String, Float64}}`: Vector containing the length between timesteps compared to one hour. The first element is the length between t_1 and t_2.
@@ -156,6 +156,26 @@ struct TimeSeries
             return new(scenario, [])
         end
     end
+end
+
+
+"""
+    function Base.:length(ts::TimeSeries)
+
+Extends the Base.length() function for the TimeSeries struct. Returns the length of the TimeSeries.series. 
+"""
+function Base.:length(ts::TimeSeries)
+    return length(ts.series)
+end
+
+
+"""
+    function Base.:getindex(ts::TimeSeries, i::Int64)
+
+Extends the Base.getindex() function for the TimeSeries struct. Returns the value of the TimeSeries.series at the index. 
+"""
+function Base.:getindex(ts::TimeSeries, i::Int64)
+    return getindex(ts.series, i)
 end
 
 
