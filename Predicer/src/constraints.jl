@@ -739,9 +739,13 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     proc_online_tuple = online_process_tuples(input_data)
     res_final_tuple = reserve_market_tuples(input_data)
     node_balance_tuple = balance_node_tuples(input_data)
+    state_node_tuple = state_node_tuples(input_data)
+
     v_flow = model_contents["variable"]["v_flow"]
 
     v_res_final = model_contents["variable"]["v_res_final"]
+
+    v_state = model_contents["variable"]["v_state"]
     vq_state_up = model_contents["variable"]["vq_state_up"]
     vq_state_dw = model_contents["variable"]["vq_state_dw"]
 
@@ -823,6 +827,15 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
         end
     end
 
+    # State residue costs
+    state_residue_costs = model_contents["expression"]["state_residue_costs"] = OrderedDict()
+    for s in scenarios
+        state_residue_costs[s] = AffExpr(0.0)
+        for tup in filter(x -> x[3] == temporals.t[end] && x[2] == s, state_node_tuple)
+            add_to_expression!(state_residue_costs[s], -1 * nodes[tup[1]].state.residual_value * v_state[tup])
+        end
+    end
+
     # Dummy variable costs
     dummy_costs = model_contents["expression"]["dummy_costs"] = OrderedDict()
     p = 1000000
@@ -839,7 +852,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     # Total model costs
     total_costs = model_contents["expression"]["total_costs"] = OrderedDict()
     for s in scenarios
-        total_costs[s] = sum(commodity_costs[s]) + sum(market_costs[s]) + sum(vom_costs[s]) + sum(reserve_costs[s]) + sum(start_costs[s]) + sum(dummy_costs[s])
+        total_costs[s] = sum(commodity_costs[s]) + sum(market_costs[s]) + sum(vom_costs[s]) + sum(reserve_costs[s]) + sum(start_costs[s]) + sum(state_residue_costs[s]) + sum(dummy_costs[s])
     end
 end
 

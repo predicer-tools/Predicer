@@ -102,8 +102,9 @@ end
         state_max::Float64
         state_min::Float64
         initial_state::Float64
-        function State(in_max, out_max, state_loss_proportional, state_max, state_min=0, initial_state=0)
-            return new(in_max, out_max, state_loss_proportional, state_max, state_min, initial_state)
+        residual_value::Int64
+        function State(in_max, out_max, state_loss_proportional, state_max, state_min=0, initial_state=0, residual_value=0)
+            return new(in_max, out_max, state_loss_proportional, state_max, state_min, initial_state, residual_value)
         end
     end
 
@@ -115,6 +116,7 @@ A struct for node states (storage), holds information on the parameters of the s
 - `state_max::Float64`: Maximum value for state variable. 
 - `state_min::Float64`: Minimum value for state variable. 
 - `initial_state::Float64`: Initial value of the state variable at t = 0.
+- `residual_value::Int64`: Value of the product remaining in the state after time horizon. 
 
 """
 struct State
@@ -124,8 +126,9 @@ struct State
     state_max::Float64
     state_min::Float64
     initial_state::Float64
-    function State(in_max, out_max, state_loss_proportional, state_max, state_min=0, initial_state=0)
-        return new(in_max, out_max, state_loss_proportional, state_max, state_min, initial_state)
+    residual_value::Int64
+    function State(in_max, out_max, state_loss_proportional, state_max, state_min=0, initial_state=0, residual_value=0)
+        return new(in_max, out_max, state_loss_proportional, state_max, state_min, initial_state, residual_value)
     end
 end
 
