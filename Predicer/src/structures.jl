@@ -470,16 +470,17 @@ end
 
 # --- Topology ---
 """
-    struct Topology
+    mutable struct Topology
         source::String
         sink::String
         capacity::Float64
         VOM_cost::Float64
         ramp_up::Float64
         ramp_down::Float64
+        delay::Float64
         cap_ts::TimeSeriesData
-        function Topology(source, sink, capacity, VOM_cost, ramp_up, ramp_down)
-            return new(source, sink, capacity, VOM_cost, ramp_up, ramp_down, TimeSeriesData())
+        function Topology(source::String, sink::String, capacity::Float64, VOM_cost::Float64, ramp_up::Float64, ramp_down::Float64, delay::Float64)
+            return new(source, sink, capacity, VOM_cost, ramp_up, ramp_down, delay, TimeSeriesData())
         end
     end
 
@@ -491,32 +492,35 @@ A struct for a process topology, signifying the connection between flows in a pr
 - `VOM_cost::Float64`: VOM cost of using this connection. 
 - `ramp_up::Float64`: Maximum allowed increase of the linked flow variable value between timesteps. Min 0.0 max 1.0. 
 - `ramp_down::Float64`: Minimum allowed increase of the linked flow variable value between timesteps. Min 0.0 max 1.0.
+- `delay::Float64`: A set delay in hours over the process. 
 - `cap_ts::TimeSeriesData`: TimeSeriesStruct
 """
-struct Topology
+mutable struct Topology
     source::String
     sink::String
     capacity::Float64
     VOM_cost::Float64
     ramp_up::Float64
     ramp_down::Float64
+    delay::Float64
     cap_ts::TimeSeriesData
-    function Topology(source::String, sink::String, capacity::Float64, VOM_cost::Float64, ramp_up::Float64, ramp_down::Float64)
-        return new(source, sink, capacity, VOM_cost, ramp_up, ramp_down, TimeSeriesData())
+    function Topology(source::String, sink::String, capacity::Float64, VOM_cost::Float64, ramp_up::Float64, ramp_down::Float64, delay::Float64)
+        return new(source, sink, capacity, VOM_cost, ramp_up, ramp_down, delay, TimeSeriesData())
     end
 end
 
 
 # --- Process ---
 """
-    struct Process
+    mutable struct Process <: AbstractProcess
         name::String
+        conversion::Integer # change to string-based: unit_based, market_based, transfer_based
+        delay::Float64
         is_cf::Bool
         is_cf_fix::Bool
         is_online::Bool
         is_res::Bool
         eff::Float64
-        conversion::Integer
         load_min::Float64
         load_max::Float64
         start_cost::Float64
@@ -528,14 +532,13 @@ end
         eff_ts::TimeSeriesData
         eff_ops::Vector{Any}
         eff_fun::Vector{Tuple{Any,Any}}
-        function Process(name, is_cf, is_cf_fix, is_online, is_res, eff, conversion, load_min, load_max, start_cost, min_online, min_offline, initial_state)
-            return new(name, is_cf, is_cf_fix, is_online, is_res, eff, conversion, load_min, load_max, start_cost, min_online, min_offline, initial_state, [], [], [], [], [])
-        end
     end
 
 A struct for a process (unit).
 # Fields
 - `name::String`: Name of the process.
+- `conversion::String`: Process type; unit, market, or transport based. 
+- `delay::Float64`: The delay over the process, in hours.
 - `is_cf::Bool`: Flag indicating if the process is a cf (capacity factor) process, aka depends on a TimeSeries.
 - `is_cf_fix::Bool`: Flag indicating if the cf TimeSeries is a upper limit (false) or a set value (true).
 - `is_online::Bool`: Flag indicating if the process has an binary online variable.
@@ -557,6 +560,7 @@ A struct for a process (unit).
 mutable struct Process <: AbstractProcess
     name::String
     conversion::Integer # change to string-based: unit_based, market_based, transfer_based
+    delay::Float64
     is_cf::Bool
     is_cf_fix::Bool
     is_online::Bool
@@ -585,8 +589,8 @@ The constructor for the Process struct.
 - `name::String`: The name of the process.
 - `conversion::Int`: Used to differentiate between types of process. 1 = unit based, 2 = transfer process, 3 = market process.
 """
-function Process(name::String, conversion::Int=1)
-    return Process(name, conversion, false, false, false, false, -1.0, 0.0, 1.0, 0.0, 0, 0, true, [], TimeSeriesData(), TimeSeriesData(), [], [])
+function Process(name::String, conversion::Int=1, delay::Float64=0.0)
+    return Process(name, conversion, delay, false, false, false, false, -1.0, 0.0, 1.0, 0.0, 0, 0, true, [], TimeSeriesData(), TimeSeriesData(), [], [])
 end
 
 
@@ -605,8 +609,24 @@ end
 
 Returns a transfer process. 
 """
-function TransferProcess(name::String)
-    return Process(name, 2)
+function TransferProcess(name::String, delay::Float64=0.0)
+    return Process(name, 2, delay)
+end
+
+
+"""
+    function add_delay(p::Process, delay::Float64)
+
+Adds a delay to the chosen Transport process (conversion == 2). 
+"""
+function add_delay(p::Process, delay::Real)
+    if p.conversion == 2    
+        p.delay = Float64(delay)
+    elseif p.conversion == 1
+        return error("Cannot add a delay to unit based processes, only transfer processes.")
+    elseif p.conversion == 2
+        return error("Cannot add a delay to market processes, only transfer processes.")
+    end
 end
 
 
