@@ -1,4 +1,5 @@
 using DataStructures
+using TimeZones
 
 """
     create_tuples(model_contents::OrderedDict, input_data::InputData)
@@ -93,10 +94,14 @@ function process_topology_tuples(input_data::InputData) # original name: create_
     processes = input_data.processes
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
-    for p in values(processes), s in scenarios
-        for topo in p.topos
-            for t in temporals.t
-                push!(process_topology_tuples, (p.name, topo.source, topo.sink, s, t))
+    for p in values(processes)
+        if p.delay == 0
+            for s in scenarios
+                for topo in p.topos
+                    for t in temporals.t
+                        push!(process_topology_tuples, (p.name, topo.source, topo.sink, s, t))
+                    end
+                end
             end
         end
     end
@@ -237,7 +242,7 @@ function balance_process_tuples(input_data::InputData) # orignal name: create_pr
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
     for p in values(processes)
-        if p.conversion == 1 && !p.is_cf
+        if p.conversion == 1 && !p.is_cf && p.delay == 0
             if isempty(p.eff_fun)
                 for s in scenarios, t in temporals.t
                     push!(balance_process_tuples, (p.name, s, t))
@@ -465,4 +470,40 @@ Return scenarios. Form: (s).
 function scenarios(input_data::InputData) # original name: create_risk_tuple()
     scenarios = collect(keys(input_data.scenarios))
     return scenarios
+end
+
+""" 
+    create_delay_tuple(input_data::OrderedDict)
+
+Returns array of tuples containing processes with delay functionality. Form: (p, so, si, s, t).
+"""
+function create_delay_tuple(input_data::Predicer.InputData)
+    delay_tuple = []
+    processes = input_data.processes
+    scenarios = collect(keys(input_data.scenarios))
+    temporals = input_data.temporals
+    for p in keys(processes)
+        if processes[p].delay != 0
+            for topo in processes[p].topos
+                additional_timestep_n = round(max(1, abs(processes[p].delay)/temporals.dtf))
+                extra_ts = temporals.t
+                for i = 1:additional_timestep_n
+                    if processes[p].delay > 0
+                        extra_ts = vcat(string(ZonedDateTime(extra_ts[1], temporals.ts_format) - Minute(60*temporals.dtf)), extra_ts)
+                        extra_ts = vcat(extra_ts, string(ZonedDateTime(extra_ts[end], temporals.ts_format) + Minute(60*temporals.dtf)))
+                    else
+                        extra_ts = vcat(string(ZonedDateTime(extra_ts[1], temporals.ts_format) + Minute(60*temporals.dtf)), extra_ts)
+                        extra_ts = vcat(extra_ts, string(ZonedDateTime(extra_ts[end], temporals.ts_format) - Minute(60*temporals.dtf)))
+                    end
+                end
+                for t in extra_ts
+                    for s in scenarios
+                        # Create additional timesteps for processes with delays.
+                        push!(delay_tuple, (p, topo.source, topo.sink, s, t))
+                    end
+                end
+            end
+        end
+    end
+    return delay_tuple
 end

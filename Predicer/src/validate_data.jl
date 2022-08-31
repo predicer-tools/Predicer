@@ -35,6 +35,10 @@ using Predicer
 
     # In constraints, chekc if e.g. v_start even exists before trying to force start constraints. 
 
+# TODO
+# Need to add validation for delays!
+# If a transfer process has been given two delays, how should it be handled? Use the larger delay?
+
 
 """
     function validate_processes(error_log::OrderedDict, input_data::Predicer.InputData)

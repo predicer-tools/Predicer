@@ -84,6 +84,7 @@ end
 # Sets up the tuples, variables, constraints, etc used in the model using smaller functions. These functions 
 # aim to do only one thing, such as create a necessary tuple or create a variable base on a tuple.  
 function setup_model(model_contents, input_data)
+    resolve_delays(input_data)
     create_variables(model_contents, input_data)
     create_constraints(model_contents, input_data)
 end
@@ -321,4 +322,72 @@ function export_model_contents(model_contents::OrderedDict, results::Bool)
             end
         end
     end
+end
+
+function resolve_delays(input_data::Predicer.InputData)
+    processes = input_data.processes
+    processes_to_add = []
+    nodes_to_add = []
+    highest_delay = 0
+    for p in keys(processes)
+        delay_topos = filter(t -> t.delay > 0, processes[p].topos)
+        if !isempty(delay_topos)
+            for topo in delay_topos
+                highest_delay = max(topo.delay, highest_delay)
+                if processes[p].conversion == 2 # transfer process
+                    Predicer.add_delay(processes[p], topo.delay)
+                    topo.delay = 0
+                elseif processes[p].conversion == 1 # unit based process
+                    # create node
+                    delay_n_name = "delayNode_" * processes[p].name * "_" * topo.source * "_to_" * topo.sink
+                    dn = Node(delay_n_name)
+                    push!(nodes_to_add, dn)
+
+                    # create transfer process
+                    delay_p_name = "delayProcess_" * processes[p].name * "_" * topo.source * "_to_" * topo.sink
+                    dp = TransferProcess(delay_p_name, topo.delay)
+                    add_eff(dp, 1.0)
+                    add_load_limits(dp, 0.0, 1.0)
+
+                    # add topos to new delay/transport process
+                    # - if topo is a sink of p, add the delay node after p
+                    # - if topo is a source of p, add the delay node before p
+                    if topo.source == processes[p].name # The topo is a sink, as it goes from the process, 
+                        add_topology(dp, Topology(delay_n_name, topo.sink, topo.capacity, 0.0, 1.0, 1.0, 0.0))
+
+                    elseif topo.sink == processes[p].name
+                        add_topology(dp, Topology(topo.source, delay_n_name, topo.capacity, 0.0, 1.0, 1.0, 0.0))
+                    end
+                    push!(processes_to_add, dp)
+
+                    # change p topos depending on if it is a so or si. 
+                    # - delay node as so if topo is a so
+                    # - delay node as si if topo is a sink
+                    if topo.source == processes[p].name
+                        for t in processes[p].topos
+                            if t == topo
+                                t.sink = delay_n_name
+                                t.delay = 0
+                            end
+                        end
+                    else
+                        for t in processes[p].topos
+                            if t == topo
+                                t.source = delay_n_name
+                                t.delay = 0
+                            end
+                        end
+                    end
+                    # manage "history" of original nodes.
+                end
+            end
+        end
+    end
+    for p in processes_to_add
+        input_data.processes[p.name] = p
+    end
+    for n in nodes_to_add
+        input_data.nodes[n.name] = n
+    end
+    return input_data
 end

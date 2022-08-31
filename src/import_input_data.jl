@@ -142,38 +142,45 @@ function import_input_data()
             pt = system_data["process_topology"][j, :]
             if pt.process == p.process
                 if pt.source_sink == "source"
-                    push!(sources, (pt.node, pt.capacity, pt.VOM_cost, pt.ramp_up, pt.ramp_down))
+                    push!(sources, (pt.node, pt.capacity, pt.VOM_cost, pt.ramp_up, pt.ramp_down, pt.delay))
                 elseif pt.source_sink == "sink"
-                    push!(sinks, (pt.node, pt.capacity, pt.VOM_cost, pt.ramp_up, pt.ramp_down))
+                    push!(sinks, (pt.node, pt.capacity, pt.VOM_cost, pt.ramp_up, pt.ramp_down, pt.delay))
                 end
             end
         end
         if p.conversion == 1
             for so in sources
-                Predicer.add_topology(processes[p.process], Predicer.Topology(so[1], p.process, Float64(so[2]), Float64(so[3]), Float64(so[4]), Float64(so[5])))
+                Predicer.add_topology(processes[p.process], Predicer.Topology(so[1], p.process, Float64(so[2]), Float64(so[3]), Float64(so[4]), Float64(so[5]), Float64(so[6])))
             end
             for si in sinks
-                Predicer.add_topology(processes[p.process], Predicer.Topology(p.process, si[1], Float64(si[2]), Float64(si[3]), Float64(si[4]), Float64(si[5])))
+                Predicer.add_topology(processes[p.process], Predicer.Topology(p.process, si[1], Float64(si[2]), Float64(si[3]), Float64(si[4]), Float64(si[5]), Float64(si[6])))
             end
         elseif p.conversion == 2
             for so in sources, si in sinks
-                Predicer.add_topology(processes[p.process], Predicer.Topology(so[1], si[1], Float64(min(so[2], si[2])), Float64(si[3]), Float64(si[4]), Float64(si[5])))
+
+                if so[6] == si[6]
+                    topo_delay = so[6]
+                elseif abs(so[6]) > abs(si[6])
+                    topo_delay = so[6]
+                elseif abs(so[6]) < abs(si[6])
+                    topo_delay = si[6]
+                end
+                Predicer.add_topology(processes[p.process], Predicer.Topology(so[1], si[1], Float64(min(so[2], si[2])), Float64(si[3]), Float64(si[4]), Float64(si[5]), Float64(topo_delay)))
             end
         elseif p.conversion == 3
             for so in sources, si in sinks
-                Predicer.add_topology(processes[p.process], Predicer.Topology(so[1], si[1], Float64(min(so[2], si[2])), Float64(si[3]), Float64(si[4]), Float64(si[5])))
-                Predicer.add_topology(processes[p.process], Predicer.Topology(si[1], so[1], Float64(min(so[2], si[2])), Float64(si[3]), Float64(si[4]), Float64(si[5])))
+                Predicer.add_topology(processes[p.process], Predicer.Topology(so[1], si[1], Float64(min(so[2], si[2])), Float64(si[3]), Float64(si[4]), Float64(si[5]), Float64(si[6])))
+                Predicer.add_topology(processes[p.process], Predicer.Topology(si[1], so[1], Float64(min(so[2], si[2])), Float64(si[3]), Float64(si[4]), Float64(si[5]), Float64(si[6])))
 
             end
         end
         if Bool(p.is_res)
-            Predicer.add_process_to_reserve(processes[p.process])
+            Predicer.add_process_to_reserve(processes[p.process]) 
         end
         if Bool(p.is_online)
             Predicer.add_online(processes[p.process], Float64(p.start_cost), Float64(p.min_online), Float64(p.min_offline), Bool(p.initial_state))
         end
     end
-    #return system_data["efficiencies"]
     
     for n in names(cap_ts)
         timesteps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), cap_ts.t)

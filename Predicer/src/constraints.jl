@@ -17,6 +17,7 @@ function create_constraints(model_contents::OrderedDict, input_data::Predicer.In
     setup_processes_limits(model_contents, input_data)
     setup_reserve_balances(model_contents, input_data)
     setup_ramp_constraints(model_contents, input_data)
+    #setup_delay_process_balance(model_contents, input_data)
     setup_fixed_values(model_contents, input_data)
     setup_bidding_constraints(model_contents, input_data)
     setup_generic_constraints(model_contents, input_data)
@@ -567,6 +568,37 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
     model_contents["constraint"]["ramp_down_eq"] = ramp_down_eq
 end
 
+
+function setup_delay_process_balance(model_contents::OrderedDict, input_data::Predicer.InputData)
+    model = model_contents["model"]
+    delay_tuple = create_delay_tuple(input_data)
+    v_flow = model_contents["variable"]["v_flow"]
+    processes = input_data.processes
+    temporals = input_data.temporals
+    highest_delay = model_contents["highest_delay"]
+
+
+    so_expr= OrderedDict()
+    si_expr= OrderedDict()
+    for tup in delay_tuple
+        so = filter(t -> t.sink == tup[1],  processes[tup[1]].topos)[1]
+        si = filter(t -> t.source == tup[1],  processes[tup[1]].topos)[1]
+        t = tup[3]
+        t_delay = TimeZones.ZonedDateTime(year(t), month(t), day(t), hour(t) - processes[tup[1]].delay, t.timezone)
+        if tup[3] in temporals[1:highest_delay]
+            so_expr[tup] = @expression(model, v_flow[(tup[1], si.source, si.sink, tup[2], tup[3])])
+            si_expr[tup] = @expression(model, v_flow[(tup[1], si.source, si.sink, tup[2], tup[3])])
+        else
+            so_expr[tup] = @expression(model, v_flow[(tup[1], so.source, so.sink, tup[2], t_delay)])
+            si_expr[tup] = @expression(model, v_flow[(tup[1], si.source, si.sink, tup[2], t)])
+        end
+    end
+
+    delay_balance_eq = @constraint(model, delay_balance_eq[tup in delay_tuple], so_expr[tup] == si_expr[tup])
+    model_contents["constraint"]["delay_balance_eq"] = delay_balance_eq
+    model_contents["expression"]["delay_expr_so"] = so_expr
+    model_contents["expression"]["delay_expr_si"] = si_expr
+end
 
 """
     setup_fixed_values(model_contents::OrderedDict, input_data::Predicer.InputData)

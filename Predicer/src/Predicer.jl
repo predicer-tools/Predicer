@@ -12,7 +12,8 @@ module Predicer
     solve_model,
     export_model_contents,
     get_result_dataframe,
-    write_bid_matrix
+    write_bid_matrix,
+    resolve_delays
 
     export Node,
     Process, 
@@ -62,9 +63,10 @@ module Predicer
     reserve_market_tuples,
     fixed_market_tuples,
     process_topology_ramp_times_tuples,
-    scenarios
+    scenarios,
+    create_delay_tuple
 
-        export create_variables,
+    export create_variables,
     create_v_flow,
     create_v_online,
     create_v_reserve,
