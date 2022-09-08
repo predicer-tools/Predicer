@@ -314,5 +314,11 @@ function import_input_data(input_data_path::String)
         push!(gen_constraints[k[1]].factors,con_fac)
     end
     
-    return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
+    contains_reserves = (true in map(n -> n.is_res, collect(values(nodes))))
+    contains_online = (true in map(p -> p.is_online, collect(values(processes))))
+    contains_states = (true in map(n -> n.is_state, collect(values(nodes))))
+    contains_piecewise_eff = (false in map(p -> isempty(p.eff_ops), collect(values(processes))))
+    contains_risk = (risk["beta"] > 0)
+
+    return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
 end

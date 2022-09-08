@@ -856,6 +856,11 @@ end
 """
     mutable struct InputData
         temporals::Temporals
+        contains_reserves::Bool
+        contains_online::Bool
+        contains_states::Bool
+        contains_piecewise_eff::Bool
+        contains_risk::Bool
         processes::OrderedDict{String, Process}
         nodes::OrderedDict{String, Node}
         markets::OrderedDict{String, Market}
@@ -868,6 +873,11 @@ end
 Struct containing the imported input data, based on which the Predicer is built.
 # Fields
 - `temporals::Temporals`: The timesteps in the model as a Temporals struct.
+- `contains_reserves`: Boolean indicating whether the model (input_data) requires reserve functionality structures. 
+- `contains_online::Bool`: Boolean indicating whether the model (input_data) requires online functionality structures. 
+- `contains_states::Bool`: Boolean indicating whether the model (input_data) requires state functionality structures. 
+- `contains_piecewise_eff::Bool`: Boolean indicating whether the model (input_data) requires piecewise efficiency functionality structures. 
+- `contains_risk::Bool`: Boolean indicating whether the model (input_data) requires risk functionality structures. 
 - `processes::OrderedDict{String, Process}`: A dict containing the data relevant for processes.
 - `nodes::OrderedDict{String, Node}`: A dict containing the data relevant for nodes.
 - `markets::OrderedDict{String, Market}`: A dict containing the data relevant for markets.
@@ -878,6 +888,11 @@ Struct containing the imported input data, based on which the Predicer is built.
 """
 mutable struct InputData
     temporals::Temporals
+    contains_reserves::Bool
+    contains_online::Bool
+    contains_states::Bool
+    contains_piecewise_eff::Bool
+    contains_risk::Bool
     processes::OrderedDict{String, Process}
     nodes::OrderedDict{String, Node}
     markets::OrderedDict{String, Market}
@@ -885,8 +900,8 @@ mutable struct InputData
     reserve_type::OrderedDict{String, Float64}
     risk::OrderedDict{String, Float64}
     gen_constraints::OrderedDict{String, GenConstraint}
-    function InputData(temporals, processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
-        return new(temporals, processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
+    function InputData(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
+        return new(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
     end
 end
 
