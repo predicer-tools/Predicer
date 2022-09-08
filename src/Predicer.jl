@@ -5,6 +5,10 @@ module Predicer
     include("variables.jl")
     include("constraints.jl")
     include("validate_data.jl")
+    include("init.jl")
+
+    include("import_input_data.jl")
+
     
     
 

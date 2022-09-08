@@ -2,15 +2,12 @@ using DataFrames
 using XLSX
 using DataStructures
 using TimeZones
+
 import Predicer
 
-function import_input_data()
+function import_input_data(input_data_path::String)
     sheetnames_system = ["nodes", "processes", "process_topology", "markets","scenarios","efficiencies", "reserve_type","risk"]#, "energy_market", "reserve_market"]
     sheetnames_timeseries = ["cf", "inflow", "market_prices", "price","eff_ts"]
-    # Assuming this file is under \predicer\model
-    wd = split(string(@__DIR__), "src")[1]
-    input_data_path = wd * "input_data\\input_data.xlsx"
-    
 
     system_data = OrderedDict()
     timeseries_data = OrderedDict()
@@ -25,19 +22,19 @@ function import_input_data()
     gen_constraints = OrderedDict{String, Predicer.GenConstraint}()
 
     for sn in sheetnames_system
-        system_data[sn] = DataFrame(XLSX.readtable(input_data_path, sn)...)
+        system_data[sn] = DataFrame(XLSX.readtable(input_data_path, sn))
     end
 
     for sn in sheetnames_timeseries
-        timeseries_data[sn] = DataFrame(XLSX.readtable(input_data_path, sn)...)
+        timeseries_data[sn] = DataFrame(XLSX.readtable(input_data_path, sn))
     end
 
-    temps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), DataFrame(XLSX.readtable(input_data_path, "timeseries")...).t)
+    temps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), DataFrame(XLSX.readtable(input_data_path, "timeseries")).t)
 
-    fixed_data = DataFrame(XLSX.readtable(input_data_path, "fixed_ts")...)
-    cap_ts = DataFrame(XLSX.readtable(input_data_path, "cap_ts")...)    
-    constraint_data = DataFrame(XLSX.readtable(input_data_path, "gen_constraint")...) 
-    constraint_type = DataFrame(XLSX.readtable(input_data_path, "constraints")...)
+    fixed_data = DataFrame(XLSX.readtable(input_data_path, "fixed_ts"))
+    cap_ts = DataFrame(XLSX.readtable(input_data_path, "cap_ts"))    
+    constraint_data = DataFrame(XLSX.readtable(input_data_path, "gen_constraint")) 
+    constraint_type = DataFrame(XLSX.readtable(input_data_path, "constraints"))
 
 
     for i in 1:nrow(system_data["scenarios"])
