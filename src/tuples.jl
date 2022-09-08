@@ -2,36 +2,37 @@ using DataStructures
 using TimeZones
 
 """
-    create_tuples(model_contents::OrderedDict, input_data::InputData)
+    create_tuples(input_data::InputData)
 
-Create all tuples used in the model, and save them in the model_contents dict.
+Create all tuples used in the model, and save them in the tuplebook dict.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::InputData`: Struct containing data used to build the model. 
 """
-function create_tuples(model_contents::OrderedDict, input_data::InputData) # unused, should be debricated
-    model_contents["tuple"]["res_nodes_tuple"] = reserve_nodes(input_data)
-    model_contents["tuple"]["res_tuple"] = reserve_market_directional_tuples(input_data)
-    model_contents["tuple"]["process_tuple"] = process_topology_tuples(input_data)
-    model_contents["tuple"]["proc_online_tuple"] = online_process_tuples(input_data)
-    model_contents["tuple"]["res_potential_tuple"] = reserve_process_tuples(input_data)
-    model_contents["tuple"]["res_pot_prod_tuple"] = producer_reserve_process_tuples(input_data)
-    model_contents["tuple"]["res_pot_cons_tuple"] = consumer_reserve_process_tuples(input_data)
-    model_contents["tuple"]["node_state_tuple"] = state_node_tuples(input_data)
-    model_contents["tuple"]["node_balance_tuple"] = balance_node_tuples(input_data)
-    model_contents["tuple"]["proc_balance_tuple"] = balance_process_tuples(input_data)
-    model_contents["tuple"]["proc_op_balance_tuple"] = operative_slot_process_tuples(input_data)
-    model_contents["tuple"]["proc_op_tuple"] = piecewise_efficiency_process_tuples(input_data)
-    model_contents["tuple"]["cf_balance_tuple"] = cf_process_topology_tuples(input_data)
-    model_contents["tuple"]["lim_tuple"] = fixed_limit_process_topology_tuples(input_data)
-    model_contents["tuple"]["trans_tuple"] = transport_process_topology_tuples(input_data)
-    model_contents["tuple"]["res_eq_tuple"] = reserve_node_tuples(input_data)
-    model_contents["tuple"]["res_eq_updn_tuple"] = up_down_reserve_market_tuples(input_data)
-    model_contents["tuple"]["res_final_tuple"] = reserve_market_tuples(input_data)
-    model_contents["tuple"]["fixed_value_tuple"] = fixed_market_tuples(input_data)
-    model_contents["tuple"]["ramp_tuple"] = process_topology_ramp_times_tuples(input_data)
-    model_contents["tuple"]["risk_tuple"] = scenarios(input_data)
+function create_tuples(input_data::InputData) # unused, should be debricated
+    tuplebook = OrderedDict()
+    tuplebook["res_nodes_tuple"] = reserve_nodes(input_data)
+    tuplebook["res_tuple"] = reserve_market_directional_tuples(input_data)
+    tuplebook["process_tuple"] = process_topology_tuples(input_data)
+    tuplebook["proc_online_tuple"] = online_process_tuples(input_data)
+    tuplebook["res_potential_tuple"] = reserve_process_tuples(input_data)
+    tuplebook["res_pot_prod_tuple"] = producer_reserve_process_tuples(input_data)
+    tuplebook["res_pot_cons_tuple"] = consumer_reserve_process_tuples(input_data)
+    tuplebook["node_state_tuple"] = state_node_tuples(input_data)
+    tuplebook["node_balance_tuple"] = balance_node_tuples(input_data)
+    tuplebook["proc_balance_tuple"] = balance_process_tuples(input_data)
+    tuplebook["proc_op_balance_tuple"] = operative_slot_process_tuples(input_data)
+    tuplebook["proc_op_tuple"] = piecewise_efficiency_process_tuples(input_data)
+    tuplebook["cf_balance_tuple"] = cf_process_topology_tuples(input_data)
+    tuplebook["lim_tuple"] = fixed_limit_process_topology_tuples(input_data)
+    tuplebook["trans_tuple"] = transport_process_topology_tuples(input_data)
+    tuplebook["res_eq_tuple"] = reserve_node_tuples(input_data)
+    tuplebook["res_eq_updn_tuple"] = up_down_reserve_market_tuples(input_data)
+    tuplebook["res_final_tuple"] = reserve_market_tuples(input_data)
+    tuplebook["fixed_value_tuple"] = fixed_market_tuples(input_data)
+    tuplebook["ramp_tuple"] = process_topology_ramp_times_tuples(input_data)
+    tuplebook["risk_tuple"] = scenarios(input_data)
+    return tuplebook
 end
 
 

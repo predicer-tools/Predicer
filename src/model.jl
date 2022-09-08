@@ -6,7 +6,7 @@ using Dates
 using DataStructures
 using XLSX
 
-
+#= 
 # Function used to setup model based on the given input data. This function 
 # calls separate functions for setting up the variables and constraints used 
 # in the model. Returns "model_contents"; a dictionary containing all variables,
@@ -89,7 +89,7 @@ function setup_model(model_contents, input_data)
     create_constraints(model_contents, input_data)
 end
 
-
+=#
 
 """
     get_result_dataframe(model_contents,type="",process="",node="",scenario="")
@@ -103,9 +103,9 @@ Returns a dataframe containing specific information from the model?
 - `node`: ?
 - `scenario`: ?
 """
-function get_result_dataframe(model_contents,type="",process="",node="",scenario="")
+function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.InputData,type::String="",process::String="",node::String="",scenario::String="")
     println("Getting results for:")
-    tuples = model_contents["tuple"]
+    tuples = Predicer.create_tuples(input_data)
     temporals = unique(map(x->x[5],tuples["process_tuple"]))
     df = DataFrame(t = temporals)
     vars = model_contents["variable"]
@@ -150,12 +150,9 @@ function get_result_dataframe(model_contents,type="",process="",node="",scenario
         end
     elseif type == "v_state"
         v_state = vars[type]
-        nods = unique(map(x->x[1],tuples["node_state_tuple"]))
-        for n in nods
-            col_tup = filter(x->x[1]==n && x[2]==scenario, tuples["node_state_tuple"])
-            if !isempty(col_tup)
-                df[!, n] = value.(v_state[col_tup].data)
-            end
+        col_tup = filter(x->x[1]==node && x[2]==scenario, tuples["node_state_tuple"])
+        if !isempty(col_tup)
+            df[!, node] = value.(v_state[col_tup].data)
         end
     elseif type == "vq_state_up" || type == "vq_state_dw"
         v_state = vars[type]
@@ -171,7 +168,7 @@ function get_result_dataframe(model_contents,type="",process="",node="",scenario
     end
     return df
 end
-
+ 
 """
     write_bid_matrix(model_contents::OrderedDict, input_data::OrderedDict)
 
@@ -183,7 +180,7 @@ function write_bid_matrix(model_contents::OrderedDict, input_data::Predicer.Inpu
     v_flow = vars["v_flow"]
     v_res_final = vars["v_res_final"]
 
-    tuples = model_contents["tuple"]
+    tuples = Predicer.create_tuples(input_data)
     temporals = unique(map(x->x[5],tuples["process_tuple"]))
     markets = input_data.markets
     scenarios = keys(input_data.scenarios)
@@ -199,7 +196,7 @@ function write_bid_matrix(model_contents::OrderedDict, input_data::Predicer.Inpu
             for s in scenarios
                 p_name = "PRICE-"*s
                 v_name = "VOLUME-"*s
-                price = map(x->x[2],filter(x->x.scenario==s,markets[m].price)[1].series)
+                price = map(x->x[2],filter(x->x.scenario==s,markets[m].price.ts_data)[1].series)
                 if markets[m].type == "energy"
                     tup_b = filter(x->x[2]==m && x[4]==s,tuples["process_tuple"])
                     tup_s = filter(x->x[3]==m && x[4]==s,tuples["process_tuple"])
