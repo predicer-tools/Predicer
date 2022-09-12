@@ -102,21 +102,23 @@ Set up state variables and surplus and shortage slack variables used for modelin
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 """
 function create_v_state(model_contents::OrderedDict, input_data::InputData)
-    if input_data.contains_states
-        model = model_contents["model"]
-        node_state_tuple = state_node_tuples(input_data)
-        node_balance_tuple = balance_node_tuples(input_data)
+    
+    model = model_contents["model"]
+    node_state_tuple = state_node_tuples(input_data)
+    node_balance_tuple = balance_node_tuples(input_data)
 
+    if input_data.contains_states
         # Node state variable
         v_state = @variable(model, v_state[tup in node_state_tuple] >= 0)
         model_contents["variable"]["v_state"] = v_state
-
-        # Slack variables for node_states
-        vq_state_up = @variable(model, vq_state_up[tup in node_balance_tuple] >= 0)
-        vq_state_dw = @variable(model, vq_state_dw[tup in node_balance_tuple] >= 0)
-        model_contents["variable"]["vq_state_up"] = vq_state_up
-        model_contents["variable"]["vq_state_dw"] = vq_state_dw
     end
+    
+    # Slack variables for node_states
+    vq_state_up = @variable(model, vq_state_up[tup in node_balance_tuple] >= 0)
+    vq_state_dw = @variable(model, vq_state_dw[tup in node_balance_tuple] >= 0)
+    model_contents["variable"]["vq_state_up"] = vq_state_up
+    model_contents["variable"]["vq_state_dw"] = vq_state_dw
+    
 end
 
 

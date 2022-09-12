@@ -182,22 +182,18 @@ end
 Return tuples for each node with a state (storage) for every time step and scenario. Form: (n, s, t).
 """
 function state_node_tuples(input_data::InputData) # original name: create_node_state_tuple()
-    if !input_data.contains_states
-        return []
-    else
-        state_node_tuples = []
-        nodes = input_data.nodes
-        scenarios = collect(keys(input_data.scenarios))
-        temporals = input_data.temporals
-        for n in values(nodes)
-            if n.is_state
-                for s in scenarios, t in temporals.t
-                    push!(state_node_tuples, (n.name, s, t))
-                end
+    state_node_tuples = []
+    nodes = input_data.nodes
+    scenarios = collect(keys(input_data.scenarios))
+    temporals = input_data.temporals
+    for n in values(nodes)
+        if n.is_state
+            for s in scenarios, t in temporals.t
+                push!(state_node_tuples, (n.name, s, t))
             end
         end
-        return state_node_tuples
     end
+    return state_node_tuples
 end
 
 
