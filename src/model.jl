@@ -6,91 +6,6 @@ using Dates
 using DataStructures
 using XLSX
 
-#= 
-# Function used to setup model based on the given input data. This function 
-# calls separate functions for setting up the variables and constraints used 
-# in the model. Returns "model_contents"; a dictionary containing all variables,
-# constraints, tuples, and expressions used to build the model.
-"""
-    Initialize(input_data::Predicer.InputData)
-
-Function to initialize the model based on given input data. This function calls functions initializing the solver, model, etc. 
-
-# Arguments
-- `input_data::Predicer.InputData`: Dictionary containing data used to build the model. 
-
-# Examples
-```julia-repl
-julia> model_contents = Initialize(input_data);
-OrderedDict{Any, Any} with 8 entries:
-  "constraint"     => ...
-  "expression"     => ...
-  "variable"       => ...
-  "tuple"          => ...
-  "gen_constraint" => ...
-  "gen_expression" => ...
-  "res_dir"        => ...
-  "model"          => ...
-```
-"""
-function Initialize(input_data::Predicer.InputData)
-    input_data_check = validate_data(input_data)
-    if input_data_check["is_valid"]
-        model_contents = Initialize_contents()
-        model = init_jump_model(Cbc.Optimizer)
-        model_contents["model"] = model
-        setup_model(model_contents, input_data)
-        return model_contents
-    else
-        return input_data_check["errors"]
-    end
-end
-
-# Function to run the model built based on the given input data. 
-
-"""
-    solve_model(model_contents::OrderedDict)
-
-Function to use the optimizer to solve model. 
-
-# Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
-"""
-function solve_model(model_contents::OrderedDict)
-    model = model_contents["model"]
-    optimize!(model)
-end
-
-# Function to initialize jump model with the given solver. 
-function init_jump_model(solver)
-    model = JuMP.Model(solver)
-    set_optimizer_attributes(model, "LogLevel" => 1, "PrimalTolerance" => 1e-7)
-    return model
-end
-
-# Add all constraints, (expressions? and variables?) into a large dictionary for easier access, 
-# and being able to use the anonymous notation while still being conveniently accessible. 
-function Initialize_contents()
-    model_contents = OrderedDict()
-    model_contents["constraint"] = OrderedDict() #constraints
-    model_contents["expression"] = OrderedDict() #expressions?
-    model_contents["variable"] = OrderedDict() #variables?
-    model_contents["gen_constraint"] = OrderedDict() #GenericConstraints
-    model_contents["gen_expression"] = OrderedDict() #GenericConstraints
-    model_contents["res_dir"] = ["res_up", "res_down"]
-    return model_contents
-end
-
-# Sets up the tuples, variables, constraints, etc used in the model using smaller functions. These functions 
-# aim to do only one thing, such as create a necessary tuple or create a variable base on a tuple.  
-function setup_model(model_contents, input_data)
-    resolve_delays(input_data)
-    create_variables(model_contents, input_data)
-    create_constraints(model_contents, input_data)
-end
-
-=#
-
 """
     get_result_dataframe(model_contents,type="",process="",node="",scenario="")
 
@@ -178,10 +93,12 @@ function write_bid_matrix(model_contents::OrderedDict, input_data::Predicer.Inpu
     println("Writing bid matrix...")
     vars = model_contents["variable"]
     v_flow = vars["v_flow"]
-    v_res_final = vars["v_res_final"]
+    if input_data.contains_reserves
+        v_res_final = vars["v_res_final"]
+    end
 
     tuples = Predicer.create_tuples(input_data)
-    temporals = unique(map(x->x[5],tuples["process_tuple"]))
+    temporals = input_data.temporals.t
     markets = input_data.markets
     scenarios = keys(input_data.scenarios)
 
@@ -202,8 +119,10 @@ function write_bid_matrix(model_contents::OrderedDict, input_data::Predicer.Inpu
                     tup_s = filter(x->x[3]==m && x[4]==s,tuples["process_tuple"])
                     volume = value.(v_flow[tup_s].data)-value.(v_flow[tup_b].data)
                 else
-                    tup = filter(x->x[1]==m && x[2]==s,tuples["res_final_tuple"])
-                    volume = value.(v_res_final[tup].data)
+                    if input_data.contains_reserves
+                        tup = filter(x->x[1]==m && x[2]==s,tuples["res_final_tuple"])
+                        volume = value.(v_res_final[tup].data)
+                    end
                 end
                 df[!,p_name] = price
                 df[!,v_name] = volume
