@@ -4,25 +4,6 @@ using TimeZones
 abstract type AbstractNode end
 abstract type AbstractProcess end
 
-
-
-"""
-
-mutable struct PredicerCore
-    threads::Int
-    model_contents::OrderedDict
-    temporals::Temporals
-    input_data::InputData
-end
-
-function PredicerCore()
-    return 0
-end
-"""
-
-
-
-
 """
     mutable struct Temporals
         t::Vector{String}
