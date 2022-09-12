@@ -166,9 +166,8 @@ function import_input_data(input_data_path::String)
             end
         elseif p.conversion == 3
             for so in sources, si in sinks
-                Predicer.add_topology(processes[p.process], Predicer.Topology(so[1], si[1], Float64(min(so[2], si[2])), Float64(si[3]), Float64(si[4]), Float64(si[5]), Float64(si[6])))
+                Predicer.add_topology(processes[p.process], Predicer.Topology(so[1], si[1], Float64(min(so[2], si[2])), Float64(so[3]), Float64(si[4]), Float64(si[5]), Float64(si[6])))
                 Predicer.add_topology(processes[p.process], Predicer.Topology(si[1], so[1], Float64(min(so[2], si[2])), Float64(si[3]), Float64(si[4]), Float64(si[5]), Float64(si[6])))
-
             end
         end
         if Bool(p.is_res)
