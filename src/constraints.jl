@@ -45,9 +45,9 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
     v_flow = model_contents["variable"]["v_flow"]
     if input_data.contains_states
         v_state = model_contents["variable"]["v_state"]
-        vq_state_up = model_contents["variable"]["vq_state_up"]
-        vq_state_dw = model_contents["variable"]["vq_state_dw"]
     end
+    vq_state_up = model_contents["variable"]["vq_state_up"]
+    vq_state_dw = model_contents["variable"]["vq_state_dw"]
     temporals = input_data.temporals  
     nodes = input_data.nodes
     markets = input_data.markets
@@ -93,7 +93,6 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
         else
             inflow_val = 0.0
         end
-
 
         if isempty(cons)
             if isempty(resd)
@@ -377,7 +376,7 @@ function setup_processes_limits(model_contents::OrderedDict, input_data::Predice
     if input_data.contains_online
         proc_online_tuple = online_process_tuples(input_data)
         p_online = filter(x -> processes[x[1]].is_online, lim_tuple)
-        p_offline = filter(x -> !(processes[x[1]].is_online), lim_tuple)
+        
         if !isempty(proc_online_tuple)
             v_online = model_contents["variable"]["v_online"]
             for tup in p_online
@@ -390,24 +389,30 @@ function setup_processes_limits(model_contents::OrderedDict, input_data::Predice
                 add_to_expression!(e_lim_max[tup], -processes[tup[1]].load_max * cap * v_online[(tup[1], tup[4], tup[5])])
                 add_to_expression!(e_lim_min[tup], -processes[tup[1]].load_min * cap * v_online[(tup[1], tup[4], tup[5])])
             end
-    
-            for tup in p_offline
-                topo = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1]
-                if isempty(topo.cap_ts)
-                    cap = topo.capacity
-                else
-                    cap = topo.cap_ts(tup[4], tup[5])
-                end
-                if input_data.contains_reserves
-                    if tup in p_reserve_prod || tup in p_reserve_cons
-                        add_to_expression!(e_lim_max[tup], -cap)
-                    else
-                        set_upper_bound(v_flow[tup], cap)
-                    end
-                end
+        end
+    end 
+
+    # non-online, non-cf processes
+    p_offline = filter(x -> !(processes[x[1]].is_online), lim_tuple)
+    for tup in p_offline
+        topo = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1]
+        if isempty(topo.cap_ts)
+            cap = topo.capacity
+        else
+            cap = topo.cap_ts(tup[4], tup[5])
+        end
+        if input_data.contains_reserves
+            if tup in p_reserve_prod || tup in p_reserve_cons
+                add_to_expression!(e_lim_max[tup], -cap)
+            else
+                set_upper_bound(v_flow[tup], cap)
             end
+        else
+            set_upper_bound(v_flow[tup], cap)
         end
     end
+    
+   
 
 
     con_max_tuples = filter(x -> !(e_lim_max[x] == AffExpr(0)), keys(e_lim_max))
@@ -882,36 +887,33 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
         end
     end
 
-    # Costs related to states
+    # State residue costs
     state_residue_costs = model_contents["expression"]["state_residue_costs"] = OrderedDict()
-    dummy_costs = model_contents["expression"]["dummy_costs"] = OrderedDict()
     for s in scenarios
         state_residue_costs[s] = AffExpr(0.0)
-        dummy_costs[s] = AffExpr(0.0) 
     end
     if input_data.contains_states
         v_state = model_contents["variable"]["v_state"]
-        vq_state_up = model_contents["variable"]["vq_state_up"]
-        vq_state_dw = model_contents["variable"]["vq_state_dw"]
         state_node_tuple = state_node_tuples(input_data)
-
-        # State residue costs
         for s in scenarios
             for tup in filter(x -> x[3] == temporals.t[end] && x[2] == s, state_node_tuple)
                 add_to_expression!(state_residue_costs[s], -1 * nodes[tup[1]].state.residual_value * v_state[tup])
             end
         end
+    end
 
-        # Dummy variable costs
-        p = 1000000
-        # State dummy variables
-        # Process balance dummy variables?
-        for s in scenarios
-            for tup in filter(x->x[2]==s,node_balance_tuple)
-                add_to_expression!(dummy_costs[s], sum(vq_state_up[tup])*p + sum(vq_state_dw[tup])*p)
-            end
+    # Dummy variable costs
+    vq_state_up = model_contents["variable"]["vq_state_up"]
+    vq_state_dw = model_contents["variable"]["vq_state_dw"]
+    dummy_costs = model_contents["expression"]["dummy_costs"] = OrderedDict()
+    p = 1000000
+    for s in scenarios
+        dummy_costs[s] = AffExpr(0.0) 
+        for tup in filter(x->x[2]==s,node_balance_tuple)
+            add_to_expression!(dummy_costs[s], sum(vq_state_up[tup])*p + sum(vq_state_dw[tup])*p)
         end
     end
+    
 
     # Total model costs
     total_costs = model_contents["expression"]["total_costs"] = OrderedDict()
@@ -955,7 +957,11 @@ function setup_objective_function(model_contents::OrderedDict, input_data::Predi
     model = model_contents["model"]
     total_costs = model_contents["expression"]["total_costs"]
     scen_p = collect(values(input_data.scenarios))
-    beta = input_data.risk["beta"]
-    cvar = model_contents["expression"]["cvar"]
-    @objective(model, Min, (1-beta)*sum(values(scen_p).*values(total_costs))+beta*cvar)
+    if input_data.contains_risk
+        beta = input_data.risk["beta"]
+        cvar = model_contents["expression"]["cvar"]
+        @objective(model, Min, (1-beta)*sum(values(scen_p).*values(total_costs))+beta*cvar)
+    else
+        @objective(model, Min, sum(values(scen_p).*values(total_costs)))
+    end
 end
