@@ -63,25 +63,29 @@ Return tuples identifying each reserve market with its node and directions in ea
     This function assumes that reserve markets' market type is formatted "reserve" and that the up and down reserve market directions are "res_up" and "res_down".
 """
 function reserve_market_directional_tuples(input_data::InputData) # original name: create_res_tuple()
-    reserve_market_directional_tuples = []
-    markets = input_data.markets
-    scenarios = collect(keys(input_data.scenarios))
-    temporals = input_data.temporals
-    res_dir = ["res_up", "res_down"]
-    for m in values(markets)
-        if m.type == "reserve"
-            if m.direction in res_dir
-                for s in scenarios, t in temporals.t
-                    push!(reserve_market_directional_tuples, (m.name, m.node, m.direction, s, t))
-                end
-            else
-                for d in res_dir, s in scenarios, t in temporals.t
-                    push!(reserve_market_directional_tuples, (m.name, m.node, d, s, t))
+    if !input_data.contains_reserves
+        return []
+    else
+        reserve_market_directional_tuples = []
+        markets = input_data.markets
+        scenarios = collect(keys(input_data.scenarios))
+        temporals = input_data.temporals
+        res_dir = ["res_up", "res_down"]
+        for m in values(markets)
+            if m.type == "reserve"
+                if m.direction in res_dir
+                    for s in scenarios, t in temporals.t
+                        push!(reserve_market_directional_tuples, (m.name, m.node, m.direction, s, t))
+                    end
+                else
+                    for d in res_dir, s in scenarios, t in temporals.t
+                        push!(reserve_market_directional_tuples, (m.name, m.node, d, s, t))
+                    end
                 end
             end
         end
+        return reserve_market_directional_tuples
     end
-    return reserve_market_directional_tuples
 end
 
 
@@ -116,18 +120,22 @@ end
 Return tuples for each process with online variables for every time step and scenario. Form: (p, s, t).
 """
 function online_process_tuples(input_data::InputData) # original name: create_proc_online_tuple()
-    online_process_tuples = []
-    processes = input_data.processes
-    scenarios = collect(keys(input_data.scenarios))
-    temporals = input_data.temporals
-    for p in values(processes)
-        if p.is_online
-            for s in scenarios, t in temporals.t
-                push!(online_process_tuples, (p.name, s, t))
+    if !input_data.contains_online
+        return []
+    else
+        online_process_tuples = []
+        processes = input_data.processes
+        scenarios = collect(keys(input_data.scenarios))
+        temporals = input_data.temporals
+        for p in values(processes)
+            if p.is_online
+                for s in scenarios, t in temporals.t
+                    push!(online_process_tuples, (p.name, s, t))
+                end
             end
         end
+        return online_process_tuples
     end
-    return online_process_tuples
 end
 
 
@@ -137,12 +145,15 @@ end
 Return tuples containing information on 'producer' process topologies with reserve potential for every time step and scenario. Form: (d, rt, p, so, si, s, t).
 """
 function producer_reserve_process_tuples(input_data::InputData) # original name: create_res_pot_prod_tuple()
-    res_nodes = reserve_nodes(input_data)
-    res_process_tuples = reserve_process_tuples(input_data)
-
-    # filter those processes that have a reserve node as a sink
-    producer_reserve_process_tuples = filter(x -> x[5] in res_nodes, res_process_tuples)
-    return producer_reserve_process_tuples
+    if !input_data.contains_reserves
+        return []
+    else
+        res_nodes = reserve_nodes(input_data)
+        res_process_tuples = reserve_process_tuples(input_data)
+        # filter those processes that have a reserve node as a sink
+        producer_reserve_process_tuples = filter(x -> x[5] in res_nodes, res_process_tuples)
+        return producer_reserve_process_tuples
+    end
 end
 
 
@@ -152,12 +163,16 @@ end
 Return tuples containing information on 'consumer' process topologies with reserve potential for every time step and scenario. Form: (d, rt, p, so, si, s, t).
 """
 function consumer_reserve_process_tuples(input_data::InputData) # original name: create_res_pot_cons_tuple()
-    res_nodes = reserve_nodes(input_data)
-    res_process_tuples = reserve_process_tuples(input_data)
+    if !input_data.contains_reserves
+        return []
+    else
+        res_nodes = reserve_nodes(input_data)
+        res_process_tuples = reserve_process_tuples(input_data)
 
-    # filter those processes that have a reserve node as a source
-    consumer_reserve_process_tuples = filter(x -> x[4] in res_nodes, res_process_tuples)
-    return consumer_reserve_process_tuples
+        # filter those processes that have a reserve node as a source
+        consumer_reserve_process_tuples = filter(x -> x[4] in res_nodes, res_process_tuples)
+        return consumer_reserve_process_tuples
+    end
 end
 
 
@@ -167,18 +182,22 @@ end
 Return tuples for each node with a state (storage) for every time step and scenario. Form: (n, s, t).
 """
 function state_node_tuples(input_data::InputData) # original name: create_node_state_tuple()
-    state_node_tuples = []
-    nodes = input_data.nodes
-    scenarios = collect(keys(input_data.scenarios))
-    temporals = input_data.temporals
-    for n in values(nodes)
-        if n.is_state
-            for s in scenarios, t in temporals.t
-                push!(state_node_tuples, (n.name, s, t))
+    if !input_data.contains_states
+        return []
+    else
+        state_node_tuples = []
+        nodes = input_data.nodes
+        scenarios = collect(keys(input_data.scenarios))
+        temporals = input_data.temporals
+        for n in values(nodes)
+            if n.is_state
+                for s in scenarios, t in temporals.t
+                    push!(state_node_tuples, (n.name, s, t))
+                end
             end
         end
+        return state_node_tuples
     end
-    return state_node_tuples
 end
 
 
@@ -212,24 +231,28 @@ Return tuples containing information on process topologies with reserve potentia
     This function assumes that the up and down reserve market directions are "res_up" and "res_down".
 """
 function reserve_process_tuples(input_data::InputData) # original name: create_res_potential_tuple(), duplicate existed: create_proc_potential_tuple()
-    reserve_process_tuples = []
-    processes = input_data.processes
-    scenarios = collect(keys(input_data.scenarios))
-    temporals = input_data.temporals
-    res_nodes = reserve_nodes(input_data)
-    res_type = collect(keys(input_data.reserve_type))
-    res_dir = ["res_up", "res_down"]
+    if !input_data.contains_reserves
+        return []
+    else
+        reserve_process_tuples = []
+        processes = input_data.processes
+        scenarios = collect(keys(input_data.scenarios))
+        temporals = input_data.temporals
+        res_nodes = reserve_nodes(input_data)
+        res_type = collect(keys(input_data.reserve_type))
+        res_dir = ["res_up", "res_down"]
 
-    for p in values(processes), s in scenarios, t in temporals.t
-        for topo in p.topos
-            if (topo.source in res_nodes|| topo.sink in res_nodes) && p.is_res
-                for d in res_dir, rt in res_type
-                    push!(reserve_process_tuples, (d, rt, p.name, topo.source, topo.sink, s, t))
+        for p in values(processes), s in scenarios, t in temporals.t
+            for topo in p.topos
+                if (topo.source in res_nodes|| topo.sink in res_nodes) && p.is_res
+                    for d in res_dir, rt in res_type
+                        push!(reserve_process_tuples, (d, rt, p.name, topo.source, topo.sink, s, t))
+                    end
                 end
             end
         end
+        return reserve_process_tuples
     end
-    return reserve_process_tuples
 end
 
 """
@@ -261,20 +284,24 @@ end
 Return tuples identifying processes with piecewise efficiency for each of their operative slots (o), and every time step and scenario. Form: (p, s, t, o).
 """
 function operative_slot_process_tuples(input_data::InputData) # original name: create_proc_op_balance_tuple()
-    operative_slot_process_tuples = []
-    processes = input_data.processes
-    scenarios = collect(keys(input_data.scenarios))
-    temporals = input_data.temporals
-    for p in values(processes)
-        if p.conversion == 1 && !p.is_cf
-            if !isempty(p.eff_fun)
-                for s in scenarios, t in temporals.t, o in p.eff_ops
-                    push!(operative_slot_process_tuples, (p.name, s, t, o))
+    if !input_data.contains_piecewise_eff
+        return []
+    else
+        operative_slot_process_tuples = []
+        processes = input_data.processes
+        scenarios = collect(keys(input_data.scenarios))
+        temporals = input_data.temporals
+        for p in values(processes)
+            if p.conversion == 1 && !p.is_cf
+                if !isempty(p.eff_fun)
+                    for s in scenarios, t in temporals.t, o in p.eff_ops
+                        push!(operative_slot_process_tuples, (p.name, s, t, o))
+                    end
                 end
             end
         end
+        return operative_slot_process_tuples
     end
-    return operative_slot_process_tuples
 end
 
 
@@ -284,20 +311,24 @@ end
 Return tuples identifying processes with piecewise efficiency for each time step and scenario. Form: (p, s, t).
 """
 function piecewise_efficiency_process_tuples(input_data::InputData) # original name: create_proc_op_tuple()
-    piecewise_efficiency_process_tuples = []
-    processes = input_data.processes
-    scenarios = collect(keys(input_data.scenarios))
-    temporals = input_data.temporals
-    for p in values(processes)
-        if p.conversion == 1 && !p.is_cf
-            if !isempty(p.eff_fun)
-                for s in scenarios, t in temporals.t
-                    push!(piecewise_efficiency_process_tuples, (p.name, s, t))
+    if !input_data.contains_piecewise_eff
+        return []
+    else
+        piecewise_efficiency_process_tuples = []
+        processes = input_data.processes
+        scenarios = collect(keys(input_data.scenarios))
+        temporals = input_data.temporals
+        for p in values(processes)
+            if p.conversion == 1 && !p.is_cf
+                if !isempty(p.eff_fun)
+                    for s in scenarios, t in temporals.t
+                        push!(piecewise_efficiency_process_tuples, (p.name, s, t))
+                    end
                 end
             end
         end
+        return piecewise_efficiency_process_tuples
     end
-    return piecewise_efficiency_process_tuples
 end
 
 
@@ -321,7 +352,7 @@ end
 """
     fixed_limit_process_topology_tuples(input_data::InputData)
 
-??Return tuples containing information on process topologies with fixed limit on flow capacity. Form: (p, so, si, s, t).
+Return tuples containing information on process topologies with fixed limit on flow capacity. Form: (p, so, si, s, t).
 """
 function fixed_limit_process_topology_tuples( input_data::InputData) # original name: create_lim_tuple()
     fixed_limit_process_topology_tuples = []
@@ -361,15 +392,19 @@ end
 Return tuples for each node with reserves for each relevant reserve type, all time steps and scenarios. Form: (n, rt, s, t).
 """
 function reserve_node_tuples(input_data::InputData) # original name: create_res_eq_tuple()
-    reserve_node_tuples = []
-    res_nodes = reserve_nodes(input_data)
-    scenarios = collect(keys(input_data.scenarios))
-    temporals = input_data.temporals
-    res_type = collect(keys(input_data.reserve_type))
-    for n in res_nodes, r in res_type, s in scenarios, t in temporals.t
-        push!(reserve_node_tuples, (n, r, s, t))
+    if !input_data.contains_reserves
+        return []
+    else
+        reserve_node_tuples = []
+        res_nodes = reserve_nodes(input_data)
+        scenarios = collect(keys(input_data.scenarios))
+        temporals = input_data.temporals
+        res_type = collect(keys(input_data.reserve_type))
+        for n in res_nodes, r in res_type, s in scenarios, t in temporals.t
+            push!(reserve_node_tuples, (n, r, s, t))
+        end
+        return reserve_node_tuples
     end
-    return reserve_node_tuples
 end
 
 
@@ -382,16 +417,20 @@ Return tuples for each reserve market with an 'up_down' direction for all time s
     This function assumes that reserve markets with up and down reserve have market direction "up_down".
 """
 function up_down_reserve_market_tuples(input_data::InputData) # original name: create_res_eq_updn_tuple()
-    up_down_reserve_market_tuples = []
-    markets = input_data.markets
-    scenarios = collect(keys(input_data.scenarios))
-    temporals = input_data.temporals
-    for m in values(markets), s in scenarios, t in temporals.t
-        if m.direction == "up_down"
-            push!(up_down_reserve_market_tuples, (m.name, s, t))
+    if !input_data.contains_reserves
+        return []
+    else
+        up_down_reserve_market_tuples = []
+        markets = input_data.markets
+        scenarios = collect(keys(input_data.scenarios))
+        temporals = input_data.temporals
+        for m in values(markets), s in scenarios, t in temporals.t
+            if m.direction == "up_down"
+                push!(up_down_reserve_market_tuples, (m.name, s, t))
+            end
         end
+        return up_down_reserve_market_tuples
     end
-    return up_down_reserve_market_tuples
 end
 
 
@@ -404,18 +443,22 @@ Return tuples for each reserve market for every time step and scenario. Form: (r
     This function assumes that reserve markets' market type is formatted "reserve".
 """
 function reserve_market_tuples(input_data::InputData) # orignal name: create_res_final_tuple()
-    reserve_market_tuples = []
-    markets = input_data.markets
-    scenarios = collect(keys(input_data.scenarios))
-    temporals = input_data.temporals
-    for m in values(markets)
-        if m.type == "reserve"
-            for s in scenarios, t in temporals.t
-                push!(reserve_market_tuples, (m.name, s, t))
+    if !input_data.contains_reserves
+        return []
+    else
+        reserve_market_tuples = []
+        markets = input_data.markets
+        scenarios = collect(keys(input_data.scenarios))
+        temporals = input_data.temporals
+        for m in values(markets)
+            if m.type == "reserve"
+                for s in scenarios, t in temporals.t
+                    push!(reserve_market_tuples, (m.name, s, t))
+                end
             end
         end
+        return reserve_market_tuples
     end
-    return reserve_market_tuples
 end
 
 
