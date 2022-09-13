@@ -24,6 +24,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
     temporals = unique(map(x->x[5],tuples["process_tuple"]))
     df = DataFrame(t = temporals)
     vars = model_contents["variable"]
+    expr = model_contents["expression"]
     if type == "v_flow"
         v_flow = vars[type]
         tups = unique(map(x->(x[1],x[2],x[3]),filter(x->x[1]==process, tuples["process_tuple"])))
@@ -78,6 +79,24 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 df[!, n] = value.(v_state[col_tup].data)
             end
         end
+    elseif type == "v_bid"
+        v_bid = expr[type]
+        bid_tups = unique(map(x->(x[1],x[3],x[4]),filter(x->x[1]==node && x[3]==scenario,tuples["balance_market_tuple"])))
+
+        dat_vec = []
+        for (i,tup) in enumerate(bid_tups)
+            push!(dat_vec,value(v_bid[tup]))
+        end
+        df[!,node] = dat_vec
+    elseif type == "v_flow_bal"
+        v_bal = vars[type]
+        dir = ["up","dw"]
+        for d in dir
+            tup = filter(x->x[1]==node && x[2]==d && x[3]==scenario, tuples["balance_market_tuple"])
+            if !isempty(tup)
+                df[!,d] = value.(v_bal[tup].data)
+            end
+        end
     else
         println("ERROR: incorrect type")
     end
@@ -93,6 +112,7 @@ function write_bid_matrix(model_contents::OrderedDict, input_data::Predicer.Inpu
     println("Writing bid matrix...")
     vars = model_contents["variable"]
     v_flow = vars["v_flow"]
+    v_bid = model_contents["expression"]["v_bid"]
     if input_data.contains_reserves
         v_res_final = vars["v_res_final"]
     end
@@ -115,9 +135,14 @@ function write_bid_matrix(model_contents::OrderedDict, input_data::Predicer.Inpu
                 v_name = "VOLUME-"*s
                 price = map(x->x[2],filter(x->x.scenario==s,markets[m].price.ts_data)[1].series)
                 if markets[m].type == "energy"
-                    tup_b = filter(x->x[2]==m && x[4]==s,tuples["process_tuple"])
-                    tup_s = filter(x->x[3]==m && x[4]==s,tuples["process_tuple"])
-                    volume = value.(v_flow[tup_s].data)-value.(v_flow[tup_b].data)
+                    bid_tuple = unique(map(x->(x[1],x[3],x[4]),filter(x->x[1]==markets[m].node && x[3]==s,tuples["balance_market_tuple"])))
+                    volume = []
+                    for tup in bid_tuple
+                        push!(volume,value(v_bid[tup]))
+                    end
+                    #tup_b = filter(x->x[2]==m && x[4]==s,tuples["process_tuple"])
+                    #tup_s = filter(x->x[3]==m && x[4]==s,tuples["process_tuple"])
+                    #volume = value.(v_flow[tup_s].data)-value.(v_flow[tup_b].data)
                 else
                     if input_data.contains_reserves
                         tup = filter(x->x[1]==m && x[2]==s,tuples["res_final_tuple"])

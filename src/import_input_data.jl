@@ -35,7 +35,7 @@ function import_input_data(input_data_path::String)
     cap_ts = DataFrame(XLSX.readtable(input_data_path, "cap_ts"))    
     constraint_data = DataFrame(XLSX.readtable(input_data_path, "gen_constraint")) 
     constraint_type = DataFrame(XLSX.readtable(input_data_path, "constraints"))
-
+    balance_prices = DataFrame(XLSX.readtable(input_data_path, "balance_prices"))
 
     for i in 1:nrow(system_data["scenarios"])
         scenarios[system_data["scenarios"][i,1]] = system_data["scenarios"][i,2]
@@ -270,6 +270,32 @@ function import_input_data(input_data_path::String)
                 if !ismissing(data[i])
                     tup = (timestamps[i],data[i])
                     push!(markets[mm.market].fixed,tup)
+                end
+            end
+        end
+        if mm.type == "energy" && mm.is_bid == true
+            timesteps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), balance_prices.t)
+            for s in keys(scenarios)
+                tup_up = mm.market*",up,"*s
+                tup_dw = mm.market*",dw,"*s
+
+                if tup_up in names(balance_prices)
+                    data = balance_prices[!,tup_up]
+                    ts = Predicer.TimeSeries(s)
+                    for i in 1:length(timesteps)
+                        tup = (timesteps[i], data[i])
+                        push!(ts.series, tup)
+                    end
+                    push!(markets[mm.market].up_price.ts_data, ts)
+                end
+                if tup_dw in names(balance_prices)
+                    data = balance_prices[!,tup_dw]
+                    ts = Predicer.TimeSeries(s)
+                    for i in 1:length(timesteps)
+                        tup = (timesteps[i], data[i])
+                        push!(ts.series, tup)
+                    end
+                    push!(markets[mm.market].down_price.ts_data, ts)
                 end
             end
         end

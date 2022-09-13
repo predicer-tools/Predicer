@@ -774,9 +774,11 @@ struct Market
     reserve_type::String
     is_bid::Bool
     price::TimeSeriesData
+    up_price::TimeSeriesData
+    down_price::TimeSeriesData
     fixed::Vector{Tuple{Any,Any}}
     function Market(name, type, node, direction, realisation, reserve_type, is_bid)
-        return new(name, type, node, direction, realisation, reserve_type, is_bid, TimeSeriesData(), [])
+        return new(name, type, node, direction, realisation, reserve_type, is_bid, TimeSeriesData(),TimeSeriesData(),TimeSeriesData(), [])
     end
 end
 

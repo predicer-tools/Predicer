@@ -32,6 +32,7 @@ function create_tuples(input_data::InputData) # unused, should be debricated
     tuplebook["fixed_value_tuple"] = fixed_market_tuples(input_data)
     tuplebook["ramp_tuple"] = process_topology_ramp_times_tuples(input_data)
     tuplebook["risk_tuple"] = scenarios(input_data)
+    tuplebook["balance_market_tuple"] = create_balance_market_tuple(input_data)
     return tuplebook
 end
 
@@ -546,4 +547,25 @@ function create_delay_tuple(input_data::Predicer.InputData)
         end
     end
     return delay_tuple
+end
+
+""" 
+    create_balance_market_tuple(input_data::OrderedDict)
+
+Returns array of tuples containing balance market. Form: (m, dir, s, t).
+"""
+function create_balance_market_tuple(input_data::Predicer.InputData)
+    bal_tuples = []
+    markets = input_data.markets
+    dir = ["up","dw"]
+    scenarios = collect(keys(input_data.scenarios))
+    temporals = input_data.temporals
+    for m in keys(markets)
+        if markets[m].type == "energy" && markets[m].is_bid == true
+            for d in dir, s in scenarios, t in temporals.t
+                push!(bal_tuples, (markets[m].name, d, s, t))
+            end
+        end
+    end
+    return bal_tuples
 end
