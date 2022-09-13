@@ -18,8 +18,8 @@ function create_constraints(model_contents::OrderedDict, input_data::Predicer.In
     setup_reserve_balances(model_contents, input_data)
     setup_ramp_constraints(model_contents, input_data)
     #setup_delay_process_balance(model_contents, input_data)
-    setup_fixed_values(model_contents, input_data)
     setup_bidding_constraints(model_contents, input_data)
+    setup_fixed_values(model_contents, input_data)
     setup_generic_constraints(model_contents, input_data)
     setup_cost_calculations(model_contents, input_data)
     setup_cvar_element(model_contents, input_data)
@@ -637,6 +637,7 @@ function setup_fixed_values(model_contents::OrderedDict, input_data::Predicer.In
     model = model_contents["model"]
     process_tuple = process_topology_tuples(input_data)
     fixed_value_tuple = fixed_market_tuples(input_data)
+    v_bid = model_contents["expression"]["v_bid"]
     v_flow = model_contents["variable"]["v_flow"]
     markets = input_data.markets
     scenarios = collect(keys(input_data.scenarios))
@@ -656,7 +657,8 @@ function setup_fixed_values(model_contents::OrderedDict, input_data::Predicer.In
                     for s in scenarios
                         tup1 = filter(x->x[2]==m && x[4]==s && x[5]==t,process_tuple)[1]
                         tup2 = filter(x->x[3]==m && x[4]==s && x[5]==t,process_tuple)[1]
-                        fix_expr[(m, s, t)] = @expression(model,v_flow[tup1]-v_flow[tup2]-fix_val)
+                        fix_expr[(m, s, t)] = @expression(model,v_bid[(m,s,t)]-fix_val)
+                        #fix_expr[(m, s, t)] = @expression(model,v_flow[tup1]-v_flow[tup2]-fix_val)
                     end
                 end
             elseif markets[m].type == "reserve" && input_data.contains_reserves
@@ -688,7 +690,11 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
     process_tuple = process_topology_tuples(input_data)
+    balance_process_tuple = create_balance_market_tuple(input_data)
+    
     v_flow = model_contents["variable"]["v_flow"]
+    v_flow_bal = model_contents["variable"]["v_flow_bal"]
+    v_bid = model_contents["expression"]["v_bid"] = OrderedDict()
 
     if input_data.contains_reserves
         v_res_final = model_contents["variable"]["v_res_final"]
@@ -704,6 +710,19 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
                 else
                     price_matr[m] = hcat(price_matr[m],vec)
                 end
+                if markets[m].type == "energy"
+                    for t in temporals.t
+                        v_bid[(markets[m].node,s,t)] = AffExpr(0.0)
+                        add_to_expression!(v_bid[(markets[m].node,s,t)],
+                                v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==s,process_tuple)[1]],1.0)
+                        add_to_expression!(v_bid[(markets[m].node,s,t)],
+                                v_flow_bal[filter(x->x[1]==markets[m].node && x[2]=="up" && x[4]==t && x[3]==s,balance_process_tuple)[1]],1.0)
+                        add_to_expression!(v_bid[(markets[m].node,s,t)],
+                                v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==s,process_tuple)[1]],-1.0)
+                        add_to_expression!(v_bid[(markets[m].node,s,t)],
+                                v_flow_bal[filter(x->x[1]==markets[m].node && x[2]=="dw" && x[4]==t && x[3]==s,balance_process_tuple)[1]],-1.0)
+                    end
+                end
             end
         end
     end
@@ -714,11 +733,19 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
                 if markets[m].type == "energy"
                     for k in 2:length(s_indx)
                         if price_matr[m][s_indx[k]] == price_matr[m][s_indx[k-1]]
-                            @constraint(model, v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]] == 
-                                v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]])
+                            @constraint(model, 
+                                        v_bid[(markets[m].node,scenarios[s_indx[k]],t)] ==
+                                        v_bid[(markets[m].node,scenarios[s_indx[k-1]],t)])
+
+                            #@constraint(model, v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]] == 
+                            #    v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]])
                         else
-                            @constraint(model, v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]] >= 
-                                v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]])
+                            @constraint(model, 
+                                        v_bid[(markets[m].node,scenarios[s_indx[k]],t)] >=
+                                        v_bid[(markets[m].node,scenarios[s_indx[k-1]],t)])
+
+                            #@constraint(model, v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]] >= 
+                            #    v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]])
                         end
                     end
                 elseif markets[m].type == "reserve" && input_data.contains_reserves
@@ -797,7 +824,11 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     model = model_contents["model"]
     process_tuple = process_topology_tuples(input_data)
     node_balance_tuple = balance_node_tuples(input_data)
+    
     v_flow = model_contents["variable"]["v_flow"]
+    v_bid = model_contents["expression"]["v_bid"]
+    v_flow_bal = model_contents["variable"]["v_flow_bal"]
+
     scenarios = collect(keys(input_data.scenarios))
     nodes = input_data.nodes
     markets = input_data.markets
@@ -822,16 +853,32 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
             end
             # Spot-Market costs and profits
             if nodes[n].is_market
-                flow_out = filter(x -> x[2] == n && x[4] == s, process_tuple)
-                flow_in = filter(x -> x[3] == n && x[4] == s, process_tuple)
-                price_ts = markets[n].price(s)
+                # bidding market with balance market
+                if markets[n].is_bid
+                    price_ts = markets[n].price(s)
+                    price_up_ts = markets[n].up_price(s)
+                    price_dw_ts = markets[n].down_price(s)
+                    for t in temporals.t
+                        tup = (nodes[n].name,s,t)
+                        tup_up = (nodes[n].name,"up",s,t)
+                        tup_dw = (nodes[n].name,"dw",s,t)
+                        add_to_expression!(market_costs[s], -v_bid[tup] * price_ts(t) * temporals(t))
+                        add_to_expression!(market_costs[s], v_flow_bal[tup_up] * price_up_ts(t) * temporals(t))
+                        add_to_expression!(market_costs[s], -v_flow_bal[tup_dw] * price_dw_ts(t) * temporals(t))
+                    end
+                # non-bidding market
+                else
+                    flow_out = filter(x -> x[2] == n && x[4] == s, process_tuple)
+                    flow_in = filter(x -> x[3] == n && x[4] == s, process_tuple)
+                    price_ts = markets[n].price(s)
 
-                for tup in flow_out
-                    add_to_expression!(market_costs[s], sum(v_flow[tup]) * price_ts(tup[5]) * temporals(tup[5]))
-                end
-                # Assuming what goes into the node is sold and has a negatuive cost
-                for tup in flow_in
-                    add_to_expression!(market_costs[s],  - sum(v_flow[tup]) * price_ts(tup[5]) * temporals(tup[5]))
+                    for tup in flow_out
+                        add_to_expression!(market_costs[s], sum(v_flow[tup]) * price_ts(tup[5]) * temporals(tup[5]))
+                    end
+                    # Assuming what goes into the node is sold and has a negatuive cost
+                    for tup in flow_in
+                        add_to_expression!(market_costs[s],  - sum(v_flow[tup]) * price_ts(tup[5]) * temporals(tup[5]))
+                    end
                 end
             end
         end
