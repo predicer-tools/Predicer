@@ -732,8 +732,8 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
                 s_indx = sortperm((price_matr[m][i,:]))
                 if markets[m].type == "energy"
                     for k in 2:length(s_indx)
-                        if price_matr[m][s_indx[k]] == price_matr[m][s_indx[k-1]]
-                            @constraint(model, 
+                        if price_matr[m][i, s_indx[k]] == price_matr[m][i, s_indx[k-1]]
+                            @constraint(model,
                                         v_bid[(markets[m].node,scenarios[s_indx[k]],t)] ==
                                         v_bid[(markets[m].node,scenarios[s_indx[k-1]],t)])
 
@@ -750,7 +750,7 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
                     end
                 elseif markets[m].type == "reserve" && input_data.contains_reserves
                     for k in 2:length(s_indx)
-                        if price_matr[m][s_indx[k]] == price_matr[m][s_indx[k-1]]
+                        if price_matr[m][i, s_indx[k]] == price_matr[m][i, s_indx[k-1]]
                             @constraint(model, v_res_final[(m,scenarios[s_indx[k]],t)] == v_res_final[(m,scenarios[s_indx[k-1]],t)])
                         else
                             @constraint(model, v_res_final[(m,scenarios[s_indx[k]],t)] >= v_res_final[(m,scenarios[s_indx[k-1]],t)])
