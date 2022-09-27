@@ -27,24 +27,28 @@
 - Navigate to the local folder containing the Predicer package.
 - type `]` to open the package manager in julia, and type `activate .` to activate the local Julia environment.
 
-        (IDH) pkg> activate .
+        (Predicer) pkg> activate .
 
 - Press backspace to exit the package manager
-- Type `using IDH` to use the package.
+- Type `using Predicer` to use the package.
 
-        julia> using IDH
+        julia> using Predicer
 
-- `IDH.init_model()` builds the model based on the defined input data in `.\\input_data\\input_data.xlsx`, and returns a dictionary containing the model and the model structure. 
+- To generate a model based on a input data file (in the example an Excel file located under `Predicer\\input_data\\`) use the `Predicer.generate_model(fpath)` function, where the parameter 'fpath' is the path to the input data file. The 'generate_model()' function imports the input data from the defined location, and build a model around it. The function returns two values, a "model contents" (mc) dictionary containing the built optimization model, as well as used expressions, indices and constraints for debugging. The other return value is the input data on which the optimization model is built on. 
         
-        julia> mc = IDH.init_model();
+        julia> mc, input_data = Predicer.generate_model(fpath)
+
+- Or if using the example input data file `Predicer\\input_data\\input_data.xlsx`
+
+        julia> mc, input_data = Predicer.generate_model(joinpath(pwd(), "input_data\\input_data.xlsx"))
 
 
-- `IDH.solve_model(mc)` solves the model `mc`, and shows the output of the solver.
+- `Predicer.solve_model(mc)` solves the model `mc`, and shows the solver output.
 
-        julia> IDH.solve_model(mc)
+        julia> Predicer.solve_model(mc)
 
-- `IDH.export_model_contents(mc, results=false)` can be used to export structure and indices of the model to an excel file located in `.\\results\\`. If the parameter `results` is true and the model has been solved, two files will be generated. One file (model_contents_yyy_mm_dd_hh_mm_ss.xlsx) contains the structure and indices of the model, and the other (model_contents_results_yyy_mm_dd_hh_mm_ss.xlsx) contains the model structure and the values for these. 
 
-        julia> IDH.export_model_contents(mc)
+- The resulting bid matrix can be exported to a .xlsx file under `Predicer\\results` by using the `Predicer.write_bid_matrix()` function
 
-        julia> IDH.export_model_contents(mc, true)
+        julia> Predicer.write_bid_matrix(mc)
+
