@@ -547,7 +547,7 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
                 if processes[tup[1]].is_online
                     v_start = model_contents["variable"]["v_start"]
                     v_stop = model_contents["variable"]["v_stop"]
-                    if processes[tup[1]].is_res
+                    if processes[tup[1]].is_res && input_data.contains_reserves
                         res_tup_up = filter(x->x[1]==res_dir[1] && x[3:end]==tup,res_potential_tuple)
                         res_tup_down = filter(x->x[1]==res_dir[2] && x[3:end]==tup,res_potential_tuple)
                         if tup[2] in res_nodes_tuple
@@ -565,7 +565,7 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
                         add_to_expression!(ramp_expr_down[tup], - ramp_dw_cap - stop_cap * v_stop[(tup[1], tup[4], tup[5])]) 
                     end
                 else
-                    if processes[tup[1]].is_res
+                    if processes[tup[1]].is_res && input_data.contains_reserves
                         res_tup_up = filter(x->x[1]==res_dir[1] && x[3:end]==tup,res_potential_tuple)
                         res_tup_down = filter(x->x[1]==res_dir[2] && x[3:end]==tup,res_potential_tuple)
                         if tup[2] in res_nodes_tuple
@@ -600,8 +600,6 @@ function setup_delay_process_balance(model_contents::OrderedDict, input_data::Pr
     v_flow = model_contents["variable"]["v_flow"]
     processes = input_data.processes
     temporals = input_data.temporals
-    highest_delay = model_contents["highest_delay"]
-
     so_expr= OrderedDict()
     si_expr= OrderedDict()
     for tup in delay_tuple
@@ -723,6 +721,13 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
                                 v_flow_bal[filter(x->x[1]==markets[m].node && x[2]=="dw" && x[4]==t && x[3]==s,balance_process_tuple)[1]],-1.0)
                     end
                 end
+                if markets[m].type=="reserve"
+                    for t in temporals.t
+                        if markets[m].price(s)(t) == 0
+                            fix(v_res_final[(m, s, t)], 0.0; force=true)
+                        end
+                    end
+                end
             end
         end
     end
@@ -755,7 +760,6 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
                         else
                             @constraint(model, v_res_final[(m,scenarios[s_indx[k]],t)] >= v_res_final[(m,scenarios[s_indx[k-1]],t)])
                         end
-
                     end
                 end
             end
