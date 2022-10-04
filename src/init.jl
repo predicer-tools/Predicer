@@ -29,7 +29,6 @@ function setup_optimizer(solver::Any)
 end
 
 function build_model(model_contents::OrderedDict, input_data::Predicer.InputData)
-    resolve_delays(input_data)
     create_variables(model_contents, input_data)
     create_constraints(model_contents, input_data)
 end
@@ -54,6 +53,10 @@ function generate_model(fpath::String)
     validation_result = Predicer.validate_data(input_data)
     if !validation_result["is_valid"]
         return validation_result["errors"]
+    end
+    # Resolve potential delays
+    if input_data.contains_delay
+        input_data = Predicer.resolve_delays(input_data)
     end
     # create mc
     mc = build_model_contents_dict()
