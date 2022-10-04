@@ -7,30 +7,36 @@ using DataStructures
 using XLSX
 
 """
-    get_result_dataframe(model_contents,type="",process="",node="",scenario="")
+    get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.InputData,type::String="",process::String="",node::String="",scenario::String="")
 
-Returns a dataframe containing specific information from the model?
+Returns a dataframe containing specific information for a variable in the model. 
 
 # Arguments
-- `model_contents::OrderedDict`: ?
-- `type`: ?
-- `process`: ?
-- `node`: ?
-- `scenario`: ?
+- `model_contents::OrderedDict`: Model contents dict.
+- `input_data::Predicer.InputData`: Input data used in model.
+- `type::String`: Type of variable to show, such as 'v_flow' or 'v_state'.
+- `process::String`: The name of the process connected to the variable.
+- `node::String`: The name of the node related to the variable.
+- `scenario::String`: The name of the scenario for which the value is to be shown.
 """
 function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.InputData,type::String="",process::String="",node::String="",scenario::String="")
     println("Getting results for:")
     tuples = Predicer.create_tuples(input_data)
-    temporals = unique(map(x->x[5],tuples["process_tuple"]))
+    temporals = input_data.temporals.t
     df = DataFrame(t = temporals)
     vars = model_contents["variable"]
     expr = model_contents["expression"]
+    if !isempty(scenario)
+        scenarios = [scenario]
+    else
+        scenarios = collect(keys(input_data.scenarios))
+    end
     if type == "v_flow"
         v_flow = vars[type]
-        tups = unique(map(x->(x[1],x[2],x[3]),filter(x->x[1]==process, tuples["process_tuple"])))
-        for tup in tups
-            colname = join(tup,"-")
-            col_tup = filter(x->x[1:3]==tup && x[4]==scenario, tuples["process_tuple"])
+        tups = unique(map(x->(x[1],x[2],x[3]),filter(x->x[1]==process, vcat(tuples["process_tuple"], tuples["delay_tuple"]))))
+        for tup in tups, s in scenarios
+            colname = join(tup,"-") * "-" *s
+            col_tup = filter(x->x[1:3]==tup && x[4]==s, vcat(tuples["process_tuple"], tuples["delay_tuple"]))
             if !isempty(col_tup)
                 df[!, colname] = value.(v_flow[col_tup].data)
             end
@@ -38,9 +44,9 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
     elseif type == "v_reserve"
         v_res = vars[type]
         tups = unique(map(x->(x[1],x[2],x[3],x[5]),filter(x->x[3]==process, tuples["res_potential_tuple"])))
-        for tup in tups
-            col_name = join(tup,"-")
-            col_tup = filter(x->(x[1],x[2],x[3],x[5])==tup && x[6]==scenario, tuples["res_potential_tuple"])
+        for tup in tups, s in scenarios
+            col_name = join(tup,"-")  * "-" *s
+            col_tup = filter(x->(x[1],x[2],x[3],x[5])==tup && x[6]==s, tuples["res_potential_tuple"])
             if !isempty(col_tup)
                 df[!, col_name] = value.(v_res[col_tup].data)
             end
@@ -48,53 +54,71 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
     elseif type == "v_res_final"
         v_res = vars[type]
         ress = unique(map(x->x[1],tuples["res_final_tuple"]))
-        for r in ress
-            col_tup = filter(x->x[1]==r && x[2]==scenario, tuples["res_final_tuple"])
+        for r in ress, s in scenarios
+            colname = r * "-" * s
+            col_tup = filter(x->x[1]==r && x[2]==s, tuples["res_final_tuple"])
             if !isempty(col_tup)
-                df[!, r] = value.(v_res[col_tup].data)
+                df[!, colname] = value.(v_res[col_tup].data)
             end
         end
 
     elseif type == "v_online" || type == "v_start" || type == "v_stop"
         v_bin = vars[type]
         procs = unique(map(x->x[1],tuples["process_tuple"]))
-        for p in procs
-            col_tup = filter(x->x[1]==p && x[2]==scenario, tuples["proc_online_tuple"])
+        for p in procs, s in scenarios
+            col_tup = filter(x->x[1]==p && x[2]==s, tuples["proc_online_tuple"])
+            colname = p * "-" * s
             if !isempty(col_tup)
-                df[!, p] = value.(v_bin[col_tup].data)
+                df[!, colname] = value.(v_bin[col_tup].data)
             end
         end
     elseif type == "v_state"
         v_state = vars[type]
-        col_tup = filter(x->x[1]==node && x[2]==scenario, tuples["node_state_tuple"])
-        if !isempty(col_tup)
-            df[!, node] = value.(v_state[col_tup].data)
+        if !isempty(node)
+            col_tup = filter(x->x[1]==node && x[2]==scenario, tuples["node_state_tuple"])
+            if !isempty(col_tup)
+                df[!, node] = value.(v_state[col_tup].data)
+            end
+        else
+            tups = unique(map(t -> t[1], filter(x->x[2]==scenario, tuples["node_state_tuple"])))
+            for tup in tups
+                col_tup = filter(x->x[1]==tup && x[2]==scenario, tuples["node_state_tuple"])
+                if !isempty(col_tup)
+                    df[!, tup] = value.(v_state[col_tup].data)
+                end
+            end
         end
     elseif type == "vq_state_up" || type == "vq_state_dw"
         v_state = vars[type]
         nods = unique(map(x->x[1],tuples["node_balance_tuple"]))
-        for n in nods
-            col_tup = filter(x->x[1]==n && x[2]==scenario, tuples["node_balance_tuple"])
+        for n in nods, s in scenarios
+            col_tup = filter(x->x[1]==n && x[2]==s, tuples["node_balance_tuple"])
+            colname = n * "-" * s
             if !isempty(col_tup)
-                df[!, n] = value.(v_state[col_tup].data)
+                df[!, colname] = value.(v_state[col_tup].data)
             end
         end
     elseif type == "v_bid"
         v_bid = expr[type]
-        bid_tups = unique(map(x->(x[1],x[3],x[4]),filter(x->x[1]==node && x[3]==scenario,tuples["balance_market_tuple"])))
-
-        dat_vec = []
-        for (i,tup) in enumerate(bid_tups)
-            push!(dat_vec,value(v_bid[tup]))
+        for s in scenarios
+            bid_tups = unique(map(x->(x[1],x[3],x[4]),filter(x->x[1]==node && x[3]==s,tuples["balance_market_tuple"])))
+            if !isempty(bid_tups)
+                dat_vec = []
+                colname = node * "-" * s
+                for (i,tup) in enumerate(bid_tups)
+                    push!(dat_vec,value(v_bid[tup]))
+                end
+                df[!,colname] = dat_vec
+            end
         end
-        df[!,node] = dat_vec
     elseif type == "v_flow_bal"
         v_bal = vars[type]
         dir = ["up","dw"]
-        for d in dir
-            tup = filter(x->x[1]==node && x[2]==d && x[3]==scenario, tuples["balance_market_tuple"])
+        for d in dir, s in scenarios
+            tup = filter(x->x[1]==node && x[2]==d && x[3]==s, tuples["balance_market_tuple"])
+            colname = node * "-" * d * "-" * s
             if !isempty(tup)
-                df[!,d] = value.(v_bal[tup].data)
+                df[!,colname] = value.(v_bal[tup].data)
             end
         end
     else
@@ -159,68 +183,9 @@ end
 
 function resolve_delays(input_data::Predicer.InputData)
     processes = input_data.processes
-    processes_to_add = []
-    nodes_to_add = []
-    highest_delay = 0
     for p in keys(processes)
-        delay_topos = filter(t -> t.delay > 0, processes[p].topos)
-        if !isempty(delay_topos)
-            for topo in delay_topos
-                highest_delay = max(topo.delay, highest_delay)
-                if processes[p].conversion == 2 # transfer process
-                    Predicer.add_delay(processes[p], topo.delay)
-                    topo.delay = 0
-                elseif processes[p].conversion == 1 # unit based process
-                    # create node
-                    delay_n_name = "delayNode_" * processes[p].name * "_" * topo.source * "_to_" * topo.sink
-                    dn = Node(delay_n_name)
-                    push!(nodes_to_add, dn)
-
-                    # create transfer process
-                    delay_p_name = "delayProcess_" * processes[p].name * "_" * topo.source * "_to_" * topo.sink
-                    dp = TransferProcess(delay_p_name, topo.delay)
-                    add_eff(dp, 1.0)
-                    add_load_limits(dp, 0.0, 1.0)
-
-                    # add topos to new delay/transport process
-                    # - if topo is a sink of p, add the delay node after p
-                    # - if topo is a source of p, add the delay node before p
-                    if topo.source == processes[p].name # The topo is a sink, as it goes from the process, 
-                        add_topology(dp, Topology(delay_n_name, topo.sink, topo.capacity, 0.0, 1.0, 1.0, 0.0))
-
-                    elseif topo.sink == processes[p].name
-                        add_topology(dp, Topology(topo.source, delay_n_name, topo.capacity, 0.0, 1.0, 1.0, 0.0))
-                    end
-                    push!(processes_to_add, dp)
-
-                    # change p topos depending on if it is a so or si. 
-                    # - delay node as so if topo is a so
-                    # - delay node as si if topo is a sink
-                    if topo.source == processes[p].name
-                        for t in processes[p].topos
-                            if t == topo
-                                t.sink = delay_n_name
-                                t.delay = 0
-                            end
-                        end
-                    else
-                        for t in processes[p].topos
-                            if t == topo
-                                t.source = delay_n_name
-                                t.delay = 0
-                            end
-                        end
-                    end
-                    # manage "history" of original nodes.
-                end
-            end
-        end
+        Predicer.add_delay(input_data.temporals, processes[p].delay)
     end
-    for p in processes_to_add
-        input_data.processes[p.name] = p
-    end
-    for n in nodes_to_add
-        input_data.nodes[n.name] = n
-    end
+    input_data.temporals.t = input_data.temporals.delay_ts
     return input_data
 end
