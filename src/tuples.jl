@@ -32,6 +32,7 @@ function create_tuples(input_data::InputData) # unused, should be debricated
     tuplebook["fixed_value_tuple"] = fixed_market_tuples(input_data)
     tuplebook["ramp_tuple"] = process_topology_ramp_times_tuples(input_data)
     tuplebook["risk_tuple"] = scenarios(input_data)
+    tuplebook["delay_tuple"] = create_delay_process_tuple(input_data)
     tuplebook["balance_market_tuple"] = create_balance_market_tuple(input_data)
     return tuplebook
 end
@@ -514,11 +515,14 @@ function scenarios(input_data::InputData) # original name: create_risk_tuple()
 end
 
 """ 
-    create_delay_tuple(input_data::OrderedDict)
+    create_delay_process_tuple(input_data::OrderedDict)
 
 Returns array of tuples containing processes with delay functionality. Form: (p, so, si, s, t).
 """
-function create_delay_tuple(input_data::Predicer.InputData)
+function create_delay_process_tuple(input_data::Predicer.InputData)
+    if !input_data.contains_delay
+        return []
+    end
     delay_tuple = []
     processes = input_data.processes
     scenarios = collect(keys(input_data.scenarios))
@@ -526,22 +530,8 @@ function create_delay_tuple(input_data::Predicer.InputData)
     for p in keys(processes)
         if processes[p].delay != 0
             for topo in processes[p].topos
-                additional_timestep_n = round(max(1, abs(processes[p].delay)/temporals.dtf))
-                extra_ts = temporals.t
-                for i = 1:additional_timestep_n
-                    if processes[p].delay > 0
-                        extra_ts = vcat(string(ZonedDateTime(extra_ts[1], temporals.ts_format) - Minute(60*temporals.dtf)), extra_ts)
-                        extra_ts = vcat(extra_ts, string(ZonedDateTime(extra_ts[end], temporals.ts_format) + Minute(60*temporals.dtf)))
-                    else
-                        extra_ts = vcat(string(ZonedDateTime(extra_ts[1], temporals.ts_format) + Minute(60*temporals.dtf)), extra_ts)
-                        extra_ts = vcat(extra_ts, string(ZonedDateTime(extra_ts[end], temporals.ts_format) - Minute(60*temporals.dtf)))
-                    end
-                end
-                for t in extra_ts
-                    for s in scenarios
-                        # Create additional timesteps for processes with delays.
-                        push!(delay_tuple, (p, topo.source, topo.sink, s, t))
-                    end
+                for t in temporals.t, s in scenarios
+                    push!(delay_tuple, (p, topo.source, topo.sink, s, t))
                 end
             end
         end
