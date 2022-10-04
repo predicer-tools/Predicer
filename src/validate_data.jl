@@ -38,6 +38,8 @@ using Predicer
 # TODO
 # Need to add validation for delays!
 # If a transfer process has been given two delays, how should it be handled? Use the larger delay?
+# Add check that no reserve processes exist if no reserve nodes exist
+# Also check if reserve markets exist. If not, all reserve functionality is useless. 
 
 
 """
