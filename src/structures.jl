@@ -10,6 +10,9 @@ abstract type AbstractProcess end
         dtf::Float64
         is_variable_dt::Bool
         variable_dt::Vector{Tuple{String, Float64}}
+        ts_format::String
+        delay::Float64
+        delay_ts::Vector{String}
     end
 
 Struct used for storing information about the timesteps in the model.
@@ -25,6 +28,8 @@ mutable struct Temporals
     is_variable_dt::Bool
     variable_dt::Vector{Tuple{String, Float64}}
     ts_format::String
+    delay::Float64
+    delay_ts::Vector{String}
 end
 
 
@@ -40,10 +45,38 @@ function Temporals(ts::Vector{String}, ts_format="yyyy-mm-ddTHH:MM:SSzzzz")
         push!(dts, (ts[i], Dates.Minute(zdt_ts[i+1] - zdt_ts[i])/Dates.Minute(60)))
     end
     if length(unique(map(t -> t[2], dts))) == 1
-        return Temporals(ts, dts[1][2], false, [], ts_format)
+        return Temporals(ts, dts[1][2], false, [], ts_format, 0, [])
     elseif length(unique(map(t -> t[2], dts))) > 1
-        return Temporals(ts, 0.0, true, dts, ts_format)
+        return Temporals(ts, 0.0, true, dts, ts_format, 0, [])
     end
+end
+
+
+
+"""
+    function add_delay(t::Temporals, d::Float64)
+
+Sets the delay of the temporals to the provided value. If a delay already exists, the larger delay is used. 
+"""
+
+function add_delay(t::Temporals, d::Float64, force::Bool=false)
+    d_diff = d - t.delay
+    if d_diff > 0.0 || force
+        t.delay = d
+        additional_ts = round(max(1, abs(t.delay)/t.dtf))
+        extra_ts = t.t
+        for i = 1:additional_ts
+            if t.delay > 0
+                extra_ts = vcat(string(ZonedDateTime(extra_ts[1], t.ts_format) - Minute(60*t.dtf)), extra_ts)
+                extra_ts = vcat(extra_ts, string(ZonedDateTime(extra_ts[end], t.ts_format) + Minute(60*t.dtf)))
+            else
+                extra_ts = vcat(string(ZonedDateTime(extra_ts[1], t.ts_format) + Minute(60*t.dtf)), extra_ts)
+                extra_ts = vcat(extra_ts, string(ZonedDateTime(extra_ts[end], t.ts_format) - Minute(60*t.dtf)))
+            end
+        end
+        t.delay_ts = extra_ts
+    end
+    return t
 end
 
 
@@ -83,7 +116,7 @@ end
         state_max::Float64
         state_min::Float64
         initial_state::Float64
-        residual_value::Int64
+        residual_value::Float64
         function State(in_max, out_max, state_loss_proportional, state_max, state_min=0, initial_state=0, residual_value=0)
             return new(in_max, out_max, state_loss_proportional, state_max, state_min, initial_state, residual_value)
         end
@@ -97,7 +130,7 @@ A struct for node states (storage), holds information on the parameters of the s
 - `state_max::Float64`: Maximum value for state variable. 
 - `state_min::Float64`: Minimum value for state variable. 
 - `initial_state::Float64`: Initial value of the state variable at t = 0.
-- `residual_value::Int64`: Value of the product remaining in the state after time horizon. 
+- `residual_value::Float64`: Value of the product remaining in the state after time horizon. 
 
 """
 struct State
@@ -107,7 +140,7 @@ struct State
     state_max::Float64
     state_min::Float64
     initial_state::Float64
-    residual_value::Int64
+    residual_value::Float64
     function State(in_max, out_max, state_loss_proportional, state_max, state_min=0, initial_state=0, residual_value=0)
         return new(in_max, out_max, state_loss_proportional, state_max, state_min, initial_state, residual_value)
     end
@@ -458,10 +491,9 @@ end
         VOM_cost::Float64
         ramp_up::Float64
         ramp_down::Float64
-        delay::Float64
         cap_ts::TimeSeriesData
-        function Topology(source::String, sink::String, capacity::Float64, VOM_cost::Float64, ramp_up::Float64, ramp_down::Float64, delay::Float64)
-            return new(source, sink, capacity, VOM_cost, ramp_up, ramp_down, delay, TimeSeriesData())
+        function Topology(source::String, sink::String, capacity::Float64, VOM_cost::Float64, ramp_up::Float64, ramp_down::Float64)
+            return new(source, sink, capacity, VOM_cost, ramp_up, ramp_down, TimeSeriesData())
         end
     end
 
@@ -473,7 +505,6 @@ A struct for a process topology, signifying the connection between flows in a pr
 - `VOM_cost::Float64`: VOM cost of using this connection. 
 - `ramp_up::Float64`: Maximum allowed increase of the linked flow variable value between timesteps. Min 0.0 max 1.0. 
 - `ramp_down::Float64`: Minimum allowed increase of the linked flow variable value between timesteps. Min 0.0 max 1.0.
-- `delay::Float64`: A set delay in hours over the process. 
 - `cap_ts::TimeSeriesData`: TimeSeriesStruct
 """
 mutable struct Topology
@@ -483,10 +514,9 @@ mutable struct Topology
     VOM_cost::Float64
     ramp_up::Float64
     ramp_down::Float64
-    delay::Float64
     cap_ts::TimeSeriesData
-    function Topology(source::String, sink::String, capacity::Float64, VOM_cost::Float64, ramp_up::Float64, ramp_down::Float64, delay::Float64)
-        return new(source, sink, capacity, VOM_cost, ramp_up, ramp_down, delay, TimeSeriesData())
+    function Topology(source::String, sink::String, capacity::Float64, VOM_cost::Float64, ramp_up::Float64, ramp_down::Float64)
+        return new(source, sink, capacity, VOM_cost, ramp_up, ramp_down, TimeSeriesData())
     end
 end
 
@@ -590,8 +620,8 @@ end
 
 Returns a transfer process. 
 """
-function TransferProcess(name::String, delay::Float64=0.0)
-    return Process(name, 2, delay)
+function TransferProcess(name::String)
+    return Process(name, 2)
 end
 
 
@@ -747,6 +777,8 @@ end
         reserve_type::String
         is_bid::Bool
         price::TimeSeriesData
+        up_price::TimeSeriesData
+        down_price::TimeSeriesData
         fixed::Vector{Tuple{Any,Any}}
         function Market(name, type, node, direction, realisation, reserve_type, is_bid)
             return new(name, type, node, direction, realisation, reserve_type, is_bid, [], [])
@@ -778,7 +810,7 @@ struct Market
     down_price::TimeSeriesData
     fixed::Vector{Tuple{Any,Any}}
     function Market(name, type, node, direction, realisation, reserve_type, is_bid)
-        return new(name, type, node, direction, realisation, reserve_type, is_bid, TimeSeriesData(),TimeSeriesData(),TimeSeriesData(), [])
+        return new(name, type, node, direction, realisation, reserve_type, is_bid, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
     end
 end
 
@@ -844,6 +876,7 @@ end
         contains_states::Bool
         contains_piecewise_eff::Bool
         contains_risk::Bool
+        contains_delay::Bool
         processes::OrderedDict{String, Process}
         nodes::OrderedDict{String, Node}
         markets::OrderedDict{String, Market}
@@ -861,6 +894,7 @@ Struct containing the imported input data, based on which the Predicer is built.
 - `contains_states::Bool`: Boolean indicating whether the model (input_data) requires state functionality structures. 
 - `contains_piecewise_eff::Bool`: Boolean indicating whether the model (input_data) requires piecewise efficiency functionality structures. 
 - `contains_risk::Bool`: Boolean indicating whether the model (input_data) requires risk functionality structures. 
+- `contains_delay::Bool`: Boolean indicating whether the model (input_data) requires delay functionality structures. 
 - `processes::OrderedDict{String, Process}`: A dict containing the data relevant for processes.
 - `nodes::OrderedDict{String, Node}`: A dict containing the data relevant for nodes.
 - `markets::OrderedDict{String, Market}`: A dict containing the data relevant for markets.
@@ -876,6 +910,7 @@ mutable struct InputData
     contains_states::Bool
     contains_piecewise_eff::Bool
     contains_risk::Bool
+    contains_delay::Bool
     processes::OrderedDict{String, Process}
     nodes::OrderedDict{String, Node}
     markets::OrderedDict{String, Market}
@@ -883,8 +918,8 @@ mutable struct InputData
     reserve_type::OrderedDict{String, Float64}
     risk::OrderedDict{String, Float64}
     gen_constraints::OrderedDict{String, GenConstraint}
-    function InputData(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
-        return new(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
+    function InputData(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
+        return new(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
     end
 end
 
