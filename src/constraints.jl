@@ -38,6 +38,7 @@ Setup node balance constraints used in the model.
 """
 function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
+    delay_tuple = create_delay_process_tuple(input_data)
     process_tuple = process_topology_tuples(input_data)
     
     node_state_tuple = state_node_tuples(input_data)
@@ -61,8 +62,8 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
     for (i, tu) in enumerate(node_balance_tuple)
         # tu of form (node, scenario, t)
         # process tuple of form (process_name, source, sink, scenario, t)
-        cons = filter(x -> (x[2] == tu[1] && x[4] == tu[2] && x[5] == tu[3]), process_tuple)
-        prod = filter(x -> (x[3] == tu[1] && x[4] == tu[2] && x[5] == tu[3]), process_tuple)
+        cons = filter(x -> (x[2] == tu[1] && x[4] == tu[2] && x[5] == tu[3]), vcat(process_tuple, delay_tuple))
+        prod = filter(x -> (x[3] == tu[1] && x[4] == tu[2] && x[5] == tu[3]), vcat(process_tuple, delay_tuple))
 
         if input_data.contains_reserves
             res_dir = model_contents["res_dir"]
@@ -254,6 +255,49 @@ function setup_process_balance(model_contents::OrderedDict, input_data::Predicer
         sources = filter(x -> (x[1] == tup[1] && x[3] == tup[1] && x[4] == tup[2] && x[5] == tup[3]), process_tuple)
         sinks = filter(x -> (x[1] == tup[1] && x[2] == tup[1] && x[4] == tup[2] && x[5] == tup[3]), process_tuple)
         nod_eff[tup] = sum(v_flow[sinks]) - (length(sources) > 0 ? eff * sum(v_flow[sources]) : 0)
+    end
+
+# Delay process balance
+    model_contents["expression"]["delay_e"] = delay_e = OrderedDict()
+    if input_data.contains_delay
+        model = model_contents["model"]
+        processes = input_data.processes
+        scenarios = collect(keys(input_data.scenarios))
+        temporals = input_data.temporals
+        delay_p_tups = Predicer.create_delay_process_tuple(input_data)
+        for dp in unique(map(tup -> tup[1], delay_p_tups))
+            delay = processes[dp].delay
+            n_delay_ts = Int(round(max(1, abs(delay)/temporals.dtf)))
+            for s in scenarios
+                if delay > 0
+                    for (i, t) in enumerate(temporals.t[begin:end-n_delay_ts])
+                        so = filter(tup -> tup[1] == dp && tup[3] == dp && tup[4] == s && tup[5] == temporals.t[i], delay_p_tups)
+                        si = filter(tup -> tup[1] == dp && tup[2] == dp && tup[4] == s && tup[5] == temporals.t[i+n_delay_ts], delay_p_tups)
+                        delay_e[(dp, s, t)] = @expression(model, sum(v_flow[so]) - sum(v_flow[si]))
+                    end
+                    dw_at_t_begin1 = filter(tup -> tup[1] == dp && tup[2] == dp && tup[4] == s && tup[5] == temporals.t[begin], delay_p_tups)
+                    dw_at_t_begin2 = filter(tup -> tup[1] == dp && tup[2] == dp && tup[4] == s && tup[5] == temporals.t[begin+1], delay_p_tups)
+                    up_at_t_end1 = filter(tup -> tup[1] == dp && tup[3] == dp && tup[4] == s && tup[5] == temporals.t[end], delay_p_tups)
+                    up_at_t_end2 = filter(tup -> tup[1] == dp && tup[3] == dp && tup[4] == s && tup[5] == temporals.t[end-1], delay_p_tups)
+                    delay_e[(dp,s,"dw")] = @expression(model, sum(v_flow[dw_at_t_begin1]) - sum(v_flow[dw_at_t_begin2]))
+                    delay_e[(dp,s,"up")] = @expression(model, sum(v_flow[up_at_t_end1]) - sum(v_flow[up_at_t_end2]))
+                elseif delay < 0
+                    for (i, t) in enumerate(temporals.t[begin+n_delay_ts:end])
+                        so = filter(tup -> tup[1] == dp && tup[3] == dp && tup[4] == s && tup[5] == temporals.t[i-n_delay_ts], delay_p_tups)
+                        si = filter(tup -> tup[1] == dp && tup[2] == dp && tup[4] == s && tup[5] == temporals.t[i], delay_p_tups)
+                        @constraint(model, sum(v_flow[si]) - sum(v_flow[so]) == 0)
+                        delay_e[(dp, s, t)] = @expression(model, sum(v_flow[so]) - sum(v_flow[si]))
+                    end
+                    dw_at_t_begin1 = filter(tup -> tup[1] == dp && tup[3] == dp && tup[4] == s && tup[5] == temporals.t[begin], delay_p_tups)
+                    dw_at_t_begin2 = filter(tup -> tup[1] == dp && tup[3] == dp && tup[4] == s && tup[5] == temporals.t[begin+1], delay_p_tups)
+                    up_at_t_end1 = filter(tup -> tup[1] == dp && tup[2] == dp && tup[4] == s && tup[5] == temporals.t[end], delay_p_tups)
+                    up_at_t_end2 = filter(tup -> tup[1] == dp && tup[2] == dp && tup[4] == s && tup[5] == temporals.t[end-1], delay_p_tups)
+                    delay_e[(dp,s,"dw")] = @expression(model, sum(v_flow[dw_at_t_begin1]) - sum(v_flow[dw_at_t_begin2]))
+                    delay_e[(dp,s,"up")] = @expression(model, sum(v_flow[up_at_t_end1]) - sum(v_flow[up_at_t_end2]))
+                end
+            end
+        end
+        @constraint(model, delay_process_balance_eq[k in collect(keys(delay_e))], delay_e[k] == 0)
     end
 
     process_bal_eq = @constraint(model, process_bal_eq[tup in proc_balance_tuple], nod_eff[tup] == 0)
