@@ -113,7 +113,7 @@ function import_input_data(input_data_path::String)
     for i in 1:nrow(system_data["processes"])
         p = system_data["processes"][i, :]
         if p.conversion == 1
-            processes[p.process] = Predicer.Process(p.process)
+            processes[p.process] = Predicer.Process(p.process, 1, Float64(p.delay))
         elseif p.conversion == 2
             processes[p.process] = Predicer.TransferProcess(p.process)
         elseif p.conversion == 3
@@ -139,35 +139,27 @@ function import_input_data(input_data_path::String)
             pt = system_data["process_topology"][j, :]
             if pt.process == p.process
                 if pt.source_sink == "source"
-                    push!(sources, (pt.node, pt.capacity, pt.VOM_cost, pt.ramp_up, pt.ramp_down, pt.delay))
+                    push!(sources, (pt.node, pt.capacity, pt.VOM_cost, pt.ramp_up, pt.ramp_down))
                 elseif pt.source_sink == "sink"
-                    push!(sinks, (pt.node, pt.capacity, pt.VOM_cost, pt.ramp_up, pt.ramp_down, pt.delay))
+                    push!(sinks, (pt.node, pt.capacity, pt.VOM_cost, pt.ramp_up, pt.ramp_down))
                 end
             end
         end
         if p.conversion == 1
             for so in sources
-                Predicer.add_topology(processes[p.process], Predicer.Topology(so[1], p.process, Float64(so[2]), Float64(so[3]), Float64(so[4]), Float64(so[5]), Float64(so[6])))
+                Predicer.add_topology(processes[p.process], Predicer.Topology(so[1], p.process, Float64(so[2]), Float64(so[3]), Float64(so[4]), Float64(so[5])))
             end
             for si in sinks
-                Predicer.add_topology(processes[p.process], Predicer.Topology(p.process, si[1], Float64(si[2]), Float64(si[3]), Float64(si[4]), Float64(si[5]), Float64(si[6])))
+                Predicer.add_topology(processes[p.process], Predicer.Topology(p.process, si[1], Float64(si[2]), Float64(si[3]), Float64(si[4]), Float64(si[5])))
             end
         elseif p.conversion == 2
             for so in sources, si in sinks
-
-                if so[6] == si[6]
-                    topo_delay = so[6]
-                elseif abs(so[6]) > abs(si[6])
-                    topo_delay = so[6]
-                elseif abs(so[6]) < abs(si[6])
-                    topo_delay = si[6]
-                end
-                Predicer.add_topology(processes[p.process], Predicer.Topology(so[1], si[1], Float64(min(so[2], si[2])), Float64(si[3]), Float64(si[4]), Float64(si[5]), Float64(topo_delay)))
+                Predicer.add_topology(processes[p.process], Predicer.Topology(so[1], si[1], Float64(min(so[2], si[2])), Float64(si[3]), Float64(si[4]), Float64(si[5])))
             end
         elseif p.conversion == 3
             for so in sources, si in sinks
-                Predicer.add_topology(processes[p.process], Predicer.Topology(so[1], si[1], Float64(min(so[2], si[2])), Float64(so[3]), Float64(si[4]), Float64(si[5]), Float64(si[6])))
-                Predicer.add_topology(processes[p.process], Predicer.Topology(si[1], so[1], Float64(min(so[2], si[2])), Float64(si[3]), Float64(si[4]), Float64(si[5]), Float64(si[6])))
+                Predicer.add_topology(processes[p.process], Predicer.Topology(so[1], si[1], Float64(min(so[2], si[2])), Float64(so[3]), Float64(si[4]), Float64(si[5])))
+                Predicer.add_topology(processes[p.process], Predicer.Topology(si[1], so[1], Float64(min(so[2], si[2])), Float64(si[3]), Float64(si[4]), Float64(si[5])))
             end
         end
         if Bool(p.is_res)
@@ -344,6 +336,7 @@ function import_input_data(input_data_path::String)
     contains_states = (true in map(n -> n.is_state, collect(values(nodes))))
     contains_piecewise_eff = (false in map(p -> isempty(p.eff_ops), collect(values(processes))))
     contains_risk = (risk["beta"] > 0)
+    contains_delay = !iszero(map(p -> p.delay, collect(values(processes))))
 
-    return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
+    return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
 end
