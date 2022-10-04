@@ -30,7 +30,7 @@ Set up v_flow variables, which symbolise flows between nodes and processes.
 """
 function create_v_flow(model_contents::OrderedDict, input_data::InputData)
     process_tuples = process_topology_tuples(input_data)
-    delay_tuples = create_delay_tuple(input_data)
+    delay_tuples = create_delay_process_tuple(input_data)
     model = model_contents["model"]
     v_flow = @variable(model, v_flow[tup in vcat(process_tuples, delay_tuples)] >= 0)
     model_contents["variable"]["v_flow"] = v_flow
