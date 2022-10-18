@@ -166,7 +166,7 @@ function import_input_data(input_data_path::String)
             Predicer.add_process_to_reserve(processes[p.process]) 
         end
         if Bool(p.is_online)
-            Predicer.add_online(processes[p.process], Float64(p.start_cost), Float64(p.min_online), Float64(p.min_offline), Bool(p.initial_state))
+            Predicer.add_online(processes[p.process], Float64(p.start_cost), Float64(p.min_online), Float64(p.min_offline), Float64(p.max_online), Float64(p.max_offline), Bool(p.initial_state))
         end
     end
     

@@ -537,6 +537,8 @@ end
         start_cost::Float64
         min_online::Int64
         min_offline::Int64
+        max_online::Int64
+        max_offline::Int64
         initial_state::Bool
         topos::Vector{Topology}
         cf::TimeSeriesData
@@ -561,6 +563,8 @@ A struct for a process (unit).
 - `start_cost::Float64`: Cost to start the process, if the 'is_online' flag is true.
 - `min_online::Int64`: Minimum time the process has to be online after start.
 - `min_offline::Int64`: Minimum time the process has to be offline after start.
+- `max_online::Int64`: Maximum time the process can be online after start.
+- `max_offline::Int64`: Maximum time the process can be offline after start.
 - `initial_state::Bool`: Initial state (on/off) of the process at the start of simulation.
 - `topos::Vector{Topology}`: Vector containing the topologies of the process.
 - `cf::TimeSeriesData`: Vector containing TimeSeries limiting a cf process.
@@ -582,6 +586,8 @@ mutable struct Process <: AbstractProcess
     start_cost::Float64
     min_online::Int64
     min_offline::Int64
+    max_online::Int64
+    max_offline::Int64
     initial_state::Bool
     topos::Vector{Topology}
     cf::TimeSeriesData
@@ -601,7 +607,7 @@ The constructor for the Process struct.
 - `conversion::Int`: Used to differentiate between types of process. 1 = unit based, 2 = transfer process, 3 = market process.
 """
 function Process(name::String, conversion::Int=1, delay::Float64=0.0)
-    return Process(name, conversion, delay, false, false, false, false, -1.0, 0.0, 1.0, 0.0, 0, 0, true, [], TimeSeriesData(), TimeSeriesData(), [], [])
+    return Process(name, conversion, delay, false, false, false, false, -1.0, 0.0, 1.0, 0.0, 0, 0, 0, 0, true, [], TimeSeriesData(), TimeSeriesData(), [], [])
 end
 
 
@@ -667,15 +673,17 @@ end
 
 
 """
-    function add_online(p::Process, start_cost::Float64=0, min_online::Float64=0, min_offline::Float64=0, initial_state::Bool=true)
+    function add_online(p::Process, start_cost::Float64=0, min_online::Float64=0, min_offline::Float64=0, max_online::Float64=0, max_offline::Float64=0, initial_state::Bool=true)
 
 Add binary online functionality to the process.
 """
-function add_online(p::Process, start_cost::Float64=0.0, min_online::Float64=0.0, min_offline::Float64=0.0, initial_state::Bool=true)
+function add_online(p::Process, start_cost::Float64=0.0, min_online::Float64=0.0, min_offline::Float64=0.0, max_online::Float64=0.0, max_offline::Float64=0.0, initial_state::Bool=true)
     if !p.is_cf
         p.is_online = true
         p.min_online = min_online >= 0 ? min_online : error("Minimum time online cannot be less than 0.")
         p.min_offline = min_offline >= 0 ? min_offline : error("Minimum time offline cannot be less than 0.")
+        p.max_online = max_online >= 0 ? max_online : error("Maximum time online cannot be less than 0.")
+        p.max_offline = max_offline >= 0 ? max_offline : error("Maximum time offline cannot be less than 0.")
         p.start_cost = start_cost
         p.initial_state = initial_state
     else
