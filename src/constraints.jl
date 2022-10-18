@@ -181,28 +181,58 @@ function setup_process_online_balance(model_contents::OrderedDict, input_data::P
             online_dyn_eq =  @constraint(model,online_dyn_eq[tup in proc_online_tuple], online_expr[tup] == 0)
             model_contents["constraint"]["online_dyn_eq"] = online_dyn_eq
 
-            # Minimum online and offline periods
+            # Minimum and maximum online and offline periods
             min_online_rhs = OrderedDict()
             min_online_lhs = OrderedDict()
             min_offline_rhs = OrderedDict()
             min_offline_lhs = OrderedDict()
+            max_online_rhs = OrderedDict()
+            max_online_lhs = OrderedDict()
+            max_offline_rhs = OrderedDict()
+            max_offline_lhs = OrderedDict()
             for p in keys(processes)
                 if processes[p].is_online
-                    min_online = processes[p].min_online * Dates.Minute(60)
-                    min_offline = processes[p].min_offline * Dates.Minute(60)
                     for s in scenarios
                         for t in temporals.t
-                            # get all timesteps that are within min_online/min_offline after t. 
-                            on_hours = filter(x-> Dates.Minute(0) <= ZonedDateTime(x, temporals.ts_format) - ZonedDateTime(t, temporals.ts_format) <= min_online, temporals.t)
-                            off_hours = filter(x-> Dates.Minute(0) <= ZonedDateTime(x, temporals.ts_format) - ZonedDateTime(t, temporals.ts_format) <= min_offline, temporals.t)
+                            min_online = processes[p].min_online * Dates.Minute(60)
+                            min_offline = processes[p].min_offline * Dates.Minute(60)
 
-                            for h in on_hours
+                            # get all timesteps that are within min_online/min_offline after t.
+                            min_on_hours = filter(x-> Dates.Minute(0) <= ZonedDateTime(x, temporals.ts_format) - ZonedDateTime(t, temporals.ts_format) <= min_online, temporals.t)
+                            min_off_hours = filter(x-> Dates.Minute(0) <= ZonedDateTime(x, temporals.ts_format) - ZonedDateTime(t, temporals.ts_format) <= min_offline, temporals.t)
+
+                            if processes[p].max_online == 0.0
+                                max_on_hours = []
+                            else
+                                max_online = processes[p].max_online * Dates.Minute(60)
+                                max_on_hours = filter(x-> Dates.Minute(0) <= ZonedDateTime(x, temporals.ts_format) - ZonedDateTime(t, temporals.ts_format) <= max_online, temporals.t)
+                            end
+                            if processes[p].max_offline == 0.0
+                                max_off_hours = []
+                            else
+                                max_offline = processes[p].max_offline * Dates.Minute(60)
+                                max_off_hours = filter(x-> Dates.Minute(0) <= ZonedDateTime(x, temporals.ts_format) - ZonedDateTime(t, temporals.ts_format) <= max_offline, temporals.t)
+                            end
+
+                            for h in min_on_hours
                                 min_online_rhs[(p, s, t, h)] = v_start[(p,s,t)]
                                 min_online_lhs[(p, s, t, h)] = v_online[(p,s,h)]
                             end
-                            for h in off_hours
+                            for h in min_off_hours
                                 min_offline_rhs[(p, s, t, h)] = (1-v_stop[(p,s,t)])
                                 min_offline_lhs[(p, s, t, h)] = v_online[(p,s,h)]
+                            end
+
+                            max_online_rhs[(p, s, t)] = processes[p].max_online + 1
+                            max_offline_rhs[(p, s, t)] = processes[p].max_offline + 1
+
+                            max_online_lhs[(p, s, t)] = AffExpr(0.0)
+                            max_offline_lhs[(p, s, t)] = AffExpr(0.0)                          
+                            for h in max_on_hours
+                                add_to_expression!(max_online_lhs[(p, s, t)], v_online[(p,s,h)])
+                            end
+                            for h in max_off_hours
+                                add_to_expression!(max_offline_lhs[(p, s, t)], v_online[(p,s,h)])
                             end
                         end
                     end
@@ -212,8 +242,13 @@ function setup_process_online_balance(model_contents::OrderedDict, input_data::P
             min_online_con = @constraint(model, min_online_con[tup in keys(min_online_lhs)], min_online_lhs[tup] >= min_online_rhs[tup])
             min_offline_con = @constraint(model, min_offline_con[tup in keys(min_offline_lhs)], min_offline_lhs[tup] <= min_offline_rhs[tup])
 
+            max_online_con = @constraint(model, max_online_con[tup in keys(max_online_lhs)], sum(v_start[tup])+sum(max_online_lhs[tup]) <= max_online_rhs[tup])
+            max_offline_con = @constraint(model, max_offline_con[tup in keys(max_offline_lhs)], sum(v_stop[tup])+sum(max_offline_lhs[tup]) <= max_offline_rhs[tup])
+
             model_contents["constraint"]["min_online_con"] = min_online_con
             model_contents["constraint"]["min_offline_con"] = min_offline_con
+            model_contents["constraint"]["max_online_con"] = max_online_con
+            model_contents["constraint"]["max_offline_con"] = max_offline_con
         end
     end
 end
