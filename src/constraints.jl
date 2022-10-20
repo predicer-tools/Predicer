@@ -223,16 +223,19 @@ function setup_process_online_balance(model_contents::OrderedDict, input_data::P
                                 min_offline_lhs[(p, s, t, h)] = v_online[(p,s,h)]
                             end
 
-                            max_online_rhs[(p, s, t)] = processes[p].max_online + 1
-                            max_offline_rhs[(p, s, t)] = processes[p].max_offline + 1
-
-                            max_online_lhs[(p, s, t)] = AffExpr(0.0)
-                            max_offline_lhs[(p, s, t)] = AffExpr(0.0)                          
-                            for h in max_on_hours
-                                add_to_expression!(max_online_lhs[(p, s, t)], v_online[(p,s,h)])
+                            max_online_rhs[(p, s, t)] = processes[p].max_online
+                            max_offline_rhs[(p, s, t)] = 1
+                            if length(max_on_hours) > processes[p].max_online 
+                                max_online_lhs[(p, s, t)] = AffExpr(0.0)
+                                for h in max_on_hours
+                                    add_to_expression!(max_online_lhs[(p, s, t)], v_online[(p,s,h)])
+                                end
                             end
-                            for h in max_off_hours
-                                add_to_expression!(max_offline_lhs[(p, s, t)], v_online[(p,s,h)])
+                            if length(max_off_hours) > processes[p].max_offline
+                                max_offline_lhs[(p, s, t)] = AffExpr(0.0)
+                                for h in max_off_hours
+                                    add_to_expression!(max_offline_lhs[(p, s, t)], v_online[(p,s,h)])
+                                end
                             end
                         end
                     end
@@ -242,8 +245,8 @@ function setup_process_online_balance(model_contents::OrderedDict, input_data::P
             min_online_con = @constraint(model, min_online_con[tup in keys(min_online_lhs)], min_online_lhs[tup] >= min_online_rhs[tup])
             min_offline_con = @constraint(model, min_offline_con[tup in keys(min_offline_lhs)], min_offline_lhs[tup] <= min_offline_rhs[tup])
 
-            max_online_con = @constraint(model, max_online_con[tup in keys(max_online_lhs)], sum(v_start[tup])+sum(max_online_lhs[tup]) <= max_online_rhs[tup])
-            max_offline_con = @constraint(model, max_offline_con[tup in keys(max_offline_lhs)], sum(v_stop[tup])+sum(max_offline_lhs[tup]) <= max_offline_rhs[tup])
+            max_online_con = @constraint(model, max_online_con[tup in keys(max_online_lhs)], sum(max_online_lhs[tup]) <= max_online_rhs[tup])
+            max_offline_con = @constraint(model, max_offline_con[tup in keys(max_offline_lhs)], sum(max_offline_lhs[tup]) >= max_offline_rhs[tup])
 
             model_contents["constraint"]["min_online_con"] = min_online_con
             model_contents["constraint"]["min_offline_con"] = min_offline_con
