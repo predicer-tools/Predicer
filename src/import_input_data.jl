@@ -29,7 +29,7 @@ function import_input_data(input_data_path::String)
         timeseries_data[sn] = DataFrame(XLSX.readtable(input_data_path, sn))
     end
 
-    temps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), DataFrame(XLSX.readtable(input_data_path, "timeseries")).t)
+    temps = map(t-> string(ZonedDateTime(t, tz"UTC")), DataFrame(XLSX.readtable(input_data_path, "timeseries")).t)
 
     fixed_data = DataFrame(XLSX.readtable(input_data_path, "fixed_ts"))
     cap_ts = DataFrame(XLSX.readtable(input_data_path, "cap_ts"))    
@@ -77,7 +77,7 @@ function import_input_data(input_data_path::String)
         if Bool(n.is_commodity)
             Predicer.convert_to_commodity(nodes[n.node])
             for s in keys(scenarios)
-                timesteps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), timeseries_data["scenarios"][s]["price"].t)
+                timesteps = map(t-> string(ZonedDateTime(t, tz"UTC")), timeseries_data["scenarios"][s]["price"].t)
                 prices = timeseries_data["scenarios"][s]["price"][!, n.node]
                 ts = Predicer.TimeSeries(s)
                 for i in 1:length(timesteps)
@@ -91,7 +91,7 @@ function import_input_data(input_data_path::String)
         end
         if Bool(n.is_inflow)
             for s in keys(scenarios)
-                timesteps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), timeseries_data["scenarios"][s]["inflow"].t)
+                timesteps = map(t-> string(ZonedDateTime(t, tz"UTC")), timeseries_data["scenarios"][s]["inflow"].t)
                 flows = timeseries_data["scenarios"][s]["inflow"][!, n.node]
                 ts = Predicer.TimeSeries(s)
                 for i in 1:length(timesteps)
@@ -123,7 +123,7 @@ function import_input_data(input_data_path::String)
         Predicer.add_eff(processes[p.process], Float64(p.eff))
         if Bool(p.is_cf)
             for s in keys(scenarios)
-                timesteps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), timeseries_data["scenarios"][s]["cf"].t)
+                timesteps = map(t-> string(ZonedDateTime(t, tz"UTC")), timeseries_data["scenarios"][s]["cf"].t)
                 cf = timeseries_data["scenarios"][s]["cf"][!, p.process]
                 ts = Predicer.TimeSeries(s)
                 for i in 1:length(timesteps)
@@ -171,7 +171,7 @@ function import_input_data(input_data_path::String)
     end
     
     for n in names(cap_ts)
-        timesteps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), cap_ts.t)
+        timesteps = map(t-> string(ZonedDateTime(t, tz"UTC")), cap_ts.t)
         if n != "t"
             col = split(n,",")
             proc = col[1]
@@ -221,7 +221,7 @@ function import_input_data(input_data_path::String)
 
     for s in keys(scenarios)
         if "eff_ts" in collect(keys(timeseries_data["scenarios"][s]))
-            timesteps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), timeseries_data["scenarios"][s]["eff_ts"].t)
+            timesteps = map(t-> string(ZonedDateTime(t, tz"UTC")), timeseries_data["scenarios"][s]["eff_ts"].t)
             for n in names(timeseries_data["scenarios"][s]["eff_ts"])[2:end]
                 mps = timeseries_data["scenarios"][s]["eff_ts"][!,n]
                 ts = Predicer.TimeSeries(s)
@@ -246,7 +246,7 @@ function import_input_data(input_data_path::String)
         markets[mm.market] = Predicer.Market(mm.market, mm.type, mm.node, mm.direction, mm.realisation, mm.reserve_type, mm.is_bid)
         #
         for s in keys(scenarios)
-            timesteps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), timeseries_data["scenarios"][s]["market_prices"].t)
+            timesteps = map(t-> string(ZonedDateTime(t, tz"UTC")), timeseries_data["scenarios"][s]["market_prices"].t)
             mps = timeseries_data["scenarios"][s]["market_prices"][!, mm.market]
             ts = Predicer.TimeSeries(s)
             for i in 1:length(timesteps)
@@ -256,7 +256,7 @@ function import_input_data(input_data_path::String)
             push!(markets[mm.market].price.ts_data, ts)
         end
         if mm.market in names(fixed_data)
-            timestamps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), fixed_data.t)
+            timestamps = map(t-> string(ZonedDateTime(t, tz"UTC")), fixed_data.t)
             data = fixed_data[!,mm.market]
             for i in 1:length(timestamps)
                 if !ismissing(data[i])
@@ -266,7 +266,7 @@ function import_input_data(input_data_path::String)
             end
         end
         if mm.type == "energy" && mm.is_bid == true
-            timesteps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), balance_prices.t)
+            timesteps = map(t-> string(ZonedDateTime(t, tz"UTC")), balance_prices.t)
             for s in keys(scenarios)
                 tup_up = mm.market*",up,"*s
                 tup_dw = mm.market*",dw,"*s
@@ -301,7 +301,7 @@ function import_input_data(input_data_path::String)
 
     con_vecs = OrderedDict()
     for n in names(constraint_data)
-        timesteps = map(t-> string(ZonedDateTime(t, tz"Europe/Helsinki")), constraint_data.t)
+        timesteps = map(t-> string(ZonedDateTime(t, tz"UTC")), constraint_data.t)
         if n != "t"
             col = split(n,",")
             constr = col[1]
