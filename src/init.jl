@@ -1,5 +1,5 @@
 using JuMP
-using Cbc
+using HiGHS
 using DataFrames
 using TimeZones
 using Dates
@@ -7,8 +7,8 @@ using DataStructures
 using XLSX
 
 
-function get_data(fpath::String)
-    return import_input_data(fpath)
+function get_data(fpath::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[])
+    return import_input_data(fpath, t_horizon)
 end
 
 function build_model_contents_dict()
@@ -24,7 +24,7 @@ end
 
 function setup_optimizer(solver::Any)
     m = JuMP.Model(solver)
-    set_optimizer_attributes(m, "LogLevel" => 1, "PrimalTolerance" => 1e-7)
+    set_optimizer_attribute(m, "presolve", "on")
     return m
 end
 
@@ -37,7 +37,7 @@ function Initialize(input_data::Predicer.InputData)
     input_data_check = validate_data(input_data)
     if input_data_check["is_valid"]
         model_contents = Initialize_contents()
-        model = init_jump_model(Cbc.Optimizer)
+        model = init_jump_model(HiGHS.Optimizer)
         model_contents["model"] = model
         setup_model(model_contents, input_data)
         return model_contents
@@ -46,9 +46,9 @@ function Initialize(input_data::Predicer.InputData)
     end
 end
 
-function generate_model(fpath::String)
+function generate_model(fpath::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[])
     # get input_data
-    input_data = Predicer.get_data(fpath)
+    input_data = Predicer.get_data(fpath, t_horizon)
     # Check input_data
     validation_result = Predicer.validate_data(input_data)
     if !validation_result["is_valid"]
@@ -60,7 +60,7 @@ function generate_model(fpath::String)
     end
     # create mc
     mc = build_model_contents_dict()
-    mc["model"] = setup_optimizer(Cbc.Optimizer)
+    mc["model"] = setup_optimizer(HiGHS.Optimizer)
     # build model
     build_model(mc, input_data)
     return mc, input_data
