@@ -109,7 +109,7 @@ end
 
 
 """
-    struct State
+    mutable struct State
         in_max::Float64
         out_max::Float64
         state_loss_proportional::Float64
@@ -133,7 +133,7 @@ A struct for node states (storage), holds information on the parameters of the s
 - `residual_value::Float64`: Value of the product remaining in the state after time horizon. 
 
 """
-struct State
+mutable struct State
     in_max::Float64
     out_max::Float64
     state_loss_proportional::Float64
