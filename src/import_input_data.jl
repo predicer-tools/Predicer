@@ -5,7 +5,7 @@ using TimeZones
 
 import Predicer
 
-function import_input_data(input_data_path::String)
+function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[])
     sheetnames_system = ["nodes", "processes", "process_topology", "markets","scenarios","efficiencies", "reserve_type","risk"]#, "energy_market", "reserve_market"]
     sheetnames_timeseries = ["cf", "inflow", "market_prices", "price","eff_ts"]
 
@@ -29,7 +29,11 @@ function import_input_data(input_data_path::String)
         timeseries_data[sn] = DataFrame(XLSX.readtable(input_data_path, sn))
     end
 
-    temps = map(t-> string(ZonedDateTime(t, tz"UTC")), DataFrame(XLSX.readtable(input_data_path, "timeseries")).t)
+    if !isempty(t_horizon)
+        temps = map(ts -> string(ts), t_horizon)
+    else
+        temps = map(t-> string(ZonedDateTime(t, tz"UTC")), DataFrame(XLSX.readtable(input_data_path, "timeseries")).t)
+    end
 
     fixed_data = DataFrame(XLSX.readtable(input_data_path, "fixed_ts"))
     cap_ts = DataFrame(XLSX.readtable(input_data_path, "cap_ts"))    
