@@ -487,21 +487,15 @@ function setup_processes_limits(model_contents::OrderedDict, input_data::Predice
             if tup in p_reserve_prod || tup in p_reserve_cons
                 add_to_expression!(e_lim_max[tup], -cap)
             else
-                set_upper_bound(v_flow[tup], cap)
+                add_to_expression!(e_lim_max[tup], -cap)
             end
         else
-            set_upper_bound(v_flow[tup], cap)
+            add_to_expression!(e_lim_max[tup], -cap)
         end
     end
-    
-   
 
-
-    con_max_tuples = filter(x -> !(e_lim_max[x] == AffExpr(0)), keys(e_lim_max))
-    con_min_tuples = filter(x -> !(e_lim_min[x] == AffExpr(0)), keys(e_lim_min))
-
-    max_eq = @constraint(model, max_eq[tup in con_max_tuples], v_flow[tup] + e_lim_max[tup] <= 0)
-    min_eq = @constraint(model, min_eq[tup in con_min_tuples], v_flow[tup] + e_lim_min[tup] >= 0)
+    max_eq = @constraint(model, max_eq[tup in collect(keys(e_lim_max))], v_flow[tup] + e_lim_max[tup] <= 0)
+    min_eq = @constraint(model, min_eq[tup in collect(keys(e_lim_min))], v_flow[tup] + e_lim_min[tup] >= 0)
     model_contents["constraint"]["max_eq"] = max_eq
     model_contents["constraint"]["min_eq"] = min_eq
 end
@@ -578,7 +572,13 @@ function setup_reserve_balances(model_contents::OrderedDict, input_data::Predice
         # r_tup = res_tuple = (m, n, res_dir, s, t)
         reserve_final_exp = model_contents["expression"]["reserve_final_exp"] = OrderedDict()
         for tup in res_final_tuple
-            r_tup = filter(x -> x[1] == tup[1] && x[4] == tup[2] && x[5] == tup[3], res_tuple)
+            if markets[tup[1]].direction == "up" || markets[tup[1]].direction == "res_up"
+                r_tup = filter(x -> x[1] == tup[1] && x[4] == tup[2] && x[5] == tup[3] && x[3] == "res_up", res_tuple)
+            elseif markets[tup[1]].direction == "down" || markets[tup[1]].direction == "res_down" 
+                r_tup = filter(x -> x[1] == tup[1] && x[4] == tup[2] && x[5] == tup[3] && x[3] == "res_down", res_tuple)
+            elseif markets[tup[1]].direction == "up_down" || markets[tup[1]].direction == "res_up_down"
+                r_tup = filter(x -> x[1] == tup[1] && x[4] == tup[2] && x[5] == tup[3], res_tuple)
+            end
             reserve_final_exp[tup] = @expression(model, sum(v_res[r_tup]) .* (markets[tup[1]].direction == "up_down" ? 0.5 : 1.0) .- v_res_final[tup])
         end
         reserve_final_eq = @constraint(model, reserve_final_eq[tup in res_final_tuple], reserve_final_exp[tup] == 0)
@@ -872,26 +872,35 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
     const_dict = model_contents["gen_constraint"] = OrderedDict()
 
     for c in keys(gen_constraints)
-        const_expr[c] = OrderedDict((s,t) => AffExpr(0.0) for s in scenarios, t in temporals.t)
+        # Get timesteps for where there is data defined. (Assuming all scenarios are equal)
+        gen_const_ts = map(x -> x[1], gen_constraints[c].constant(scenarios[1]).series)
+        # Get timesteps which are found in both temporals and gen constraints 
+        relevant_ts = filter(t -> t in gen_const_ts, temporals.t)
+        # use these ts to create gen_consts..
+        const_expr[c] = OrderedDict((s,t) => AffExpr(0.0) for s in scenarios, t in relevant_ts)
         facs = gen_constraints[c].factors
         consta = gen_constraints[c].constant
         eq_dir = gen_constraints[c].type
-        for s in scenarios, t in temporals.t
+        for s in scenarios, t in relevant_ts
             add_to_expression!(const_expr[c][(s,t)], consta(s, t))
             #add_to_expression!(const_expr[c][(s,t)],filter(x->x.scenario == s,consta)[1](t))
             for f in facs
                 p_flow = f.flow
-                tup = filter(x->x[1]==p_flow[1] && (x[2]==p_flow[2] || x[3]==p_flow[2]) && x[4]==s && x[5]==t,process_tuple)[1]
+                if input_data.processes[p_flow[1]].conversion == 1
+                    tup = filter(x->x[1]==p_flow[1] && (x[2]==p_flow[2] || x[3]==p_flow[2]) && x[4]==s && x[5]==t,process_tuple)[1]
+                else
+                    tup = filter(x->x[1]==p_flow[1] && (x[2]==p_flow[1] || x[3]==p_flow[2]) && x[4]==s && x[5]==t,process_tuple)[1]
+                end
                 fac_data = f.data(s, t)
                 add_to_expression!(const_expr[c][(s,t)],fac_data,v_flow[tup])
             end
         end 
         if eq_dir == "eq"
-            const_dict[c] = @constraint(model,[s in scenarios,t in temporals.t],const_expr[c][(s,t)]==0.0)
+            const_dict[c] = @constraint(model,[s in scenarios,t in relevant_ts],const_expr[c][(s,t)]==0.0)
         elseif eq_dir == "gt"
-            const_dict[c] = @constraint(model,[s in scenarios,t in temporals.t],const_expr[c][(s,t)]>=0.0)
+            const_dict[c] = @constraint(model,[s in scenarios,t in relevant_ts],const_expr[c][(s,t)]>=0.0)
         else
-            const_dict[c] = @constraint(model,[s in scenarios,t in temporals.t],const_expr[c][(s,t)]<=0.0)
+            const_dict[c] = @constraint(model,[s in scenarios,t in relevant_ts],const_expr[c][(s,t)]<=0.0)
         end
     end
 end
