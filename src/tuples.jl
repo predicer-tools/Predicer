@@ -72,7 +72,22 @@ function reserve_market_directional_tuples(input_data::InputData) # original nam
         markets = input_data.markets
         scenarios = collect(keys(input_data.scenarios))
         temporals = input_data.temporals
-        res_dir = ["res_up", "res_down"]
+        input_data_dirs = unique(map(m -> m.direction, collect(values(input_data.markets))))
+        res_dir = []
+        for d in input_data_dirs
+            if d == "up" || d == "res_up"
+                push!(res_dir, "res_up")
+            elseif d == "dw" || d == "res_dw" || d == "dn" || d == "res_dn" || d == "down" || d == "res_down"
+                push!(res_dir, "res_down")
+            elseif d == "up/down" || d == "up/dw" || d == "up/dn" ||d == "up_down" || d == "up_dw" || d == "up_dn"
+                push!(res_dir, "res_up")
+                push!(res_dir, "res_down")
+            elseif d != "none"
+                msg = "Invalid reserve direction given: " * d
+                throw(ErrorException(msg))
+            end
+        end
+        unique!(res_dir)
         for m in values(markets)
             if m.type == "reserve"
                 if m.direction in res_dir
@@ -238,7 +253,22 @@ function reserve_process_tuples(input_data::InputData) # original name: create_r
         temporals = input_data.temporals
         res_nodes = reserve_nodes(input_data)
         res_type = collect(keys(input_data.reserve_type))
-        res_dir = ["res_up", "res_down"]
+        input_data_dirs = unique(map(m -> m.direction, collect(values(input_data.markets))))
+        res_dir = []
+        for d in input_data_dirs
+            if d == "up" || d == "res_up"
+                push!(res_dir, "res_up")
+            elseif d == "dw" || d == "res_dw" || d == "dn" || d == "res_dn" || d == "down" || d == "res_down"
+                push!(res_dir, "res_down")
+            elseif d == "up/down" || d == "up/dw" || d == "up/dn" ||d == "up_down" || d == "up_dw" || d == "up_dn"
+                push!(res_dir, "res_up")
+                push!(res_dir, "res_down")
+            elseif d != "none"
+                msg = "Invalid reserve direction given: " * d
+                throw(ErrorException(msg))
+            end
+        end
+        unique!(res_dir)
 
         for p in values(processes), s in scenarios, t in temporals.t
             for topo in p.topos
