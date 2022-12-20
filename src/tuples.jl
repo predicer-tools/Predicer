@@ -34,6 +34,7 @@ function create_tuples(input_data::InputData) # unused, should be debricated
     tuplebook["risk_tuple"] = scenarios(input_data)
     tuplebook["delay_tuple"] = create_delay_process_tuple(input_data)
     tuplebook["balance_market_tuple"] = create_balance_market_tuple(input_data)
+    tuplebook["state_reserves"] = state_reserves(input_data)
     return tuplebook
 end
 
@@ -588,4 +589,53 @@ function create_balance_market_tuple(input_data::Predicer.InputData)
         end
     end
     return bal_tuples
+end
+
+"""
+    state_reserves(input_data::InputData)
+
+Returns reserve potentials of processes connected to states with a reserve.
+form: (sto_node, res_dir, res_type, p, so, si, s, t)
+"""
+function state_reserves(input_data::InputData)
+    state_reserves = []
+    if input_data.contains_reserves
+        processes = input_data.processes
+        nodes = input_data.nodes
+        res_nodes_tuple = reserve_nodes(input_data)
+        res_potential_tuple = reserve_process_tuples(input_data)
+        process_tuple = process_topology_tuples(input_data)
+        scenarios = collect(keys(input_data.scenarios))
+        temporals = input_data.temporals
+        for n in res_nodes_tuple
+            res_node_in_processes = unique(map(x -> (x[3], x[4], x[5]), filter(tup -> tup[5] == n, res_potential_tuple)))
+            res_node_out_processes = unique(map(x -> (x[3], x[4], x[5]), filter(tup -> tup[4] == n, res_potential_tuple)))
+            for p_in in res_node_in_processes, p_out in res_node_out_processes
+                # Get topos for p_in and p_out. Create tuple from the values
+                p_in_topos = map(topo -> (p_in[1], topo.source, topo.sink), processes[p_in[1]].topos)
+                p_out_topos = map(topo -> (p_out[1], topo.source, topo.sink), processes[p_out[1]].topos)
+
+                # Get the TOPOS not going into the reserve node
+                not_res_topos_p_in = filter(x -> !(x in res_node_in_processes), p_in_topos)
+                not_res_topos_p_out = filter(x -> !(x in res_node_out_processes), p_out_topos)
+
+                # The length of these topos should be 1.
+                if length(not_res_topos_p_in)==1 && length(not_res_topos_p_out)==1
+                    # Check that one of their source/sink is the same. 
+                    if (not_res_topos_p_in[1][2] == not_res_topos_p_out[1][3])
+                        s_node = not_res_topos_p_in[1][2]
+                        if nodes[s_node].is_state
+                            s_node_ps = unique(map(x -> x[1], filter(tup -> (tup[3] == s_node || tup[2] == s_node), process_tuple)))
+                            if length(s_node_ps) == 2# if extra node only has 2 processes
+                                append!(state_reserves, map(x -> (s_node, x...), filter(tup -> tup[3] == p_in[1], res_potential_tuple)))
+                                append!(state_reserves, map(x -> (s_node, x...), filter(tup -> tup[3] == p_out[1], res_potential_tuple)))
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return state_reserves
 end
