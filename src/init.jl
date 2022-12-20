@@ -11,14 +11,29 @@ function get_data(fpath::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[
     return import_input_data(fpath, t_horizon)
 end
 
-function build_model_contents_dict()
+function build_model_contents_dict(input_data::Predicer.InputData)
     model_contents = OrderedDict()
     model_contents["constraint"] = OrderedDict() #constraints
     model_contents["expression"] = OrderedDict() #expressions?
     model_contents["variable"] = OrderedDict() #variables?
     model_contents["gen_constraint"] = OrderedDict() #GenericConstraints
     model_contents["gen_expression"] = OrderedDict() #GenericConstraints
-    model_contents["res_dir"] = ["res_up", "res_down"]
+    input_data_dirs = unique(map(m -> m.direction, collect(values(input_data.markets))))
+    res_dir = []
+    for d in input_data_dirs
+        if d == "up" || d == "res_up"
+            push!(res_dir, "res_up")
+        elseif d == "dw" || d == "res_dw" || d == "dn" || d == "res_dn" || d == "down" || d == "res_down"
+            push!(res_dir, "res_down")
+        elseif d == "up/down" || d == "up/dw" || d == "up/dn" ||d == "up_down" || d == "up_dw" || d == "up_dn"
+            push!(res_dir, "res_up")
+            push!(res_dir, "res_down")
+        elseif d != "none"
+            msg = "Invalid reserve direction given: " * d
+            throw(ErrorException(msg))
+        end
+    end
+    model_contents["res_dir"] = unique(res_dir)
     return model_contents
 end
 
@@ -36,7 +51,7 @@ end
 function Initialize(input_data::Predicer.InputData)
     input_data_check = validate_data(input_data)
     if input_data_check["is_valid"]
-        model_contents = Initialize_contents()
+        model_contents = Initialize_contents(input_data)
         model = init_jump_model(HiGHS.Optimizer)
         model_contents["model"] = model
         setup_model(model_contents, input_data)
@@ -59,7 +74,7 @@ function generate_model(fpath::String, t_horizon::Vector{ZonedDateTime}=ZonedDat
         input_data = Predicer.resolve_delays(input_data)
     end
     # create mc
-    mc = build_model_contents_dict()
+    mc = build_model_contents_dict(input_data)
     mc["model"] = setup_optimizer(HiGHS.Optimizer)
     # build model
     build_model(mc, input_data)
