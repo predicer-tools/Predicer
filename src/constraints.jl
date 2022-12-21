@@ -540,28 +540,29 @@ function setup_reserve_balances(model_contents::OrderedDict, input_data::Predice
         v_reserve = model_contents["variable"]["v_reserve"]
         v_res = model_contents["variable"]["v_res"]
         v_res_final = model_contents["variable"]["v_res_final"]
-        v_state = model_contents["variable"]["v_state"]
 
         # state reserve balances
-        for s_node in unique(map(x -> x[1], state_reserve_tuple))
-            state_max = nodes[s_node].state.state_max
-            state_min = nodes[s_node].state.state_min
-            state_max_in = nodes[s_node].state.in_max
-            state_max_out = nodes[s_node].state.out_max
-            for s in scenarios, t in temporals.t
-                state_tup = filter(x -> x[1] == s_node && x[2] == s && x[3] == t, node_state_tuple)[1]
-                # Each storage node should have one process in and one out from the storage
-                p_out_tup = filter(x -> x[1] == s_node && x[2] == "res_up" && x[4] == x[5] && x[7] == s && x[8] == t, state_reserve_tuple)[1]
-                p_in_tup = filter(x -> x[1] == s_node && x[2] == "res_down" && x[4] == x[6] && x[7] == s && x[8] == t, state_reserve_tuple)[1]
-                p_out_eff = processes[p_in_tup[4]].eff
-                p_in_eff = processes[p_out_tup[4]].eff
-                dtf = temporals(t)
-                # State in/out limit
-                @constraint(model, v_reserve[p_in_tup[2:end]] <= state_max_in / p_in_eff)
-                @constraint(model, v_reserve[p_out_tup[2:end]] <= state_max_out * p_out_eff)
-                # State value limit
-                @constraint(model, v_reserve[p_in_tup[2:end]] <= (state_max - v_state[state_tup]) / p_in_eff / dtf)
-                @constraint(model, v_reserve[p_out_tup[2:end]] <= (v_state[state_tup] -  state_min) * p_out_eff / dtf)
+        if input_data.contains_states
+            for s_node in unique(map(x -> x[1], state_reserve_tuple))
+                state_max = nodes[s_node].state.state_max
+                state_min = nodes[s_node].state.state_min
+                state_max_in = nodes[s_node].state.in_max
+                state_max_out = nodes[s_node].state.out_max
+                for s in scenarios, t in temporals.t
+                    state_tup = filter(x -> x[1] == s_node && x[2] == s && x[3] == t, node_state_tuple)[1]
+                    # Each storage node should have one process in and one out from the storage
+                    p_out_tup = filter(x -> x[1] == s_node && x[2] == "res_up" && x[4] == x[5] && x[7] == s && x[8] == t, state_reserve_tuple)[1]
+                    p_in_tup = filter(x -> x[1] == s_node && x[2] == "res_down" && x[4] == x[6] && x[7] == s && x[8] == t, state_reserve_tuple)[1]
+                    p_out_eff = processes[p_in_tup[4]].eff
+                    p_in_eff = processes[p_out_tup[4]].eff
+                    dtf = temporals(t)
+                    # State in/out limit
+                    @constraint(model, v_reserve[p_in_tup[2:end]] <= state_max_in / p_in_eff)
+                    @constraint(model, v_reserve[p_out_tup[2:end]] <= state_max_out * p_out_eff)
+                    # State value limit
+                    @constraint(model, v_reserve[p_in_tup[2:end]] <= (state_max - model_contents["variable"]["v_state"][state_tup]) / p_in_eff / dtf)
+                    @constraint(model, v_reserve[p_out_tup[2:end]] <= (v_state[state_tup] -  state_min) * p_out_eff / dtf)
+                end
             end
         end
 
