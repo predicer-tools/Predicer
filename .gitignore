@@ -2,6 +2,9 @@
 .vscode/
 log/
 logs/
+results/*
 *.log
 *.pyc
 *.bak
+Manifest.toml
+**.DS_Store

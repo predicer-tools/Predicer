@@ -1,11 +1,16 @@
-name = "AbstractModel"
-uuid = "0f14bbd8-593a-4bbc-8ec0-b728f6a4d88c"
-authors = ["dsdennis"]
+name = "Predicer"
+uuid = "029a90ca-637b-44c2-84e0-c53784befaff"
+authors = ["sundelld <dennis.sundell@vtt.fi>"]
 version = "0.1.0"
 
 [deps]
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 Cbc = "9961bab8-2fa3-5c5a-9d89-47fab24efd76"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+DataStructures = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+HiGHS = "87dc4568-4c63-4d18-b0c0-bb2238e4078b"
 JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
+Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
+TimeZones = "f269a46b-ccf7-5d73-abea-4c690281aa53"
 XLSX = "fdbf4ff8-1666-58a4-91e7-1b58723a45e0"
