@@ -90,8 +90,6 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
                 end
                 Predicer.add_cost(nodes[n.node], ts)
             end
-        elseif Bool(n.is_market)
-            Predicer.convert_to_market(nodes[n.node])
         end
         if Bool(n.is_inflow)
             for s in keys(scenarios)

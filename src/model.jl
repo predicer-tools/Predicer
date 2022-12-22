@@ -207,3 +207,25 @@ function resolve_delays(input_data::Predicer.InputData)
     input_data.temporals.t = input_data.temporals.delay_ts
     return input_data
 end
+
+
+"""
+    resolve_market_nodes(input_data::InputData) 
+
+Function to construct market nodes based on the input data
+"""
+function resolve_market_nodes(input_data::InputData)
+    markets = input_data.markets
+    for m in collect(keys(markets))
+        if markets[m].type == "energy"
+            node_name = m
+            input_data.nodes[node_name] = Predicer.Node(node_name, false, true)
+            pname = markets[m].node * "_" * m * "_trade_process"
+            market_p = Predicer.MarketProcess(pname)
+            Predicer.add_topology(market_p, Predicer.Topology(markets[m].node, node_name, 0.0, 0.00001, 1.0, 1.0))
+            Predicer.add_topology(market_p, Predicer.Topology(node_name, markets[m].node, 0.0, 0.0, 1.0, 1.0))
+            input_data.processes[pname] = market_p
+        end
+    end
+    return input_data
+end
