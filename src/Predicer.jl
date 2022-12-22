@@ -17,7 +17,8 @@ module Predicer
     export_model_contents,
     get_result_dataframe,
     write_bid_matrix,
-    resolve_delays
+    resolve_delays,
+    resolve_market_nodes
 
     export Node,
     Process, 
