@@ -540,28 +540,35 @@ function setup_reserve_balances(model_contents::OrderedDict, input_data::Predice
         v_reserve = model_contents["variable"]["v_reserve"]
         v_res = model_contents["variable"]["v_res"]
         v_res_final = model_contents["variable"]["v_res_final"]
-        v_state = model_contents["variable"]["v_state"]
-
+        
         # state reserve balances
-        for s_node in unique(map(x -> x[1], state_reserve_tuple))
-            state_max = nodes[s_node].state.state_max
-            state_min = nodes[s_node].state.state_min
-            state_max_in = nodes[s_node].state.in_max
-            state_max_out = nodes[s_node].state.out_max
-            for s in scenarios, t in temporals.t
-                state_tup = filter(x -> x[1] == s_node && x[2] == s && x[3] == t, node_state_tuple)[1]
-                # Each storage node should have one process in and one out from the storage
-                p_out_tup = filter(x -> x[1] == s_node && x[2] == "res_up" && x[4] == x[5] && x[7] == s && x[8] == t, state_reserve_tuple)[1]
-                p_in_tup = filter(x -> x[1] == s_node && x[2] == "res_down" && x[4] == x[6] && x[7] == s && x[8] == t, state_reserve_tuple)[1]
-                p_out_eff = processes[p_in_tup[4]].eff
-                p_in_eff = processes[p_out_tup[4]].eff
-                dtf = temporals(t)
-                # State in/out limit
-                @constraint(model, v_reserve[p_in_tup[2:end]] <= state_max_in / p_in_eff)
-                @constraint(model, v_reserve[p_out_tup[2:end]] <= state_max_out * p_out_eff)
-                # State value limit
-                @constraint(model, v_reserve[p_in_tup[2:end]] <= (state_max - v_state[state_tup]) / p_in_eff / dtf)
-                @constraint(model, v_reserve[p_out_tup[2:end]] <= (v_state[state_tup] -  state_min) * p_out_eff / dtf)
+        if input_data.contains_states
+            for s_node in unique(map(x -> x[1], state_reserve_tuple))
+                state_max = nodes[s_node].state.state_max
+                state_min = nodes[s_node].state.state_min
+                state_max_in = nodes[s_node].state.in_max
+                state_max_out = nodes[s_node].state.out_max
+                for s in scenarios, t in temporals.t
+                    state_tup = filter(x -> x[1] == s_node && x[2] == s && x[3] == t, node_state_tuple)[1]
+                    # Each storage node should have one process in and one out from the storage
+                    dtf = temporals(t)
+                    p_out_tup = filter(x -> x[1] == s_node && x[2] == "res_up" && x[4] == x[5] && x[7] == s && x[8] == t, state_reserve_tuple)
+                    p_in_tup = filter(x -> x[1] == s_node && x[2] == "res_down" && x[4] == x[6] && x[7] == s && x[8] == t, state_reserve_tuple)
+                    if !isempty(p_out_tup)
+                        p_out_eff = processes[p_out_tup[1][4]].eff
+                        # State in/out limit
+                        @constraint(model, v_reserve[p_out_tup[1][2:end]] <= state_max_out * p_out_eff)
+                        # State value limit
+                        @constraint(model, v_reserve[p_out_tup[1][2:end]] <= (model_contents["variable"]["v_state"][state_tup] -  state_min) * p_out_eff / dtf)
+                    end
+                    if !isempty(p_in_tup)
+                        p_in_eff = processes[p_in_tup[1][4]].eff
+                        # State in/out limit
+                        @constraint(model, v_reserve[p_in_tup[1][2:end]] <= state_max_in / p_in_eff)
+                        # State value limit
+                        @constraint(model, v_reserve[p_in_tup[1][2:end]] <= (state_max - model_contents["variable"]["v_state"][state_tup]) / p_in_eff / dtf)
+                    end
+                end
             end
         end
 
@@ -765,7 +772,6 @@ function setup_fixed_values(model_contents::OrderedDict, input_data::Predicer.In
     process_tuple = process_topology_tuples(input_data)
     fixed_value_tuple = fixed_market_tuples(input_data)
     v_bid = model_contents["expression"]["v_bid"]
-    v_flow = model_contents["variable"]["v_flow"]
     markets = input_data.markets
     scenarios = collect(keys(input_data.scenarios))
     
@@ -782,10 +788,7 @@ function setup_fixed_values(model_contents::OrderedDict, input_data::Predicer.In
             if markets[m].type == "energy"
                 for (t, fix_val) in zip(temps, fix_vec)
                     for s in scenarios
-                        tup1 = filter(x->x[2]==m && x[4]==s && x[5]==t,process_tuple)[1]
-                        tup2 = filter(x->x[3]==m && x[4]==s && x[5]==t,process_tuple)[1]
                         fix_expr[(m, s, t)] = @expression(model,v_bid[(m,s,t)]-fix_val)
-                        #fix_expr[(m, s, t)] = @expression(model,v_flow[tup1]-v_flow[tup2]-fix_val)
                     end
                 end
             elseif markets[m].type == "reserve" && input_data.contains_reserves
@@ -839,15 +842,15 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
                 end
                 if markets[m].type == "energy"
                     for t in temporals.t
-                        v_bid[(markets[m].node,s,t)] = AffExpr(0.0)
-                        add_to_expression!(v_bid[(markets[m].node,s,t)],
-                                v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==s,process_tuple)[1]],1.0)
-                        add_to_expression!(v_bid[(markets[m].node,s,t)],
-                                v_flow_bal[filter(x->x[1]==markets[m].node && x[2]=="up" && x[4]==t && x[3]==s,balance_process_tuple)[1]],1.0)
-                        add_to_expression!(v_bid[(markets[m].node,s,t)],
-                                v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==s,process_tuple)[1]],-1.0)
-                        add_to_expression!(v_bid[(markets[m].node,s,t)],
-                                v_flow_bal[filter(x->x[1]==markets[m].node && x[2]=="dw" && x[4]==t && x[3]==s,balance_process_tuple)[1]],-1.0)
+                        v_bid[(markets[m].name,s,t)] = AffExpr(0.0)
+                        add_to_expression!(v_bid[(markets[m].name,s,t)],
+                                v_flow[filter(x->x[3]==markets[m].name && x[5]==t && x[4]==s,process_tuple)[1]],1.0)
+                        add_to_expression!(v_bid[(markets[m].name,s,t)],
+                                v_flow_bal[filter(x->x[1]==markets[m].name && x[2]=="up" && x[4]==t && x[3]==s,balance_process_tuple)[1]],1.0)
+                        add_to_expression!(v_bid[(markets[m].name,s,t)],
+                                v_flow[filter(x->x[2]==markets[m].name && x[5]==t && x[4]==s,process_tuple)[1]],-1.0)
+                        add_to_expression!(v_bid[(markets[m].name,s,t)],
+                                v_flow_bal[filter(x->x[1]==markets[m].name && x[2]=="dw" && x[4]==t && x[3]==s,balance_process_tuple)[1]],-1.0)
                     end
                 end
                 if markets[m].type=="reserve"
@@ -868,18 +871,12 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
                     for k in 2:length(s_indx)
                         if price_matr[m][i, s_indx[k]] == price_matr[m][i, s_indx[k-1]]
                             @constraint(model,
-                                        v_bid[(markets[m].node,scenarios[s_indx[k]],t)] ==
-                                        v_bid[(markets[m].node,scenarios[s_indx[k-1]],t)])
-
-                            #@constraint(model, v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]] == 
-                            #    v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]])
+                                        v_bid[(markets[m].name,scenarios[s_indx[k]],t)] ==
+                                        v_bid[(markets[m].name,scenarios[s_indx[k-1]],t)])
                         else
                             @constraint(model, 
-                                        v_bid[(markets[m].node,scenarios[s_indx[k]],t)] >=
-                                        v_bid[(markets[m].node,scenarios[s_indx[k-1]],t)])
-
-                            #@constraint(model, v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k]],process_tuple)[1]] >= 
-                            #    v_flow[filter(x->x[3]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]]-v_flow[filter(x->x[2]==markets[m].node && x[5]==t && x[4]==scenarios[s_indx[k-1]],process_tuple)[1]])
+                                        v_bid[(markets[m].name,scenarios[s_indx[k]],t)] >=
+                                        v_bid[(markets[m].name,scenarios[s_indx[k-1]],t)])
                         end
                     end
                 elseif markets[m].type == "reserve" && input_data.contains_reserves
