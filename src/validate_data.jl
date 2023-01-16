@@ -34,7 +34,17 @@ using Predicer
     # otherwise a process may need to be online or offline for 1.5 timesteps, which is difficult to solve. 
 
     # In constraints, chekc if e.g. v_start even exists before trying to force start constraints. 
+    # Chewck that all given values have reasonable values, ramp values >0 for example. 
 
+    # Check that all groups have matching types and member
+    # Check that the types of the groups of each process/node is compatible with the type of the entity? (exampel "process group" has no nodes, a node has no process groups)
+
+    # Check that a process doesnät participate in two energy markets at the same time 
+    # - should this be allowed, since the energy markets can be "blocked" using gen_constraints?
+    # - Process should be fine, as long as topos are different. 
+
+    # Check that a process is connected to a node in the given node group during market participation
+    # 
 # TODO
 # Need to add validation for delays!
 # If a transfer process has been given two delays, how should it be handled? Use the larger delay?
