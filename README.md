@@ -50,5 +50,5 @@
 
 - The resulting bid matrix can be exported to a .xlsx file under `Predicer\\results` by using the `Predicer.write_bid_matrix()` function
 
-        julia> Predicer.write_bid_matrix(mc)
+        julia> Predicer.write_bid_matrix(mc, input_data)
 
