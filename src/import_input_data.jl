@@ -6,7 +6,7 @@ using TimeZones
 import Predicer
 
 function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[])
-    sheetnames_system = ["nodes", "processes", "process_topology", "markets","scenarios","efficiencies", "reserve_type","risk"]#, "energy_market", "reserve_market"]
+    sheetnames_system = ["nodes", "processes", "groups", "process_topology", "markets", "scenarios","efficiencies", "reserve_type","risk"]#, "energy_market", "reserve_market"]
     sheetnames_timeseries = ["cf", "inflow", "market_prices", "price","eff_ts"]
 
     system_data = OrderedDict()
@@ -15,6 +15,8 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
 
     processes = OrderedDict{String, Predicer.Process}()
     nodes = OrderedDict{String, Predicer.Node}()
+    groups = OrderedDict{String, Predicer.Group}()
+
     markets = OrderedDict{String, Predicer.Market}()
     scenarios = OrderedDict{String, Float64}()
     reserve_type = OrderedDict{String, Float64}()
@@ -188,6 +190,41 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
         end
     end
 
+    for i in 1:nrow(system_data["groups"])
+        d_row = system_data["groups"][i, :]
+        gtype = d_row.type
+        gname = d_row.group
+        if gtype == "node" || gtype == "Node" || gtype == "NODE" || gtype == "n"
+            if !(gname in collect(keys(groups)))
+                groups[gname] = Predicer.NodeGroup(gname, d_row.entity)
+            else
+                add_group_members(groups[gname], d_row.entity)
+            end
+            add_group(nodes[d_row.entity], gname)
+        else
+            if !(d_row.group in collect(keys(groups)))
+                groups[gname] = Predicer.ProcessGroup(gname, d_row.entity)
+            else
+                add_group_members(groups[gname], d_row.entity)
+            end
+            add_group(processes[d_row.entity], gname)
+        end
+    end
+    #for pname in collect(keys(processes))
+    #    gname = "g_"*pname
+    #    if !(gname in collect(keys(groups)))
+    #        groups[gname] = Predicer.ProcessGroup(gname, pname)
+    #        push!(processes[pname].groups, gname)
+    #    end
+    #end
+    #for nname in collect(keys(nodes))
+    #    gname = "g_"*nname
+    #    if !(gname in collect(keys(groups)))
+    #        groups[gname] = Predicer.NodeGroup(gname, nname)
+    #        push!(nodes[nname].groups, gname)
+    #    end
+    #end
+
 
 
 
@@ -340,5 +377,5 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
     contains_risk = (risk["beta"] > 0)
     contains_delay = !iszero(map(p -> p.delay, collect(values(processes))))
 
-    return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
+    return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, processes, nodes, markets, groups, scenarios, reserve_type, risk, gen_constraints)
 end
