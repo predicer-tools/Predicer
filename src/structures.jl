@@ -1,9 +1,6 @@
 using DataStructures
 using TimeZones
 
-abstract type AbstractNode end
-abstract type AbstractProcess end
-
 """
     mutable struct Temporals
         t::Vector{String}
@@ -309,10 +306,110 @@ function Base.:isempty(tsd::TimeSeriesData)
 end
 
 
+""" 
+    struct Group
+        name::String
+        type::String
+        members::Vector{String}
+    end
+
+A struct for defining groups of processes or nodes in the model
+# Fields
+- `name::String`: Name of the group
+- `type::String`: Type of the group. Either process or Node
+- `members::Vector{String}`: Names of the members in the group. 
+"""
+struct Group
+    name::String
+    type::String
+    members::Vector{String}
+    function Group(name::String, type::String, members::Vector{String}=[])
+        return new(name, type, members)
+    end
+end
+
+"""
+    function NodeGroup(name::String, members::Vector{String}=[])
+
+Function to generate a new group of the type 'Node'.
+"""
+function NodeGroup(name::String, members::Vector{String})
+    return Group(name, "node", members)
+end
+
+
+"""
+    function NodeGroup(name::String, member::String=[])
+
+Function to generate a new group of the type 'Node'.
+"""
+function NodeGroup(name::String, member::String)
+    return Group(name, "node", [member])
+end
+
+
+"""
+    function NodeGroup(name::String)
+
+Function to generate a new group of the type 'Node'.
+"""
+function NodeGroup(name::String)
+    return Group(name, "node", [])
+end
+
+"""
+    function ProcessGroup(name::String, members::Vector{String}=[])
+
+Function to generate a new group of the type 'Process'.
+"""
+function ProcessGroup(name::String, members::Vector{String})
+    return Group(name, "process", members)
+end
+
+"""
+    function ProcessGroup(name::String, members::Vector{String}=[])
+
+Function to generate a new group of the type 'Process'.
+"""
+function ProcessGroup(name::String, member::String)
+    return Group(name, "process", [member])
+end
+
+"""
+    function ProcessGroup(name::String, members::Vector{String}=[])
+
+Function to generate a new group of the type 'Process'.
+"""
+function ProcessGroup(name::String)
+    return Group(name, "process", [])
+end
+
+"""
+    function add_group_members(group::Group, members::Vector{String})
+
+Function to add names of members to a group.
+"""
+function add_group_members(group::Group, members::Vector{String})
+    for member in members
+        push!(group.members, member)
+    end
+end
+
+"""
+    function add_group_members(group::Group, members::String)
+
+Function to add name of member to a group.
+"""
+function add_group_members(group::Group, member::String)
+    push!(group.members, member)
+end
+
+
 # --- Node ---
 """
-    mutable struct Node <: AbstractNode
+    mutable struct Node
         name::String
+        groups::Vector{String}
         is_commodity::Bool
         is_market::Bool
         is_state::Bool
@@ -326,17 +423,19 @@ end
 A struct for nodes.
 # Fields
 - `name::String`: Name of the node. 
+- `groups::Vector{String}`: Name of the groups this node is a member in.
 - `is_commodity::Bool`: Flag indicating of the node is a commodity.
 - `is_market::Bool`: Flag indicating of the node is a market node.
 - `is_state::Bool`:  Flag indicating of the node has a state (storage).
 - `is_res::Bool`: Flag indicating of the node participates as a reserve.
-- `is_inflow::Bool`: Flag indicating of the node has a inflow. 
-- `state::Union{State, Nothing}`: The state of the node. 
-- `cost::TimeSeriesData`: Vector containing TimeSeries with the costs for each scenario. 
-- `inflow::TimeSeriesData`: Vector contining TimeSeries with the inflows for each scenario. 
+- `is_inflow::Bool`: Flag indicating of the node has a inflow.
+- `state::Union{State, Nothing}`: The state of the node.
+- `cost::TimeSeriesData`: Vector containing TimeSeries with the costs for each scenario.
+- `inflow::TimeSeriesData`: Vector contining TimeSeries with the inflows for each scenario.
 """
-mutable struct Node <: AbstractNode
+mutable struct Node
     name::String
+    groups::Vector{String}
     is_commodity::Bool
     is_market::Bool
     is_state::Bool
@@ -373,8 +472,17 @@ function Node(name::String, is_commodity::Bool=false, is_market::Bool=false)
     if is_commodity == true && is_market == true
         error("A Node cannot be a commodity and a market at the same time!")
     else
-        return Node(name, is_commodity, is_market, false, false, false, nothing, TimeSeriesData(), TimeSeriesData())
+        return Node(name, [], is_commodity, is_market, false, false, false, nothing, TimeSeriesData(), TimeSeriesData())
     end
+end
+
+"""
+    function add_group(n::Node, g::Group)
+
+Add a group to the node.
+"""
+function add_group(n::Node, g::String)
+    push!(n.groups, g)
 end
 
 
@@ -523,8 +631,9 @@ end
 
 # --- Process ---
 """
-    mutable struct Process <: AbstractProcess
+    mutable struct Process
         name::String
+        groups::Vector{String}
         conversion::Integer # change to string-based: unit_based, market_based, transfer_based
         delay::Float64
         is_cf::Bool
@@ -550,6 +659,7 @@ end
 A struct for a process (unit).
 # Fields
 - `name::String`: Name of the process.
+- `groups::Vector{String}`: names of the groups this process is a member of. 
 - `conversion::String`: Process type; unit, market, or transport based. 
 - `delay::Float64`: The delay over the process, in hours.
 - `is_cf::Bool`: Flag indicating if the process is a cf (capacity factor) process, aka depends on a TimeSeries.
@@ -572,8 +682,9 @@ A struct for a process (unit).
 - `eff_ops::Vector{Any}`: Vector containing operating points for a piecewise efficiency function.
 - `eff_fun::Vector{Tuple{Any,Any}}`: Vector containing efficiencies for a piecewise efficiency function.
 """
-mutable struct Process <: AbstractProcess
+mutable struct Process
     name::String
+    groups::Vector{String}
     conversion::Integer # change to string-based: unit_based, market_based, transfer_based
     delay::Float64
     is_cf::Bool
@@ -607,7 +718,7 @@ The constructor for the Process struct.
 - `conversion::Int`: Used to differentiate between types of process. 1 = unit based, 2 = transfer process, 3 = market process.
 """
 function Process(name::String, conversion::Int=1, delay::Float64=0.0)
-    return Process(name, conversion, delay, false, false, false, false, -1.0, 0.0, 1.0, 0.0, 0, 0, 0, 0, true, [], TimeSeriesData(), TimeSeriesData(), [], [])
+    return Process(name, [], conversion, delay, false, false, false, false, -1.0, 0.0, 1.0, 0.0, 0, 0, 0, 0, true, [], TimeSeriesData(), TimeSeriesData(), [], [])
 end
 
 
@@ -632,6 +743,16 @@ end
 
 
 """
+    function add_group(p::Process, g::String)
+
+Add a group to the process.
+"""
+function add_group(p::Process, g::String)
+    push!(p.groups, g)
+end
+
+
+"""
     function add_delay(p::Process, delay::Float64)
 
 Adds a delay to the chosen Transport process (conversion == 2). 
@@ -645,7 +766,6 @@ function add_delay(p::Process, delay::Real)
         return error("Cannot add a delay to market processes, only transfer processes.")
     end
 end
-
 
 """
     function add_fixed_eff(p::Process, ts::TimeSeries)
@@ -888,6 +1008,7 @@ end
         processes::OrderedDict{String, Process}
         nodes::OrderedDict{String, Node}
         markets::OrderedDict{String, Market}
+        groups::OrderedDict{String, Group}
         scenarios::OrderedDict{String, Float64}
         reserve_type::OrderedDict{String, Float64}
         risk::OrderedDict{String, Float64}
@@ -906,6 +1027,7 @@ Struct containing the imported input data, based on which the Predicer is built.
 - `processes::OrderedDict{String, Process}`: A dict containing the data relevant for processes.
 - `nodes::OrderedDict{String, Node}`: A dict containing the data relevant for nodes.
 - `markets::OrderedDict{String, Market}`: A dict containing the data relevant for markets.
+- `groups::OrderedDict{String, Group}`: A dict containing the data relevant for groups
 - `scenarios::OrderedDict{String, Float64}`:  A dict containing the data relevant for scenarios, with scenario name as key and probability as value.
 - `reserve_type::OrderedDict{String, Float64}`:  A dict containing the reserve types, with reserve name as key and ramp rate(speed) as value: 1 = 1 hour reaction time, 4 = 15 minutes reaction time, etc. 
 - `risk::OrderedDict{String, Float64}`:  A dict containing the data on risk for the cvar calculations, with the risk parameter as key and risk value as value. 
@@ -922,12 +1044,13 @@ mutable struct InputData
     processes::OrderedDict{String, Process}
     nodes::OrderedDict{String, Node}
     markets::OrderedDict{String, Market}
+    groups::OrderedDict{String, Group}
     scenarios::OrderedDict{String, Float64}
     reserve_type::OrderedDict{String, Float64}
     risk::OrderedDict{String, Float64}
     gen_constraints::OrderedDict{String, GenConstraint}
-    function InputData(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
-        return new(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, processes, nodes, markets, scenarios, reserve_type, risk, gen_constraints)
+    function InputData(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, processes, nodes, markets, groups, scenarios, reserve_type, risk, gen_constraints)
+        return new(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, processes, nodes, markets, groups, scenarios, reserve_type, risk, gen_constraints)
     end
 end
 
