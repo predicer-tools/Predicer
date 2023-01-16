@@ -165,7 +165,7 @@ function write_bid_matrix(model_contents::OrderedDict, input_data::Predicer.Inpu
     tuples = Predicer.create_tuples(input_data)
     temporals = input_data.temporals.t
     markets = input_data.markets
-    scenarios = keys(input_data.scenarios)
+    scenarios = collect(keys(input_data.scenarios))
 
     if !isdir(pwd()*"\\results")
         mkdir("results")
@@ -180,7 +180,7 @@ function write_bid_matrix(model_contents::OrderedDict, input_data::Predicer.Inpu
                 v_name = "VOLUME-"*s
                 price = map(t -> markets[m].price(s, t),temporals)
                 if markets[m].type == "energy"
-                    bid_tuple = unique(map(x->(x[1],x[3],x[4]),filter(x->x[1]==markets[m].node && x[3]==s,tuples["balance_market_tuple"])))
+                    bid_tuple = unique(map(x->(x[1],x[3],x[4]),filter(x->x[1]==m && x[3]==s,tuples["balance_market_tuple"])))
                     volume = []
                     for tup in bid_tuple
                         push!(volume,value(v_bid[tup]))
