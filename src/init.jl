@@ -48,19 +48,6 @@ function build_model(model_contents::OrderedDict, input_data::Predicer.InputData
     create_constraints(model_contents, input_data)
 end
 
-function Initialize(input_data::Predicer.InputData)
-    input_data_check = validate_data(input_data)
-    if input_data_check["is_valid"]
-        model_contents = Initialize_contents(input_data)
-        model = init_jump_model(HiGHS.Optimizer)
-        model_contents["model"] = model
-        setup_model(model_contents, input_data)
-        return model_contents
-    else
-        return input_data_check["errors"]
-    end
-end
-
 function generate_model(fpath::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[])
     # get input_data
     input_data = Predicer.get_data(fpath, t_horizon)
@@ -73,6 +60,8 @@ function generate_model(fpath::String, t_horizon::Vector{ZonedDateTime}=ZonedDat
     if input_data.contains_delay
         input_data = Predicer.resolve_delays(input_data)
     end
+    # Build market structures
+    input_data = Predicer.resolve_market_nodes(input_data)
     # create mc
     mc = build_model_contents_dict(input_data)
     mc["model"] = setup_optimizer(HiGHS.Optimizer)
