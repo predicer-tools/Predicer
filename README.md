@@ -120,28 +120,6 @@ Processes are fundamental building blocks in Predicer, along with Nodes. They re
 | type        | String | Name of the reserve type                                                                                                                  |
 | ramp_factor | Float  | Ramp rate factor of reserve activation speed. (If reserve has to activate in 1 hour, ramp_factor is 1.0. In 15 minutes, ramp_factor is 4) |
 
-### Time series data
-
-Time series are used in Predicer to represent parameters that are time-dependent. The notation to define time series data in the excel input files depend on the time 
-series data in question. 
-
-#### Notation
-The first column, 't', should contain the time steps for the time series data. The following columns (2-n) should contain the values corresponding to the given time steps. The name of the other columns should start with the name of the linked entity, usually followed by which scenario the value is for. The values can be defined for each scenario in separate columns, or a single column can be used for several scenarios, separated by commas. The notation used for the different time series is given in the table below.
-
-As an example the inflow for the node 'nn' can be given as 'nn,s1' if the values are given for scenario 's1', and 'nn,s1,s2' if the given values should be for both 's1' and 's2'. If all scenarios should have the same values, they can be defined as 'nn,ALL'. 
-
-| Sheet          | Description                                                     | Notation                          |
-|----------------|-----------------------------------------------------------------|-----------------------------------|
-| cf             | Capacity factor time series for processes with cf functionality | process, scenario(s)              |
-| inflow         | Inflow time series for nodes                                    | node, scenario(s)                 |
-| price          | Price time series for the cost of using commodity nodes         | node, scenario(s)                 |
-| market_prices  | Price time series for the defined markets                       | market, scenario(s)               |
-| balance_prices | Price time series for balance markets                           | market, direction, scenario(s)    |
-| fixed_ts       | Value time series for market fixing                             | market                            |
-| eff_ts         | Value time series of the efficiency of processes                | process, scenariox(s)             |
-| cap_ts         | Value time series limiting a flow of a process                  | Process, connected node, scenario |
-
-
 ### Market
 
 | Parameter    | Type   | Description                                                                      |
@@ -153,7 +131,45 @@ As an example the inflow for the node 'nn' can be given as 'nn,s1' if the values
 | realisation  | Float  | Determines the fraction of offered reserve product that activates each time step |
 | reserve_type | String | Determines the type of the reserve                                               |
 | is_bid       | Bool   | Determines if bids can be offered to the market                                  |
-|              |        |                                                                                  |
+
+
+### Time series data
+
+Time series are used in Predicer to represent parameters that are time-dependent. The notation to define time series data in the excel input files depend on the time 
+series data in question. 
+
+#### Notation
+The first column, 't', should contain the time steps for the time series data. The following columns (2-n) should contain the values corresponding to the given time steps. The name of the other columns should start with the name of the linked entity, usually followed by which scenario the value is for. The values can be defined for each scenario in separate columns, or a single column can be used for several scenarios, separated by commas. The notation used for the different time series is given in the table below.
+
+As an example the inflow for the node 'nn' can be given as 'nn,s1' if the values are given for scenario 's1', and 'nn,s1,s2' if the given values should be for both 's1' and 's2'. If all scenarios should have the same values, they can be defined as 'nn,ALL'. 
+
+| Sheet          | Description                                                                 | Notation                          |
+|----------------|-----------------------------------------------------------------------------|-----------------------------------|
+| cf             | Capacity factor time series for processes with cf functionality             | process, scenario(s)              |
+| inflow         | Inflow time series for nodes (inflow positive value, demand negative value) | node, scenario(s)                 |
+| price          | Price time series for the cost of using commodity nodes                     | node, scenario(s)                 |
+| market_prices  | Price time series for the defined markets                                   | market, scenario(s)               |
+| balance_prices | Price time series for balance markets                                       | market, direction, scenario(s)    |
+| fixed_ts       | Value time series for market fixing                                         | market                            |
+| eff_ts         | Value time series of the efficiency of processes                            | process, scenariox(s)             |
+| cap_ts         | Value time series limiting a flow of a process                              | Process, connected node, scenario |
+
+
+### Scenario
+| Parameter   | Type   | Description                                                  |
+|-------------|--------|--------------------------------------------------------------|
+| name        | String | Name of the scenario                                         |
+| probability | Float  | Probability of the scenario. The sum of all rows should be 1 |
+
+### Risk
+
+he 'risk' sheet in the excel-format input data contains information about the CVaR (conditional value at risk). For details, see [[1]](#1) and [[2]](#2)
+
+
+| Risk parameter | Description                         |
+|----------------|-------------------------------------|
+| alfa           | Risk quantile                       |
+| beta           | Share of CVaR in objective function |
 
 ### General constraints
 
@@ -169,3 +185,11 @@ General constraints in Predicer can be used to limit or fix process flows in rel
 #### gen_constraint
 
 The time series data in the sheet 'gen_constraint' has a special notation. As with other time series data, the first column in the sheet 'gen_constraint' contains the time steps for the constraint. The rest of the columns (2-n) contain information corresponding to specific constraints, defined in the sheet 'constraint'. General constraints contain factors, which add up to a constant. 
+
+
+## References
+
+<a id="1">[1]</a> 
+Krokhmal, P., Uryasev, S., and Palmquist, J., “Portfolio optimization with conditional value-at-risk objective and constraints,” J. Risk, vol. 4, no. 2, pp. 43–68, 2001, doi: 10.21314/jor.2002.057.
+<a id="2">[2]</a> 
+Fleten, S. E. and Kristoffersen, T. K., “Stochastic programming for optimizing bidding strategies of a Nordic hydropower producer,” Eur. J. Oper. Res., vol. 181, no. 2, pp. 916–928, 2007, doi: 10.1016/j.ejor.2006.08.023.
