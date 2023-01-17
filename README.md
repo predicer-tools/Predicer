@@ -55,11 +55,11 @@
 
 ## Input data description
 
-The basic parameters of the input data is described here. 
+The basic parameters and usage of the excel-format input data is described here.
 
 ### Node
 
-Nodes are fundamental building blocks in Predicer, along with Processes. 
+Nodes are fundamental building blocks in Predicer, along with Processes.
 
 | Parameter               | Type   | Description                                                |
 |-------------------------|--------|------------------------------------------------------------|
@@ -79,6 +79,7 @@ Nodes are fundamental building blocks in Predicer, along with Processes.
 
 ### Processes
 
+Processes are fundamental building blocks in Predicer, along with Nodes. They represent conversion or transfer processes in the modelled system. 
 
 | Parameter     | Type    | Description                                                                                         |
 |---------------|---------|-----------------------------------------------------------------------------------------------------|
@@ -119,3 +120,52 @@ Nodes are fundamental building blocks in Predicer, along with Processes.
 | type        | String | Name of the reserve type                                                                                                                  |
 | ramp_factor | Float  | Ramp rate factor of reserve activation speed. (If reserve has to activate in 1 hour, ramp_factor is 1.0. In 15 minutes, ramp_factor is 4) |
 
+### Time series data
+
+Time series are used in Predicer to represent parameters that are time-dependent. The notation to define time series data in the excel input files depend on the time 
+series data in question. 
+
+#### Notation
+The first column, 't', should contain the time steps for the time series data. The following columns (2-n) should contain the values corresponding to the given time steps. The name of the other columns should start with the name of the linked entity, usually followed by which scenario the value is for. The values can be defined for each scenario in separate columns, or a single column can be used for several scenarios, separated by commas. The notation used for the different time series is given in the table below.
+
+As an example the inflow for the node 'nn' can be given as 'nn,s1' if the values are given for scenario 's1', and 'nn,s1,s2' if the given values should be for both 's1' and 's2'. If all scenarios should have the same values, they can be defined as 'nn,ALL'. 
+
+| Sheet          | Description                                                     | Notation                          |
+|----------------|-----------------------------------------------------------------|-----------------------------------|
+| cf             | Capacity factor time series for processes with cf functionality | process, scenario(s)              |
+| inflow         | Inflow time series for nodes                                    | node, scenario(s)                 |
+| price          | Price time series for the cost of using commodity nodes         | node, scenario(s)                 |
+| market_prices  | Price time series for the defined markets                       | market, scenario(s)               |
+| balance_prices | Price time series for balance markets                           | market, direction, scenario(s)    |
+| fixed_ts       | Value time series for market fixing                             | market                            |
+| eff_ts         | Value time series of the efficiency of processes                | process, scenariox(s)             |
+| cap_ts         | Value time series limiting a flow of a process                  | Process, connected node, scenario |
+
+
+### Market
+
+| Parameter    | Type   | Description                                                                      |
+|--------------|--------|----------------------------------------------------------------------------------|
+| market       | String | Name of the market                                                               |
+| type         | String | type of the market (energy or reserve)                                           |
+| node         | String | Node the market is connected to                                                  |
+| direction    | String | Direction of the market, only for reserve markets                                |
+| realisation  | Float  | Determines the fraction of offered reserve product that activates each time step |
+| reserve_type | String | Determines the type of the reserve                                               |
+| is_bid       | Bool   | Determines if bids can be offered to the market                                  |
+|              |        |                                                                                  |
+
+### General constraints
+
+General constraints in Predicer can be used to limit or fix process flows in relation to other process flows or a fixed value. The name and type of the constraint is defined in the sheet 'constraints', and the factors are defined in the sheet 'gen_constraint'. 
+
+#### constraint
+
+| Parameter | Type   | Description                                                                              |
+|-----------|--------|------------------------------------------------------------------------------------------|
+| name      | String | Name of the general constraint                                                           |
+| operator  | String | The operator used in the general constraint. 'eq' for '=', 'gt' for '>' and 'lt' for '<' |
+
+#### gen_constraint
+
+The time series data in the sheet 'gen_constraint' has a special notation. As with other time series data, the first column in the sheet 'gen_constraint' contains the time steps for the constraint. The rest of the columns (2-n) contain information corresponding to specific constraints, defined in the sheet 'constraint'. General constraints contain factors, which add up to a constant. 
