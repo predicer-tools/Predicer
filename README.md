@@ -52,3 +52,21 @@
 
         julia> Predicer.write_bid_matrix(mc, input_data)
 
+
+## Input data parameters
+
+
+| Parameter               | Type   | Description                                                |
+|-------------------------|--------|------------------------------------------------------------|
+| node                    | String | Name of the node                                           |
+| is_commodity            | Bool   | Indicates if the node is a commodity node                  |
+| is_state                | Bool   | Indicates if the node has a state (storage)                |
+| is_res                  | Bool   | Indicates if the node is involved in reserve markets       |
+| is_market               | Bool   | Indicates if the node is a market node                     |
+| is_inflow               | Bool   | Indicates if the node has an inflow                        |
+| state_max               | Float  | Storage state capacity (if node has a state)               |
+| in_max                  | Float  | Storage state charge capacity                              |
+| out_max                 | Float  | Storage state discharge capacity                           |
+| initial_state           | Float  | Initial state of the storage                               |
+| state_loss_proportional | Float  | Hourly storage loss relative to the state of the storage   |
+| residual_value          | Float  | Value of the storage contents at the end of the time range |
