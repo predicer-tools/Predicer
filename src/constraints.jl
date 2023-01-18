@@ -539,7 +539,6 @@ function setup_reserve_balances(model_contents::OrderedDict, input_data::Predice
         v_reserve = model_contents["variable"]["v_reserve"]
         v_res = model_contents["variable"]["v_res"]
         v_res_final = model_contents["variable"]["v_res_final"]
-        
         # state reserve balances
         if input_data.contains_states
             for s_node in unique(map(x -> x[1], state_reserve_tuple))
