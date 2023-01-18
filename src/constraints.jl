@@ -682,7 +682,7 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
                             if !isempty(res_tup_up)
                                 add_to_expression!(ramp_expr_down[tup], sum(values(reserve_types) .* v_reserve[res_tup_up]) - ramp_dw_cap - stop_cap * v_stop[(tup[1], tup[4], tup[5])]) 
                             else
-                                add_to_expression!(ramp_expr_down[tup], ramp_dw_cap - stop_cap * v_stop[(tup[1], tup[4], tup[5])]) 
+                                add_to_expression!(ramp_expr_down[tup], - ramp_dw_cap - stop_cap * v_stop[(tup[1], tup[4], tup[5])]) 
                             end
                         elseif tup[3] in res_nodes_tuple
                             if !isempty(res_tup_up)
@@ -693,7 +693,7 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
                             if !isempty(res_tup_down)
                                 add_to_expression!(ramp_expr_down[tup], sum(values(reserve_types) .* v_reserve[res_tup_down]) - ramp_dw_cap - stop_cap * v_stop[(tup[1], tup[4], tup[5])]) 
                             else   
-                                add_to_expression!(ramp_expr_down[tup], ramp_dw_cap - stop_cap * v_stop[(tup[1], tup[4], tup[5])]) 
+                                add_to_expression!(ramp_expr_down[tup], - ramp_dw_cap - stop_cap * v_stop[(tup[1], tup[4], tup[5])]) 
                             end
                         else
                             add_to_expression!(ramp_expr_up[tup], ramp_up_cap + start_cap * v_start[(tup[1], tup[4], tup[5])]) 
