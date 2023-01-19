@@ -65,6 +65,19 @@ Processes are used to convert an transfer energy between nodes in the modelled s
 
 The reserve products ***res_up*** and ***res_down*** are sold in the *elc* node. The processes *ngchp* and *heatpump* are used to offer reserve capacity. 
 
+![alt_text](https://github.com/vttresearch/Predicer/tree/dev/docs/images/example_model_desc.pdf)
+
+Pdf
+
+![alt_text](https://github.com/vttresearch/Predicer/tree/dev/docs/images/example_model_desc.jpg)
+
+jpg
+
+
+![alt_text](https://github.com/vttresearch/Predicer/blob/f2e78346ae3802d16d84ccb5ca4ef076871ed43f/docs/images/example_model.PNG)
+
+
+png
 
 ## Input data description
 
