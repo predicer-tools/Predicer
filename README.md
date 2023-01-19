@@ -53,6 +53,19 @@
         julia> Predicer.write_bid_matrix(mc, input_data)
 
 
+## Example model
+
+### Model design
+
+A simple example model simple, imaginary energy system is documented here. The input data file of the example model can be found under */input_data/example_model.xlsx*. The system contains natural gas, electricity and heat, and electricity and electricity reserve products are sold on an external market *m*. The example model contains two possible scenarios for input data, *s1* and *s2*, with equal probabilities of occurring (0.5). The data used for prices, heat demand, capacity factors, etc. is randomly generated. 
+
+The modelled system consists of three main nodes: ***ng***, symbolizing a node containing natural gas, ***elc*** symbolizing a node containing electricity, and ***heat***, a node containing heat, such as a district heating system. The *ng* node is a *commodity node*, from which natural gas can be bought at a price defined in the *price* sheet. The *heat* node has a negative *inflow* added to it, which can be seen as a heat demand in the system. The *elc* node is connected to a market node ***m***, *npe*, from which electricity can be bought or sold. 
+
+Processes are used to convert an transfer energy between nodes in the modelled system. The process ***windturb*** symbolizes a wind turbine producing electricity to the *elc* node. The production of *windturb* is limited by a capacity factor time series, defined in the *cf* sheet. The process ***ngchp*** converts natural gas from the *ng* node into electricity to the *elc* node and heat to the *heat* node at a fixed ratio, which is defined in the *constraint* and *gen_constraint* sheets. The ***heatpump*** unit convert electricity from the *elc* node into heat in the *heat* node. When the market *m* is defined, a process for trading between *elc* and *m* is automatically generated. 
+
+The reserve products ***res_up*** and ***res_down*** are sold in the *elc* node. The processes *ngchp* and *heatpump* are used to offer reserve capacity. 
+
+
 ## Input data description
 
 The basic parameters and usage of the excel-format input data are described here. The input data has to be given to Predicer in a specific form, and the excel-format input data files are not a requirement. Excel has been used during development, since they were considered more convenient than databases or other forms of data structures.
@@ -75,6 +88,7 @@ Nodes are fundamental building blocks in Predicer, along with Processes.
 | initial_state           | Float  | Initial state of the storage                               |
 | state_loss_proportional | Float  | Hourly storage loss relative to the state of the storage   |
 | residual_value          | Float  | Value of the storage contents at the end of the time range |
+
 
 
 ### Processes
@@ -100,6 +114,7 @@ Processes are fundamental building blocks in Predicer, along with Nodes. They ar
 | initial_state | Bool    | Initial state of the online unit (0 = offline, 1 = online)                                          |
 
 
+
 ### Process topology
 
 Process topologies are used to define the process flows and capacities in the modelled system. Flows are connections between nodes and processes, and are used to balance the modelled system.
@@ -115,14 +130,27 @@ Process topologies are used to define the process flows and capacities in the mo
 | ramp_down   | Float  | Determines the hourly downward ramp rate of the corresponding process flow        |
 
 
+
+### Efficiencies
+Unit-based processes can have a flat efficiency, as defined in the *processes* sheet, or an efficiency which depends on the load of the process. Load-based efficiency can be defined in the sheet *efficiencies*. Defining an efficiency in the *efficiencies* sheet overrides the value given in the *processes* sheet. The efficiency of a process is  defined on two rows; one row for the *operating point*, *op*, and one row for the corresponding *efficiency*, *eff*.  In the example table below, the efficiency of an imaginary gas turbine *gas_turb* has been defined for four load intervals. The number of given operating points and corresponding efficiencies is chosen by the user, simply by adding or removing columns The operating points are defined on a row, where the first column has the value ***process,op***, and the efficiencies are defined on a row where the value of the first column is ***process,eff***. 
+
+
+| process      | 1    | 2    | 3    | 4    |
+|--------------|------|------|------|------|
+| gas_turb,op  | 0.4  | 0.6  | 0.8  | 1.0  |
+| gas_turb,eff | 0.27 | 0.31 | 0.33 | 0.34 |
+
+
+
 ### Reserve type
 
-The sheet 'reserve_type' is used to define the types of reserve used in the model, mainly differing based on reserve activation speed. 
+The sheet *reserve_type* is used to define the types of reserve used in the model, mainly differing based on reserve activation speed. 
 
 | Parameter | Type | Description |
 |-------------|--------|-------------------------------------------------------------------------------------------------------------------------------------------|
 | type        | String | Name of the reserve type                                                                                                                  |
 | ramp_factor | Float  | Ramp rate factor of reserve activation speed. (If reserve has to activate in 1 hour, ramp_factor is 1.0. In 15 minutes, ramp_factor is 4) |
+
 
 
 ### Market
@@ -140,6 +168,7 @@ Markets are a type of node, with which the modelled system can be balanced by bu
 | is_bid       | Bool   | Determines if bids can be offered to the market                                  |
 
 
+
 ### Time series data
 
 Time series are used in Predicer to represent parameters that are time-dependent. The notation to define time series data in the excel input files depend on the time series data in question. 
@@ -150,7 +179,7 @@ The sheet *timeseries* contains the timesteps used in the model. This sheet cont
 
 The first column, *t*, should contain the time steps for the time series data. The following columns (2-n) should contain the values corresponding to the given time steps. The name of the other columns should start with the name of the linked entity, usually followed by which scenario the value is for. The values can be defined for each scenario in separate columns, or a single column can be used for several scenarios, separated by commas. The notation used for the different time series is given in the table below.
 
-As an example the inflow for the node *nn* can be given as *nn,s1* if the values are given for scenario *s1*, and *nn,s1,s2* if the given values should be for both *s1* and *s2*. If all scenarios should have the same values, they can be defined as *nn,ALL*. 
+As an example the inflow for the node *nn* can be given as ***nn,s1*** if the values are given for scenario *s1*, and ***nn,s1,s2*** if the given values should be for both *s1* and *s2*. If all scenarios should have the same values, they can be defined as ***nn,ALL***. 
 
 | Sheet          | Description                                                                 | Notation                          |
 |----------------|-----------------------------------------------------------------------------|-----------------------------------|
@@ -164,6 +193,7 @@ As an example the inflow for the node *nn* can be given as *nn,s1* if the values
 | cap_ts         | Value time series limiting a flow of a process                              | Process, connected node, scenario |
 
 
+
 ### Scenario
 
 The scenarios in Predicer are separate versions of the future, with potentially differing parameter values. Predicer optimizes the optimal course of action, based on the probability of the defined scenarios.
@@ -172,6 +202,8 @@ The scenarios in Predicer are separate versions of the future, with potentially 
 |-------------|--------|--------------------------------------------------------------|
 | name        | String | Name of the scenario                                         |
 | probability | Float  | Probability of the scenario. The sum of all rows should be 1 |
+
+
 
 ### Risk
 
@@ -183,6 +215,8 @@ The *risk* sheet in the excel-format input data contains information about the C
 | alfa           | Risk quantile                       |
 | beta           | Share of CVaR in objective function |
 
+
+
 ### General constraints
 
 General constraints in Predicer can be used to limit or fix process flows in relation to other process flows or a fixed value. The name and type of the constraint is defined in the sheet *constraints*, and the factors are defined in the sheet *gen_constraint*. 
@@ -193,6 +227,8 @@ General constraints in Predicer can be used to limit or fix process flows in rel
 |-----------|--------|------------------------------------------------------------------------------------------|
 | name      | String | Name of the general constraint                                                           |
 | operator  | String | The operator used in the general constraint. *eq* for *=*, *gt* for *>* and *lt* for *<* |
+
+
 
 #### gen_constraint
 
@@ -213,6 +249,8 @@ In the sheet *gen_constraint*, the names of the columns referencing to the facto
 | t1 | 3               | -1               | 0       |
 | t2 | 3               | -1               | 0       | 
 | tn | 3               | -1               | 0       |
+
+
 
 ## References
 
