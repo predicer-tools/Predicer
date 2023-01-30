@@ -17,6 +17,7 @@ function create_variables(model_contents::OrderedDict, input_data::InputData)
     create_v_flow_op(model_contents, input_data)
     create_v_risk(model_contents, input_data)
     create_v_balance_market(model_contents, input_data)
+    create_v_reserve_online(model_contents,input_data)
 end
 
 
@@ -177,4 +178,19 @@ function create_v_balance_market(model_contents::OrderedDict, input_data::InputD
     bal_market_tuple = create_balance_market_tuple(input_data)
     v_flow_bal = @variable(model,v_flow_bal[tup in bal_market_tuple] >= 0)
     model_contents["variable"]["v_flow_bal"] = v_flow_bal
+end
+
+"""
+    create_v_reserve_online(model_contents::OrderedDict, input_data::InputData)
+
+Set up online variables for reserve market participation.
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+"""
+function create_v_reserve_online(model_contents::OrderedDict, input_data::InputData)
+    model = model_contents["model"]
+    res_online_tuple = create_reserve_limits(input_data)
+    v_reserve_online = @variable(model,v_reserve_online[tup in res_online_tuple], Bin)
+    model_contents["variable"]["v_reserve_online"] = v_reserve_online
 end

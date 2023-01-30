@@ -24,6 +24,7 @@ function create_constraints(model_contents::OrderedDict, input_data::Predicer.In
     setup_cost_calculations(model_contents, input_data)
     setup_cvar_element(model_contents, input_data)
     setup_objective_function(model_contents, input_data)
+    setup_reserve_participation(model_contents, input_data)
 end
 
 
@@ -906,6 +907,34 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
     end
 end
 
+"""
+    setup_reserve_participation(model_contents::OrderedDict, input_data::Predicer.InputData)
+
+Setup participation limits for reserve
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+"""
+function setup_reserve_participation(model_contents::OrderedDict, input_data::Predicer.InputData)
+    model = model_contents["model"]
+    markets = input_data.markets
+    v_res_online = model_contents["variable"]["v_reserve_online"]
+    v_res_final = model_contents["variable"]["v_res_final"]
+    res_lim_tuple = create_reserve_limits(input_data)
+    res_online_up_expr = model_contents["expression"]["res_online_up_expr"] = OrderedDict()
+    res_online_lo_expr = model_contents["expression"]["res_online_lo_expr"] = OrderedDict()
+    for tup in res_lim_tuple
+        max_bid = markets[tup[1]].max_bid
+        min_bid = markets[tup[1]].min_bid
+        res_online_up_expr[tup] = @expression(model,v_res_final[tup]-max_bid*v_res_online[tup])
+        res_online_lo_expr[tup] = @expression(model,v_res_final[tup]-min_bid*v_res_online[tup]) 
+    end
+    res_online_up = @constraint(model, res_online_up[tup in res_lim_tuple], res_online_up_expr[tup] <= 0)
+    res_online_lo = @constraint(model, res_online_lo[tup in res_lim_tuple], res_online_lo_expr[tup] >= 0)
+    model_contents["constraint"]["res_online_up"] = res_online_up
+    model_contents["constraint"]["res_online_lo"] = res_online_lo
+end
 
 """
     setup_generic_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
@@ -1086,6 +1115,21 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
         end
     end
 
+    # Reserve fee costs:
+    reserve_fees = model_contents["expression"]["reserve_fee_costs"] = OrderedDict()
+    for s in scenarios
+        reserve_fees[s] = AffExpr(0.0)
+    end
+    if input_data.contains_reserves
+        v_reserve_online = model_contents["variable"]["v_reserve_online"]
+        res_online_tuple = create_reserve_limits(input_data)
+        for s in scenarios
+            for tup in filter(x->x[2] == s, res_online_tuple)
+                add_to_expression!(reserve_fees[s], markets[tup[1]].fee * v_reserve_online[tup])
+            end
+        end
+    end
+
     # State residue costs
     state_residue_costs = model_contents["expression"]["state_residue_costs"] = OrderedDict()
     for s in scenarios
@@ -1117,7 +1161,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     # Total model costs
     total_costs = model_contents["expression"]["total_costs"] = OrderedDict()
     for s in scenarios
-        total_costs[s] = sum(commodity_costs[s]) + sum(market_costs[s]) + sum(vom_costs[s]) + sum(reserve_costs[s]) + sum(start_costs[s]) + sum(state_residue_costs[s]) + sum(dummy_costs[s])
+        total_costs[s] = sum(commodity_costs[s]) + sum(market_costs[s]) + sum(vom_costs[s]) + sum(reserve_costs[s]) + sum(start_costs[s]) + sum(state_residue_costs[s]) + sum(reserve_fees[s]) + sum(dummy_costs[s])
     end
 end
 

@@ -922,6 +922,10 @@ A struct for markets.
 - `realisation::Float64`: Realisation probability.
 - `reserve_type::String`: Type of the reserve market. 
 - `is_bid::Bool`: Is the market biddable. 
+- 'is_limited::Bool' : Is the reserve market limited
+- 'min_bid::Float64' : Minimum bid for reserve
+- 'max_bid::Float64' : Minimum bid for reserve
+- 'fee::Float64' : Fee for reserve particiapation
 - `price::TimeSeriesData`: Vector containing TimeSeries of the market price in different scenarios. 
 - `fixed::Vector{Tuple{Any,Any}}`: Vector containing information on the market being fixed. 
 """
@@ -933,12 +937,16 @@ struct Market
     realisation::Float64
     reserve_type::String
     is_bid::Bool
+    is_limited::Bool
+    min_bid::Float64
+    max_bid::Float64
+    fee::Float64
     price::TimeSeriesData
     up_price::TimeSeriesData
     down_price::TimeSeriesData
     fixed::Vector{Tuple{Any,Any}}
-    function Market(name, type, node, direction, realisation, reserve_type, is_bid)
-        return new(name, type, node, direction, realisation, reserve_type, is_bid, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
+    function Market(name, type, node, direction, realisation, reserve_type, is_bid, is_limited, min_bid, max_bid, fee)
+        return new(name, type, node, direction, realisation, reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
     end
 end
 

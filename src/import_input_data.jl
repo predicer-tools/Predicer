@@ -282,7 +282,7 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
    
     for i in 1:nrow(system_data["markets"])
         mm = system_data["markets"][i, :]
-        markets[mm.market] = Predicer.Market(mm.market, mm.type, mm.node, mm.direction, mm.realisation, mm.reserve_type, mm.is_bid)
+        markets[mm.market] = Predicer.Market(mm.market, mm.type, mm.node, mm.direction, mm.realisation, mm.reserve_type, mm.is_bid, mm.is_limited, mm.min_bid, mm.max_bid, mm.fee)
         #
         for s in keys(scenarios)
             timesteps = map(t-> string(ZonedDateTime(t, tz"UTC")), timeseries_data["scenarios"][s]["market_prices"].t)

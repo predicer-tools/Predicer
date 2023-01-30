@@ -35,6 +35,7 @@ function create_tuples(input_data::InputData) # unused, should be debricated
     tuplebook["delay_tuple"] = create_delay_process_tuple(input_data)
     tuplebook["balance_market_tuple"] = create_balance_market_tuple(input_data)
     tuplebook["state_reserves"] = state_reserves(input_data)
+    tuplebook["reserve_limits"] = create_reserve_limits(input_data)
     return tuplebook
 end
 
@@ -638,4 +639,26 @@ function state_reserves(input_data::InputData)
     end
 
     return state_reserves
+end
+
+"""
+    create_reserve_limits(input_data::InputData)
+
+Returns limited reserve markets.
+form: (market, s, t)
+"""
+
+function create_reserve_limits(input_data::InputData)
+    reserve_limits = []
+    markets = input_data.markets
+    scenarios = collect(keys(input_data.scenarios))
+    temporals = input_data.temporals
+    for m in keys(markets)
+        if markets[m].type == "reserve" && markets[m].is_limited
+            for s in scenarios, t in temporals.t
+                push!(reserve_limits,(markets[m].name,s,t))
+            end
+        end
+    end
+    return reserve_limits
 end
