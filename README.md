@@ -138,6 +138,10 @@ Markets are a type of node, with which the modelled system can be balanced by bu
 | realisation  | Float  | Determines the fraction of offered reserve product that activates each time step |
 | reserve_type | String | Determines the type of the reserve                                               |
 | is_bid       | Bool   | Determines if bids can be offered to the market                                  |
+| is_limited   | Bool   | Determines if reserve markets are limited                                        |
+| min_bid      | Float  | Minimum reserve offer if limited                                                 |
+| max_bid      | Float  | Maximum reserve offer if limited                                                 |
+| fee          | Float  | Reserve participation fee (per time period) if limited                           |
 
 
 ### Time series data
