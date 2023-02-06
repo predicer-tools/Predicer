@@ -43,6 +43,8 @@ using Predicer
     # - should this be allowed, since the energy markets can be "blocked" using gen_constraints?
     # - Process should be fine, as long as topos are different. 
 
+    # Check that each entity (node, process, market, etc) has all relevant information defined. 
+
     # Check that a process is connected to a node in the given node group during market participation
     # 
 # TODO
