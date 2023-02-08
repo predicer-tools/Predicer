@@ -72,11 +72,11 @@ The reserve products ***res_up*** and ***res_down*** are sold in the *elc* node.
 ![alt_text](https://github.com/vttresearch/Predicer/blob/f2e78346ae3802d16d84ccb5ca4ef076871ed43f/docs/images/example_model.PNG)
 Basic structure of the example model.
 
-| name     | operator |
-|----------|----------|
-| ngchp_c1 | eq       |
+| name     | operator | is_setpoint | penalty |
+|----------|----------|-------------|---------|
+| ngchp_c1 | eq       | 0           | 0       |
 
-Further, the factors for the constraint are defined in the *gen_constraint* sheet. The operator of the created constraint is *eq*, meaning equal.  The sum of the factors (the process branches *elc* and *heat* multiplied by given constants), should equal a given constant. With a 1:2 ratio of electricity and heat production, the constants given to the process flows should be -2 and 1, or 2 and -1, for electricity and heat respectively. This can be seen in the table below, where the factors and constraints are defined for *s1*. The factors have to be defined again for *s2*.
+Further, the factors for the constraint are defined in the *gen_constraint* sheet. The operator of the created constraint is *eq*, meaning equal.  The sum of the factors (the process branches *elc* and *heat* multiplied by given constants) and a given constant should equal 0. With a 1:2 ratio of electricity and heat production, the constants given to the process flows should be -2 and 1, or 2 and -1, for electricity and heat respectively. This can be seen in the table below, where the factors and constraints are defined for *s1*. The factors have to be defined again for *s2*.
 
 | t  | ngchp_c1,ngchp,elc,s1 | ngchp_c1,ngchp,heat,s1 | ngchp_c1,s1|
 |----|-----------------------|------------------------|------------|
@@ -243,20 +243,22 @@ The *risk* sheet in the excel-format input data contains information about the C
 
 ### General constraints
 
-General constraints in Predicer can be used to limit or fix process flows in relation to other process flows or a fixed value. The name and type of the constraint is defined in the sheet *constraints*, and the factors are defined in the sheet *gen_constraint*. 
+General constraints in Predicer can be used to limit or fix process flow variables, online variables, or storage state variables in relation to other variables or a given value. The name and type of the constraint is defined in the sheet *constraints*, and the factors are defined in the sheet *gen_constraint*. 
 
 #### constraint
 
-| Parameter | Type   | Description                                                                              |
-|-----------|--------|------------------------------------------------------------------------------------------|
-| name      | String | Name of the general constraint                                                           |
-| operator  | String | The operator used in the general constraint. *eq* for *=*, *gt* for *>* and *lt* for *<* |
+| Parameter   | Type   | Description                                                                              |
+|-------------|--------|------------------------------------------------------------------------------------------|
+| name        | String | Name of the general constraint                                                           |
+| operator    | String | The operator used in the general constraint. *eq* for *=*, *gt* for *>* and *lt* for *<* |
+| is_setpoint | Bool   | Indicates whether the constraint is fixed, or if the model can deviate from the value.   |
+| penalty     | Float  | A user-defined penalty for deviating from the givenn value, if constraint is a setpoint. |
 
 
 
 #### gen_constraint
 
-The time series data in the sheet *gen_constraint* has a special notation. As with other time series data, the first column *t* in the sheet *gen_constraint* contains the time steps for the constraint. The rest of the columns (2-n) contain information corresponding to specific constraints, defined in the sheet *constraint*. General constraints contain factors, which add up to a constant. The notation for the first row of columns (2-n) is *constraint name, process, process flow, scenario* for factors and *constraint name, scenario* for the constant.
+The time series data in the sheet *gen_constraint* has a special notation. As with other time series data, the first column *t* in the sheet *gen_constraint* contains the time steps for the constraint. The rest of the columns (2-n) contain information corresponding to specific constraints, defined in the sheet *constraint*. General constraints contain factors, which add up to a constant. The notation for the first row of columns (2-n) depends on the type of variable the factor refers to. For process flow variables, **v_flow**, the notation is *constraint name, process, process flow, scenario*. For process online variables, **v_online**, the notation is *constraint name, process, scenario*. For storage state variables, **v_state**, the notation is *constraint name, node, scenario*. Each constraint can also have a constant value added, with the notation *constraint name, scenario* for the column. 
 
 As an example, assume a CHP gas turbine *gt* with a input flow of natural gas *ng*, as well as outputs of electricity *elc* and heat in the form of exhaust gases *heat*. Assume, that the ratio of heat and power should be 3:1, meaning an electrical efficiency of 25%, and the remaining 75% being heat. To ensure this ratio, a general constraint named *gt_c1* is defined in the sheet *constraint*, with the operator set to *eq*. 
 
@@ -274,6 +276,16 @@ In the sheet *gen_constraint*, the names of the columns referencing to the facto
 | t2 | 3               | -1               | 0       | 
 | tn | 3               | -1               | 0       |
 
+
+As another example, assume that the operation of two online processes, **proc_1** and **proc_2**, should be limited in regard to eachother.  Assume, that the constraint *c_online* is used to limit the online variables **v_online** of these processes so, that the processes are not operating at the same time, but that one of the two is always active. The variable *v_online* is a binary variable with values of 0 or 1. The sum of the online variables of *proc_1* and *proc_2* should be set to 1, in order to one, but not two, of the processes to be active. As the general constraint is set equal to 0, the addiotional constant should be set to *-1*. This ensures, that **proc_1* + *proc_2* - 1 == 0*. 
+
+| t  | c_online,proc_1,s1 | c_online,proc_1,s1 | c_online,s1|
+|----|--------------------|--------------------|------------|
+| t1 | 1                  | 1                  | -1         |
+| t2 | 1                  | 1                  | -1         | 
+| tn | 1                  | 1                  | -1         |
+
+If both the processes should be either online or offline at the same time, the coefficients for one process should be *1*, and the other should be *-1*, weith the constant set to 0. This would result in the constraint **proc_1* - *proc_2* + 0 == 0*. 
 
 
 ## References
