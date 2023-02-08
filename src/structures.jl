@@ -954,24 +954,57 @@ end
 # --- ConFactor ---
 """
     struct ConFactor
-        flow::Tuple{Any,Any}
+        var_type::String
+        var_tuple::Union{Tuple{Any,Any}, String}
         data::TimeSeriesData
-        function ConFactor(flow,data)
-            return new(flow,data)
+        function ConFactor(var_type, var_tuple)
+            return new(var_type, var_tuple, TimeSeriesData())
         end
     end
 
 Struct for general constraints factors.
 # Fields
-- `flow::Tuple{Any,Any}`: ??
-- `data::TimeSeriesData`: ??    
+- `var_type::String`: Type of the variable (v_flow, v_state, v_online)
+- `var_tuple::Tuple{Any,Any}`: Name/ID of the variable. (p, flow) for v_flow, (n, "") for v_state and (p, "") for v_online.
+- `data::TimeSeriesData`: Timeseries containing the coefficients for the variable. 
 """
 struct ConFactor
-    flow::Tuple{Any,Any}
+    var_type::String
+    var_tuple::Tuple{Any,Any}
     data::TimeSeriesData
-    function ConFactor(flow)
-        return new(flow,TimeSeriesData())
+    function ConFactor(var_type, var_tuple)
+        return new(var_type, var_tuple, TimeSeriesData())
     end
+end
+
+
+"""
+    function OnlineConFactor(var_tuple::Tuple{Any, Any})
+
+Function to create a confactor for an online variable. 
+"""
+function OnlineConFactor(var_tuple)
+    return ConFactor("online", var_tuple)
+end
+
+
+"""
+    function StateConFactor(var_tuple::Tuple{Any, Any})
+
+Function to create a confactor for a state variable. 
+"""
+function StateConFactor(var_tuple)
+    return ConFactor("state", var_tuple)
+end
+
+
+"""
+    function FlowConFactor(var_tuple::Tuple{Any, Any})
+
+Function to create a confactor for a flow variable. 
+"""
+function FlowConFactor(var_tuple)
+    return ConFactor("flow", var_tuple)
 end
 
 
@@ -980,16 +1013,20 @@ end
     struct GenConstraint
         name::String
         type::String
+        is_setpoint::Bool
+        penalty::Float64
         factors::Vector{ConFactor}
         constant::TimeSeriesData
-        function GenConstraint(name,type)
-            return new(name,type,[],[])
+        function GenConstraint(name,type,is_setpoint=false, penalty=0.0)
+            return new(name,type,is_setpoint, penalty, [], TimeSeriesData())
         end
     end
 
 Struct for general constraints.
 # Fields
 - `name::String`: Name of the generic constraint. 
+- `is_setpoint::Bool`: Indicates whether the constraint is a setpoint (=true) with possible deviation from the given value, or fixed (=false) 
+- `penalty::Float64`: Name of the generic constraint. 
 - `type::String`: Type of the generic constraint. 
 - `factors::Vector{ConFactor}`: Vector of ConFactors. 
 - `constant::TimeSeriesData`: TimeSeries?
@@ -997,10 +1034,12 @@ Struct for general constraints.
 struct GenConstraint
     name::String
     type::String
+    is_setpoint::Bool
+    penalty::Float64
     factors::Vector{ConFactor}
     constant::TimeSeriesData
-    function GenConstraint(name,type)
-        return new(name,type,[], TimeSeriesData())
+    function GenConstraint(name,type,is_setpoint=false, penalty=0.0)
+        return new(name,type,is_setpoint, penalty, [], TimeSeriesData())
     end
 end
 

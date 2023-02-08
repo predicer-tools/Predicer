@@ -917,23 +917,25 @@ Setup participation limits for reserve
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
 function setup_reserve_participation(model_contents::OrderedDict, input_data::Predicer.InputData)
-    model = model_contents["model"]
-    markets = input_data.markets
-    v_res_online = model_contents["variable"]["v_reserve_online"]
-    v_res_final = model_contents["variable"]["v_res_final"]
-    res_lim_tuple = create_reserve_limits(input_data)
-    res_online_up_expr = model_contents["expression"]["res_online_up_expr"] = OrderedDict()
-    res_online_lo_expr = model_contents["expression"]["res_online_lo_expr"] = OrderedDict()
-    for tup in res_lim_tuple
-        max_bid = markets[tup[1]].max_bid
-        min_bid = markets[tup[1]].min_bid
-        res_online_up_expr[tup] = @expression(model,v_res_final[tup]-max_bid*v_res_online[tup])
-        res_online_lo_expr[tup] = @expression(model,v_res_final[tup]-min_bid*v_res_online[tup]) 
+    if input_data.contains_reserves
+        model = model_contents["model"]
+        markets = input_data.markets
+        v_res_online = model_contents["variable"]["v_reserve_online"]
+        v_res_final = model_contents["variable"]["v_res_final"]
+        res_lim_tuple = create_reserve_limits(input_data)
+        res_online_up_expr = model_contents["expression"]["res_online_up_expr"] = OrderedDict()
+        res_online_lo_expr = model_contents["expression"]["res_online_lo_expr"] = OrderedDict()
+        for tup in res_lim_tuple
+            max_bid = markets[tup[1]].max_bid
+            min_bid = markets[tup[1]].min_bid
+            res_online_up_expr[tup] = @expression(model,v_res_final[tup]-max_bid*v_res_online[tup])
+            res_online_lo_expr[tup] = @expression(model,v_res_final[tup]-min_bid*v_res_online[tup]) 
+        end
+        res_online_up = @constraint(model, res_online_up[tup in res_lim_tuple], res_online_up_expr[tup] <= 0)
+        res_online_lo = @constraint(model, res_online_lo[tup in res_lim_tuple], res_online_lo_expr[tup] >= 0)
+        model_contents["constraint"]["res_online_up"] = res_online_up
+        model_contents["constraint"]["res_online_lo"] = res_online_lo
     end
-    res_online_up = @constraint(model, res_online_up[tup in res_lim_tuple], res_online_up_expr[tup] <= 0)
-    res_online_lo = @constraint(model, res_online_lo[tup in res_lim_tuple], res_online_lo_expr[tup] >= 0)
-    model_contents["constraint"]["res_online_up"] = res_online_up
-    model_contents["constraint"]["res_online_lo"] = res_online_lo
 end
 
 """
@@ -948,7 +950,11 @@ Setup generic constraints.
 function setup_generic_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
     process_tuple = process_topology_tuples(input_data)
+    online_tuple = online_process_tuples(input_data)
+    state_tuple = state_node_tuples(input_data)
     v_flow = model_contents["variable"]["v_flow"]
+    v_online = model_contents["variable"]["v_online"]
+    v_state = model_contents["variable"]["v_state"]
 
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
@@ -969,16 +975,37 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
         eq_dir = gen_constraints[c].type
         for s in scenarios, t in relevant_ts
             add_to_expression!(const_expr[c][(s,t)], consta(s, t))
-            #add_to_expression!(const_expr[c][(s,t)],filter(x->x.scenario == s,consta)[1](t))
             for f in facs
-                p_flow = f.flow
-                if input_data.processes[p_flow[1]].conversion == 1
-                    tup = filter(x->x[1]==p_flow[1] && (x[2]==p_flow[2] || x[3]==p_flow[2]) && x[4]==s && x[5]==t,process_tuple)[1]
-                else
-                    tup = filter(x->x[1]==p_flow[1] && (x[2]==p_flow[1] || x[3]==p_flow[2]) && x[4]==s && x[5]==t,process_tuple)[1]
+                if f.var_type == "flow"
+                    p_flow = f.var_tuple
+                    if input_data.processes[p_flow[1]].conversion == 1
+                        tup = filter(x->x[1]==p_flow[1] && (x[2]==p_flow[2] || x[3]==p_flow[2]) && x[4]==s && x[5]==t,process_tuple)[1]
+                    else
+                        tup = filter(x->x[1]==p_flow[1] && (x[2]==p_flow[1] || x[3]==p_flow[2]) && x[4]==s && x[5]==t,process_tuple)[1]
+                    end
+                    fac_data = f.data(s, t)
+                    add_to_expression!(const_expr[c][(s,t)],fac_data,v_flow[tup])
+                elseif f.var_type == "online"
+                    p = f.var_tuple[1]
+                    if input_data.processes[p].is_online
+                        tup = filter(x -> x[1] == p && x[2] == s && x[3] == t, online_tuple)[1]
+                    else
+                        msg = "Factor " * string((p, f.var_tuple)) * " of gen_constraint " * string(c) * " has no online functionality!" 
+                        throw(ErrorException(msg))
+                    end
+                    fac_data = f.data(s, t)
+                    add_to_expression!(const_expr[c][(s,t)],fac_data,v_online[tup])
+                elseif f.var_type == "state"
+                    n = f.var_tuple[1]
+                    if input_data.nodes[n].is_state
+                        tup = filter(x -> x[1] == n && x[2] == s && x[3] == t, state_tuple)[1]
+                    else
+                        msg = "Factor " * string((n, f.var_tuple)) * " of gen_constraint " * string(c) * " has no state functionality!" 
+                        throw(ErrorException(msg))
+                    end
+                    fac_data = f.data(s, t)
+                    add_to_expression!(const_expr[c][(s,t)],fac_data,v_state[tup])
                 end
-                fac_data = f.data(s, t)
-                add_to_expression!(const_expr[c][(s,t)],fac_data,v_flow[tup])
             end
         end 
         if eq_dir == "eq"

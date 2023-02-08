@@ -335,14 +335,16 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
     for i in 1:nrow(constraint_type)
         con = constraint_type[i,1]
         con_dir = constraint_type[i,2]
-        gen_constraints[con] = Predicer.GenConstraint(con,con_dir)
+        is_setpoint = Bool(constraint_type[i,3])
+        penalty = Float64(constraint_type[i,4])
+        gen_constraints[con] = Predicer.GenConstraint(con,con_dir, is_setpoint, penalty)
     end
 
     con_vecs = OrderedDict()
     for n in names(constraint_data)
         timesteps = map(t-> string(ZonedDateTime(t, tz"UTC")), constraint_data.t)
         if n != "t"
-            col = split(n,",")
+            col = map(substr -> strip(substr), split(n,","))
             constr = col[1]
             scen = col[end]
             data = constraint_data[!,n]
@@ -350,8 +352,20 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
             for i in 1:length(timesteps)
                 push!(ts.series,(timesteps[i],data[i]))
             end
-            if length(col) == 4
-                tup = (col[1],col[2],col[3])
+            if length(col) == 4 # This means it is a flow variable
+                tup = ("flow", col[1],col[2],col[3])
+                if tup in keys(con_vecs)
+                    push!(con_vecs[tup],ts)
+                else
+                    con_vecs[tup] = []
+                    push!(con_vecs[tup],ts)
+                end
+            elseif length(col) == 3 # This means it is either an online variable or a state variable
+                if col[2] in collect(keys(nodes))
+                    tup = ("state", col[1],col[2])
+                elseif col[2] in collect(keys(processes))
+                    tup = ("online", col[1],col[2])
+                end
                 if tup in keys(con_vecs)
                     push!(con_vecs[tup],ts)
                 else
@@ -365,9 +379,15 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
     end
 
     for k in keys(con_vecs)
-        con_fac = Predicer.ConFactor((k[2],k[3]))
+        if k[1] == "flow"
+            con_fac = Predicer.FlowConFactor((k[3],k[4]))
+        elseif k[1] == "online"
+            con_fac = Predicer.OnlineConFactor((k[3],""))
+        elseif k[1] == "state"
+            con_fac = Predicer.StateConFactor((k[3],""))
+        end
         append!(con_fac.data.ts_data, con_vecs[k])
-        push!(gen_constraints[k[1]].factors,con_fac)
+        push!(gen_constraints[k[2]].factors,con_fac)
     end
     
     contains_reserves = (true in map(n -> n.is_res, collect(values(nodes))))
