@@ -953,9 +953,14 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
     online_tuple = online_process_tuples(input_data)
     state_tuple = state_node_tuples(input_data)
     v_flow = model_contents["variable"]["v_flow"]
-    v_online = model_contents["variable"]["v_online"]
-    v_state = model_contents["variable"]["v_state"]
-
+    if input_data.contains_online
+        v_online = model_contents["variable"]["v_online"]
+    
+    end    
+    if input_data.contains_states
+        v_state = model_contents["variable"]["v_state"]
+    end
+    
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
     gen_constraints = input_data.gen_constraints
