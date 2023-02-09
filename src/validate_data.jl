@@ -47,6 +47,10 @@ using Predicer
 
     # Check that a process is connected to a node in the given node group during market participation
     # 
+
+    # Check that gen_constraints are valid
+    # "normal in the constraints sheet, and setpoints in the setpoints sheet
+    
 # TODO
 # Need to add validation for delays!
 # If a transfer process has been given two delays, how should it be handled? Use the larger delay?
