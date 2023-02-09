@@ -70,7 +70,9 @@ module Predicer
     process_topology_ramp_times_tuples,
     scenarios,
     create_delay_tuple,
-    state_reserves
+    state_reserves,
+    create_reserve_limits,
+    setpoint_tuples
 
     export create_variables,
     create_v_flow,
