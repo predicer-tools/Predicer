@@ -258,15 +258,19 @@ General constraints in Predicer can be used to limit or fix process flow variabl
 
 #### gen_constraint
 
-The time series data in the sheet *gen_constraint* has a special notation. As with other time series data, the first column *t* in the sheet *gen_constraint* contains the time steps for the constraint. The rest of the columns (2-n) contain information corresponding to specific constraints, defined in the sheet *constraint*. General constraints contain factors, which add up to a constant. The notation for the first row of columns (2-n) depends on the type of variable the factor refers to. For process flow variables, **v_flow**, the notation is *constraint name, process, process flow, scenario*. For process online variables, **v_online**, the notation is *constraint name, process, scenario*. For storage state variables, **v_state**, the notation is *constraint name, node, scenario*. Each constraint can also have a constant value added, with the notation *constraint name, scenario* for the column. 
+The user can define additional constraints to the Predicer model, making it more flexible. Genral constraints are a powerful tool for customizing the model, but can also cause problems that are difficult to detect and solve. The user can either add "rigid" constraints, essentially defining a value or a range of values from which a variable or a sum of variables cannot deviate. Normal general constraints are applicable for flow, state and online variables. 
 
-As an example, assume a CHP gas turbine *gt* with a input flow of natural gas *ng*, as well as outputs of electricity *elc* and heat in the form of exhaust gases *heat*. Assume, that the ratio of heat and power should be 3:1, meaning an electrical efficiency of 25%, and the remaining 75% being heat. To ensure this ratio, a general constraint named *gt_c1* is defined in the sheet *constraint*, with the operator set to *eq*. 
+The user can also define so-called "setpoint" constraints, in which the optimizer can deviate from the values defined by the user. Deviation from the values defined in the setpoint constraints adds and additional cost to the model. The setpoint constraints are only applicable for state and flow variables, not online variables. 
 
+The time series data in the sheet *gen_constraint* has a special notation. As with other time series data, the first column *t* in the sheet *gen_constraint* contains the time steps for the constraint. The rest of the columns (2-n) contain information corresponding to specific constraints, defined in the sheet *constraint*. 
 
+"rigid" general constraints contain factors, which add up to a constant. The notation for the first row of columns (2-n) depends on the type of variable the factor refers to. For process flow variables, **v_flow**, the notation is *constraint name, process, process flow, scenario*. For process online variables, **v_online**, the notation is *constraint name, process, scenario*. For storage state variables, **v_state**, the notation is *constraint name, node, scenario*. Each constraint can also have a constant value added, with the notation *constraint name, scenario* for the column. For "setpoint" constraints, only one column of factors can be defined, as per the previously mentioned notation. 
 
-| name  | operator |
-|-------|----------|
-| gt_c1 | eq       |
+As an example of a normal general constraint, assume a CHP gas turbine *gt* with a input flow of natural gas *ng*, as well as outputs of electricity *elc* and heat in the form of exhaust gases *heat*. Assume, that the ratio of heat and power should be 3:1, meaning an electrical efficiency of 25%, and the remaining 75% being heat. To ensure this ratio, a general constraint named *gt_c1* is defined in the sheet *constraint*, with the operator set to *eq*. 
+
+| name  | operator | is_setpoint | penalty |
+|-------|----------|-------------|---------|
+| gt_c1 | eq       | 0           | 0       |
 
 In the sheet *gen_constraint*, the names of the columns referencing to the factors should be *gt_c1,gt,heat,s1* and *gt_c1,gt,elc,s1*. This refers to the constraint *gt_c1*, the process *gt*, and the process flows *heat* and *elc*. The name of the column referencing to the constant should be *gt_c1,s1*. As the sum of the factors equal the constant, the value of the factors should be *3* or *-3* for the factor representing the electricity flow, and *-1* or *1*, respectively, for the factor representing the heat flow. The value of the constant should be *0*. As the sum of the factors equal the constant, it would lead to *3 \* elc - 1 \* heat = 0* or alternatively *-3 \* elc + 1 \* heat = 0*.
 
@@ -286,6 +290,23 @@ As another example, assume that the operation of two online processes, **proc_1*
 | tn | 1                  | 1                  | -1         |
 
 If both the processes should be either online or offline at the same time, the coefficients for one process should be *1*, and the other should be *-1*, weith the constant set to 0. This would result in the constraint **proc_1* - *proc_2* + 0 == 0*. 
+
+
+As an example of a setpoint general constraint, assume the value of the electricity, **elc**, production of the process **gas_turb** has to be between 3 and 8. To do this, two setpoint constraints are defined, **c_up** and **c_dw**, for defining an upper and lower boundary for the process flow. As above, the constraints are defined in the *gen_constraint* sheet. The operator for *c_up* should be *st* (= smaller than), and the operator for *c_dw* should be *gt* (=greater than). Both constraints are defined as setpoint constraints, with a deviation penalty of 100. The unit of the penalty is simply per iunit of variable, meaning a variable deviation of 2 would increase the costs in the model with 200.
+
+| name  | operator | is_setpoint | penalty |
+|-------|----------|-------------|---------|
+| c_up  | st       | 1           | 100     |
+| c_dw  | gt       | 1           | 100     |
+
+
+In the *constraint* sheet, the values for the upper and lower boundaries are defined. The constraints *c_up* is the upper boundary, and a value of 8 is given. For *c_dw*, a value of 3 is defined. With these constraints, the electricity production of *gas_turb* has to be between 3 and 8. Any deviation from this range will result in a penalty of 100 for each unit of production exceeding this range. 
+
+| t  | c_up,gas_turb,elc,s1 | c_dw,gas_turb,elc,s1 |
+|----|----------------------|----------------------|
+| t1 | 8                    | 3                    |
+| t2 | 8                    | 3                    |
+| tn | 8                    | 3                    |
 
 
 ## References
