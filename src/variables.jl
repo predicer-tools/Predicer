@@ -18,6 +18,7 @@ function create_variables(model_contents::OrderedDict, input_data::InputData)
     create_v_risk(model_contents, input_data)
     create_v_balance_market(model_contents, input_data)
     create_v_reserve_online(model_contents,input_data)
+    create_v_setpoint(model_contents, input_data)
 end
 
 
@@ -193,4 +194,22 @@ function create_v_reserve_online(model_contents::OrderedDict, input_data::InputD
     res_online_tuple = create_reserve_limits(input_data)
     v_reserve_online = @variable(model,v_reserve_online[tup in res_online_tuple], Bin)
     model_contents["variable"]["v_reserve_online"] = v_reserve_online
+end
+
+
+
+"""
+    create_v_setpoint(model_contents::OrderedDict, input_data::InputData)
+
+Set up variables for general constraints with a setpoint functionality. 
+"""
+function create_v_setpoint(model_contents::OrderedDict, input_data::InputData)
+    model = model_contents["model"]
+    setpoint_tuples = Predicer.setpoint_tuples(input_data)
+    v_set_up = @variable(model, v_set_up[tup in setpoint_tuples] >= 0)
+    v_set_down = @variable(model, v_set_down[tup in setpoint_tuples] >= 0)
+    v_setpoint = @variable(model, v_setpoint[tup in setpoint_tuples] >= 0)
+    model_contents["variable"]["v_set_up"] = v_set_up
+    model_contents["variable"]["v_set_down"] = v_set_down
+    model_contents["variable"]["v_setpoint"] = v_setpoint
 end

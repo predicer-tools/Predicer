@@ -36,6 +36,7 @@ function create_tuples(input_data::InputData) # unused, should be debricated
     tuplebook["balance_market_tuple"] = create_balance_market_tuple(input_data)
     tuplebook["state_reserves"] = state_reserves(input_data)
     tuplebook["reserve_limits"] = create_reserve_limits(input_data)
+    tuplebook["setpoint_tuples"] = setpoint_tuples(input_data)
     return tuplebook
 end
 
@@ -647,7 +648,6 @@ end
 Returns limited reserve markets.
 form: (market, s, t)
 """
-
 function create_reserve_limits(input_data::InputData)
     reserve_limits = []
     markets = input_data.markets
@@ -661,4 +661,24 @@ function create_reserve_limits(input_data::InputData)
         end
     end
     return reserve_limits
+end
+
+"""
+    function setpoint_tuples(input_data::InputData)
+
+Function to create tuples for general constraints with setpoints. Form (c, s, t), where
+c is the name of the general constraint. 
+"""
+function setpoint_tuples(input_data::InputData)
+    setpoint_tuples = []
+    scenarios = collect(keys(input_data.scenarios))
+    temporals = input_data.temporals.t
+    for c in collect(keys(input_data.gen_constraints))
+        if input_data.gen_constraints[c].is_setpoint
+            for s in scenarios, t in temporals
+                push!(setpoint_tuples, (c, s, t))
+            end
+        end
+    end
+    return setpoint_tuples
 end
