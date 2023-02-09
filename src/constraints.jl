@@ -952,25 +952,31 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
     process_tuple = process_topology_tuples(input_data)
     online_tuple = online_process_tuples(input_data)
     state_tuple = state_node_tuples(input_data)
+    setpoint_tups = setpoint_tuples(input_data)
     v_flow = model_contents["variable"]["v_flow"]
     if input_data.contains_online
-        v_online = model_contents["variable"]["v_online"]
-    
+        v_online = model_contents["variable"]["v_online"]    
     end    
     if input_data.contains_states
         v_state = model_contents["variable"]["v_state"]
     end
     
+    v_setpoint = model_contents["variable"]["v_setpoint"]
+    v_set_up = model_contents["variable"]["v_set_up"]
+    v_set_down = model_contents["variable"]["v_set_down"]
+
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
     gen_constraints = input_data.gen_constraints
 
     const_expr = model_contents["gen_expression"] = OrderedDict()
     const_dict = model_contents["gen_constraint"] = OrderedDict()
+    setpoint_expr_lhs = OrderedDict()
+    setpoint_expr_rhs = OrderedDict()
 
     for c in keys(gen_constraints)
         # Get timesteps for where there is data defined. (Assuming all scenarios are equal)
-        gen_const_ts = map(x -> x[1], gen_constraints[c].constant(scenarios[1]).series)
+        gen_const_ts = map(x -> x[1], gen_constraints[c].factors[1].data(scenarios[1]).series)
         # Get timesteps which are found in both temporals and gen constraints 
         relevant_ts = filter(t -> t in gen_const_ts, temporals.t)
         # use these ts to create gen_consts..
@@ -978,49 +984,94 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
         facs = gen_constraints[c].factors
         consta = gen_constraints[c].constant
         eq_dir = gen_constraints[c].type
-        for s in scenarios, t in relevant_ts
-            add_to_expression!(const_expr[c][(s,t)], consta(s, t))
-            for f in facs
-                if f.var_type == "flow"
-                    p_flow = f.var_tuple
-                    if input_data.processes[p_flow[1]].conversion == 1
-                        tup = filter(x->x[1]==p_flow[1] && (x[2]==p_flow[2] || x[3]==p_flow[2]) && x[4]==s && x[5]==t,process_tuple)[1]
-                    else
-                        tup = filter(x->x[1]==p_flow[1] && (x[2]==p_flow[1] || x[3]==p_flow[2]) && x[4]==s && x[5]==t,process_tuple)[1]
+        if !gen_constraints[c].is_setpoint
+            for s in scenarios, t in relevant_ts
+                add_to_expression!(const_expr[c][(s,t)], consta(s, t))
+                for f in facs
+                    if f.var_type == "flow"
+                        p_flow = f.var_tuple
+                        if input_data.processes[p_flow[1]].conversion == 1
+                            tup = filter(x->x[1]==p_flow[1] && (x[2]==p_flow[2] || x[3]==p_flow[2]) && x[4]==s && x[5]==t,process_tuple)[1]
+                        else
+                            tup = filter(x->x[1]==p_flow[1] && (x[2]==p_flow[1] || x[3]==p_flow[2]) && x[4]==s && x[5]==t,process_tuple)[1]
+                        end
+                        fac_data = f.data(s, t)
+                        add_to_expression!(const_expr[c][(s,t)],fac_data,v_flow[tup])
+                    elseif f.var_type == "online"
+                        p = f.var_tuple[1]
+                        if input_data.processes[p].is_online
+                            tup = filter(x -> x[1] == p && x[2] == s && x[3] == t, online_tuple)[1]
+                        else
+                            msg = "Factor " * string((p, f.var_tuple)) * " of gen_constraint " * string(c) * " has no online functionality!" 
+                            throw(ErrorException(msg))
+                        end
+                        fac_data = f.data(s, t)
+                        add_to_expression!(const_expr[c][(s,t)],fac_data,v_online[tup])
+                    elseif f.var_type == "state"
+                        n = f.var_tuple[1]
+                        if input_data.nodes[n].is_state
+                            tup = filter(x -> x[1] == n && x[2] == s && x[3] == t, state_tuple)[1]
+                        else
+                            msg = "Factor " * string((n, f.var_tuple)) * " of gen_constraint " * string(c) * " has no state functionality!" 
+                            throw(ErrorException(msg))
+                        end
+                        fac_data = f.data(s, t)
+                        add_to_expression!(const_expr[c][(s,t)],fac_data,v_state[tup])
                     end
-                    fac_data = f.data(s, t)
-                    add_to_expression!(const_expr[c][(s,t)],fac_data,v_flow[tup])
-                elseif f.var_type == "online"
-                    p = f.var_tuple[1]
-                    if input_data.processes[p].is_online
-                        tup = filter(x -> x[1] == p && x[2] == s && x[3] == t, online_tuple)[1]
+                end
+            end 
+            if eq_dir == "eq"
+                const_dict[c] = @constraint(model,[s in scenarios,t in relevant_ts],const_expr[c][(s,t)]==0.0)
+            elseif eq_dir == "gt"
+                const_dict[c] = @constraint(model,[s in scenarios,t in relevant_ts],const_expr[c][(s,t)]>=0.0)
+            else
+                const_dict[c] = @constraint(model,[s in scenarios,t in relevant_ts],const_expr[c][(s,t)]<=0.0)
+            end
+        else
+            for s in scenarios, t in relevant_ts
+                if !((c, s, t) in collect(keys(setpoint_expr_lhs)))
+                    setpoint_expr_lhs[(c, s, t)] = AffExpr(0.0)
+                    setpoint_expr_rhs[(c, s, t)] = AffExpr(0.0)
+                else
+                    msg = "Several columns with factors are not supported for setpoint constraints!" 
+                    throw(ErrorException(msg))
+                end
+                for f in facs
+                    if f.var_type == "state"
+                        n = f.var_tuple[1]
+                        d_max = input_data.nodes[n].state.state_max
+                        add_to_expression!(setpoint_expr_lhs[(c, s, t)], v_state[(n, s, t)])
+                    elseif f.var_type == "flow"
+                        p = f.var_tuple[1]
+                        topo = filter(x -> x.source == f.var_tuple[2] || x.sink == f.var_tuple[2], input_data.processes[p].topos)[1]
+                        d_max = topo.capacity
+                        flow_tup = (p, topo.source, topo.sink, s, t)
+                        add_to_expression!(setpoint_expr_lhs[(c, s, t)], v_flow[flow_tup])
                     else
-                        msg = "Factor " * string((p, f.var_tuple)) * " of gen_constraint " * string(c) * " has no online functionality!" 
+                        msg = "Setpoint constraints cannot be used with variables of the type " * f.var_type * "!" 
                         throw(ErrorException(msg))
                     end
-                    fac_data = f.data(s, t)
-                    add_to_expression!(const_expr[c][(s,t)],fac_data,v_online[tup])
-                elseif f.var_type == "state"
-                    n = f.var_tuple[1]
-                    if input_data.nodes[n].is_state
-                        tup = filter(x -> x[1] == n && x[2] == s && x[3] == t, state_tuple)[1]
-                    else
-                        msg = "Factor " * string((n, f.var_tuple)) * " of gen_constraint " * string(c) * " has no state functionality!" 
-                        throw(ErrorException(msg))
+                    d_setpoint = f.data(s,t)
+                    if eq_dir == "eq" # lower and upper setpoint are the same.  
+                        d_upper = d_setpoint / d_max
+                        d_lower = d_setpoint / d_max
+                    elseif eq_dir == "gt" # No upper bound
+                        d_upper = 1.0
+                        d_lower = d_setpoint / d_max
+                    else # eq_dir == "st" , meaning no lower bound
+                        d_upper = d_setpoint / d_max
+                        d_lower = 0.0
                     end
-                    fac_data = f.data(s, t)
-                    add_to_expression!(const_expr[c][(s,t)],fac_data,v_state[tup])
+                    JuMP.set_upper_bound(v_set_up[(c, s, t)], (1.0 - d_upper) * d_max)
+                    JuMP.set_upper_bound(v_set_down[(c, s, t)], d_lower * d_max)
+                    JuMP.set_upper_bound(v_setpoint[(c, s, t)], (d_upper - d_lower) * d_max)
+                    add_to_expression!(setpoint_expr_rhs[(c, s, t)], d_lower * d_max + v_setpoint[(c, s, t)] + v_set_up[(c, s, t)] - v_set_down[(c, s, t)])                        
                 end
             end
-        end 
-        if eq_dir == "eq"
-            const_dict[c] = @constraint(model,[s in scenarios,t in relevant_ts],const_expr[c][(s,t)]==0.0)
-        elseif eq_dir == "gt"
-            const_dict[c] = @constraint(model,[s in scenarios,t in relevant_ts],const_expr[c][(s,t)]>=0.0)
-        else
-            const_dict[c] = @constraint(model,[s in scenarios,t in relevant_ts],const_expr[c][(s,t)]<=0.0)
         end
     end
+    setpoint_eq = @constraint(model, setpoint_eq[tup in setpoint_tups], setpoint_expr_lhs[tup] == setpoint_expr_rhs[tup])
+    model_contents["constraint"]["setpoint_eq"] = setpoint_eq
 end
 
 
@@ -1162,6 +1213,23 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
         end
     end
 
+    # Setpoint deviation costs
+    setpoint_deviation_costs = model_contents["expression"]["setpoint_deviation_costs"] = OrderedDict()
+    v_set_up = model_contents["variable"]["v_set_up"]
+    v_set_down = model_contents["variable"]["v_set_down"]
+    for s in scenarios
+        setpoint_deviation_costs[s] = AffExpr(0.0)
+    end
+    for c in collect(keys(input_data.gen_constraints))
+        if input_data.gen_constraints[c].is_setpoint
+            penalty = input_data.gen_constraints[c].penalty
+            for s in scenarios
+                c_tups = filter(tup -> tup[1] == c && tup[2] == s, setpoint_tuples(input_data))
+                add_to_expression!(setpoint_deviation_costs[s], penalty * (sum(v_set_up[c_tups]) + sum(v_set_down[c_tups])))
+            end
+        end
+    end
+
     # State residue costs
     state_residue_costs = model_contents["expression"]["state_residue_costs"] = OrderedDict()
     for s in scenarios
@@ -1193,7 +1261,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     # Total model costs
     total_costs = model_contents["expression"]["total_costs"] = OrderedDict()
     for s in scenarios
-        total_costs[s] = sum(commodity_costs[s]) + sum(market_costs[s]) + sum(vom_costs[s]) + sum(reserve_costs[s]) + sum(start_costs[s]) + sum(state_residue_costs[s]) + sum(reserve_fees[s]) + sum(dummy_costs[s])
+        total_costs[s] = sum(commodity_costs[s]) + sum(market_costs[s]) + sum(vom_costs[s]) + sum(reserve_costs[s]) + sum(start_costs[s]) + sum(state_residue_costs[s]) + sum(reserve_fees[s]) + sum(setpoint_deviation_costs[s]) + sum(dummy_costs[s])
     end
 end
 
