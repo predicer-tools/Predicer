@@ -240,6 +240,26 @@ The *risk* sheet in the excel-format input data contains information about the C
 | beta           | Share of CVaR in objective function |
 
 
+### Inflow blocks
+
+*Inflow blocks*, or simply *blocks*, are potential flexibility which can be modelled with *Predicer*. A block has generally been thought of as "if a demand response action is taken on time *t* by reducing/increasing *inflow* to *node* *n* by amount x, how must the system compensate on times- t-1, t-2.. or t+1, t+2...", or "if the heating for a building is turned off on time t, what has to be done in the following hours to compensate?". The blocks can thus be seen as a potential for flexibility, and how the system has to be compensated as a consequence of using the potential.
+
+Each *block* consists of a binary variable, consequent timesteps, and a constant value for each timestep. Each block is linked to a specific node, as well as a specific scenario. Despite being called "Inflow blocks", they can be linked to nodes without any inflow as well. Node inflow is modelled for each timestep and scenario as the given value in the *inflow* sheet. The product of the block binary variable value and the given constant is added to the inflow for relevant combinations of node, scenario and timestep. Two active blocks cannot overlap in the same node, time and scenario. The user can define any number of blocks for the same time, but only one can be active for a specific node, scenario and timestep. 
+
+Inflow blocks are defined in the ***inflow_blocks*** sheet. The first column of the sheet is named *t*, and is not used in the model itself. Each block is defined using two columns for each scenario; one column with the timesteps and one column with the corresponding constant values. The first row of the first column is of the form ***blockname, nodename, scenario***, and the second column is ***blockname, scenario***. It is important, that these columns have an equal amount of rows. The columns for different blocks or different scenarios can have different amount of rows. 
+
+As an example, assume there are two blocks, ***b1*** and ***b2***. The blocks should be defined to the *inflow_blocks* sheet as following:
+
+| t | b1, n1, s1     | b1, s1 | b1, n1, s2     | b1, s2 | b2, n2, s1     | b2, s1 |
+|---|----------------|--------|----------------|--------|----------------|--------|
+| 1 | 20.4.2022 1:00 | 6      | 20.4.2022 3:00 | 4      | 20.4.2022 6:00 | -3     |
+| 2 | 20.4.2022 2:00 | -3     | 20.4.2022 4:00 | -2     | 20.4.2022 7:00 | 2      |
+| 3 | 20.4.2022 3:00 | -2     | 20.4.2022 5:00 | -2     | 20.4.2022 8:00 | 1      |
+| 4 | 20.4.2022 4:00 | -1     |                |        | 20.4.2022 9:00 | 1      |
+
+
+As with the generic constraints described below, the validity of the user input is not checked. The user should thus ensure, that the node linked to the block can handle the change in inflow, especially in nodes with either only consumers or producer. If a block causes a change in the sign of the inflow (- to +, or + to -), the results may be unpredictable. As an example, using a block causing a positive flow of heat into a district heating node without any way to remove the heat would result in high penalty costs, and the model would thus not use the block.
+
 
 ### General constraints
 
