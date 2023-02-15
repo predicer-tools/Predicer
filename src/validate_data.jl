@@ -49,7 +49,8 @@ using Predicer
     # 
 
     # Check that gen_constraints are valid
-    # "normal in the constraints sheet, and setpoints in the setpoints sheet
+    # Check that inflow blocks are correct:
+    # timesteps after eachother, node has inflow, etc?
     
 # TODO
 # Need to add validation for delays!
