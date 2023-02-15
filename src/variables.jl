@@ -19,6 +19,7 @@ function create_variables(model_contents::OrderedDict, input_data::InputData)
     create_v_balance_market(model_contents, input_data)
     create_v_reserve_online(model_contents,input_data)
     create_v_setpoint(model_contents, input_data)
+    create_v_block(model_contents, input_data)
 end
 
 
@@ -212,4 +213,18 @@ function create_v_setpoint(model_contents::OrderedDict, input_data::InputData)
     model_contents["variable"]["v_set_up"] = v_set_up
     model_contents["variable"]["v_set_down"] = v_set_down
     model_contents["variable"]["v_setpoint"] = v_setpoint
+end
+
+
+""" 
+    create_v_block(model_contents::OrderedDict, input_data::InputData)
+
+Function to setup variables needed for inflow blocks.
+"""
+function create_v_block(model_contents::OrderedDict, input_data::InputData)
+    model = model_contents["model"]
+    block_tuples = Predicer.block_tuples(input_data)
+    var_tups = unique(map(x -> (x[1], x[2], x[3]), block_tuples))
+    v_block = @variable(model, v_block[tup in var_tups], Bin) 
+    model_contents["variable"]["v_block"] = v_block
 end

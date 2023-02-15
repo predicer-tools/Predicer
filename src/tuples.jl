@@ -37,6 +37,7 @@ function create_tuples(input_data::InputData) # unused, should be debricated
     tuplebook["state_reserves"] = state_reserves(input_data)
     tuplebook["reserve_limits"] = create_reserve_limits(input_data)
     tuplebook["setpoint_tuples"] = setpoint_tuples(input_data)
+    tuplebook["block_tuples"] = block_tuples(input_data)
     return tuplebook
 end
 
@@ -681,4 +682,22 @@ function setpoint_tuples(input_data::InputData)
         end
     end
     return setpoint_tuples
+end
+
+"""
+    function block_tuples(input_data::InputData)
+
+Function to create tuples for inflow blocks. Form (blockname, node, s, t).
+"""
+function block_tuples(input_data::InputData)
+    blocks = input_data.inflow_blocks
+    block_tuples = []
+    for b in collect(keys(blocks))
+        for t_series in blocks[b].data.ts_data
+            for t in t_series.series
+                push!(block_tuples, (b, blocks[b].node, t_series.scenario, t[1]))
+            end
+        end
+    end
+    return block_tuples
 end

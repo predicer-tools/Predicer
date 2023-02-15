@@ -72,7 +72,8 @@ module Predicer
     create_delay_tuple,
     state_reserves,
     create_reserve_limits,
-    setpoint_tuples
+    setpoint_tuples,
+    block_tuples
 
     export create_variables,
     create_v_flow,
