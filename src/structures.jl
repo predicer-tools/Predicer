@@ -1043,6 +1043,28 @@ struct GenConstraint
     end
 end
 
+
+"""
+    struct InflowBlock
+        name::String
+        node::String
+        data::TimeSeriesData
+        function InflowBlock(name::String, node::String)
+            return new(name, node, TimeSeriesData())
+        end
+    end
+"""
+struct InflowBlock
+    name::String
+    node::String
+    data::TimeSeriesData
+    function InflowBlock(name::String, node::String)
+        return new(name, node, TimeSeriesData())
+    end
+end
+
+
+
 """
     mutable struct InputData
         temporals::Temporals
@@ -1059,6 +1081,7 @@ end
         scenarios::OrderedDict{String, Float64}
         reserve_type::OrderedDict{String, Float64}
         risk::OrderedDict{String, Float64}
+        inflow_blocks::OrderedDict{String, InflowBlock}
         gen_constraints::OrderedDict{String, GenConstraint}
     end
 
@@ -1095,9 +1118,10 @@ mutable struct InputData
     scenarios::OrderedDict{String, Float64}
     reserve_type::OrderedDict{String, Float64}
     risk::OrderedDict{String, Float64}
+    inflow_blocks::OrderedDict{String, InflowBlock}
     gen_constraints::OrderedDict{String, GenConstraint}
-    function InputData(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, processes, nodes, markets, groups, scenarios, reserve_type, risk, gen_constraints)
-        return new(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, processes, nodes, markets, groups, scenarios, reserve_type, risk, gen_constraints)
+    function InputData(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, processes, nodes, markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
+        return new(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, processes, nodes, markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
     end
 end
 

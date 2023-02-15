@@ -6,7 +6,7 @@ using TimeZones
 import Predicer
 
 function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[])
-    sheetnames_system = ["nodes", "processes", "groups", "process_topology", "markets", "scenarios","efficiencies", "reserve_type","risk"]#, "energy_market", "reserve_market"]
+    sheetnames_system = ["nodes", "processes", "groups", "process_topology", "inflow_blocks", "markets", "scenarios","efficiencies", "reserve_type","risk"]
     sheetnames_timeseries = ["cf", "inflow", "market_prices", "price","eff_ts"]
 
     system_data = OrderedDict()
@@ -21,6 +21,7 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
     scenarios = OrderedDict{String, Float64}()
     reserve_type = OrderedDict{String, Float64}()
     risk = OrderedDict{String, Float64}()
+    inflow_blocks = OrderedDict{String, Predicer.InflowBlock}()
     gen_constraints = OrderedDict{String, Predicer.GenConstraint}()
 
     for sn in sheetnames_system
@@ -50,8 +51,6 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
     for i in 1:nrow(system_data["risk"])
         risk[system_data["risk"][i,1]] = system_data["risk"][i,2]
     end
-    
-
 
     # Divide timeseries data per scenario.
     for k in keys(timeseries_data)
@@ -210,23 +209,6 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
             add_group(processes[d_row.entity], gname)
         end
     end
-    #for pname in collect(keys(processes))
-    #    gname = "g_"*pname
-    #    if !(gname in collect(keys(groups)))
-    #        groups[gname] = Predicer.ProcessGroup(gname, pname)
-    #        push!(processes[pname].groups, gname)
-    #    end
-    #end
-    #for nname in collect(keys(nodes))
-    #    gname = "g_"*nname
-    #    if !(gname in collect(keys(groups)))
-    #        groups[gname] = Predicer.NodeGroup(gname, nname)
-    #        push!(nodes[nname].groups, gname)
-    #    end
-    #end
-
-
-
 
     # Get piecewise efficiencies from the input data.
     #-------------------------------------------
@@ -255,6 +237,35 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
         end
         for j in 1:length(processes[p].eff_fun)
             push!(processes[p].eff_ops, "op"*string(j))
+        end
+    end
+
+    # inflow blocks
+    if length(names(system_data["inflow_blocks"])) > 1
+        ns = names(system_data["inflow_blocks"])[2:end]
+        colnames = map(n -> map(x -> strip(x), split(n, ",")), ns)
+        blocknames = unique(map(x -> (String(x[1]), String(x[2])), filter(cn -> length(cn) == 3, colnames)))
+        for bn in blocknames
+            inflow_blocks[bn[2]] = InflowBlock(bn[2], bn[1])
+        end
+        for b in collect(keys(inflow_blocks))
+            cols = filter(cns -> b in cns, colnames)
+            t_cols = filter(c -> length(c) == 3, cols)
+            c_cols = filter(c -> length(c) == 2, cols)
+            scens = map(c -> c[3], t_cols)
+            for s in scens
+                t_col = filter(x -> x[3] == s, t_cols)[1]
+                c_col = filter(x -> x[2] == s, c_cols)[1]
+                t_col_index = filter(x -> t_col == map(y -> strip(y), split(x, ",")), ns)[1]
+                c_col_index = filter(x -> c_col == map(y -> strip(y), split(x, ",")), ns)[1]
+                ts = filter(x -> typeof(x) != Missing, system_data["inflow_blocks"][!, t_col_index])
+                cs = filter(x -> typeof(x) != Missing, system_data["inflow_blocks"][!, c_col_index])
+                series = TimeSeries(s)
+                for i = 1:length(ts)
+                    push!(series.series, (string(ZonedDateTime(ts[i], tz"UTC")), cs[i]))
+                end
+                push!(inflow_blocks[b].data.ts_data, series)
+            end
         end
     end
 
@@ -332,6 +343,11 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
         end
     end
 
+    
+
+
+
+
     for i in 1:nrow(constraint_type)
         con = constraint_type[i,1]
         con_dir = constraint_type[i,2]
@@ -397,5 +413,5 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
     contains_risk = (risk["beta"] > 0)
     contains_delay = !iszero(map(p -> p.delay, collect(values(processes))))
 
-    return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, processes, nodes, markets, groups, scenarios, reserve_type, risk, gen_constraints)
+    return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, processes, nodes, markets, groups, scenarios, reserve_type, risk, inflow_blocks, gen_constraints)
 end
