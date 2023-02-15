@@ -25,6 +25,7 @@ function create_constraints(model_contents::OrderedDict, input_data::Predicer.In
     setup_cvar_element(model_contents, input_data)
     setup_objective_function(model_contents, input_data)
     setup_reserve_participation(model_contents, input_data)
+    setup_inflow_blocks(model_contents, input_data)
 end
 
 
@@ -41,10 +42,12 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
     model = model_contents["model"]
     delay_tuple = create_delay_process_tuple(input_data)
     process_tuple = process_topology_tuples(input_data)
+    block_tuples = Predicer.block_tuples(input_data)
     
     node_state_tuple = state_node_tuples(input_data)
     node_balance_tuple = balance_node_tuples(input_data)
     v_flow = model_contents["variable"]["v_flow"]
+    v_block = model_contents["variable"]["v_block"]
     if input_data.contains_states
         v_state = model_contents["variable"]["v_state"]
     end
@@ -53,7 +56,24 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
     temporals = input_data.temporals  
     nodes = input_data.nodes
     markets = input_data.markets
+    scenarios = collect(keys(input_data.scenarios))
 
+
+    #######
+    ## Setup inflow expression
+    inflow_expr =  model_contents["expression"]["inflow_expr"] = OrderedDict()
+    for n in collect(keys(nodes))
+        for s in scenarios, t in temporals.t
+            inflow_expr[(n, s, t)] = AffExpr(0.0)
+            if nodes[n].is_inflow
+                add_to_expression!(inflow_expr[(n, s, t)], nodes[n].inflow(s, t))
+            end
+            for b_tup in filter(x -> x[2] == n && x[3] == s && x[4] == t, block_tuples) # get tuples with blocks
+                add_to_expression!(inflow_expr[(n, s, t)], input_data.inflow_blocks[b_tup[1]].data(s,t) * v_block[(b_tup[1], b_tup[2], b_tup[3])])
+            end
+        end
+    end
+   
     # Balance constraints
     # gather data in dicts, e_prod, etc, now point to a Dict()
     e_prod = model_contents["expression"]["e_prod"] = OrderedDict()
@@ -89,24 +109,17 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
             v_res = []
         end
 
-        # Check inflow for node
-        if nodes[tu[1]].is_inflow
-            inflow_val = nodes[tu[1]].inflow(tu[2], tu[3])
-        else
-            inflow_val = 0.0
-        end
-
         if isempty(cons)
             if isempty(resd)
-                cons_expr = @expression(model, -vq_state_dw[tu] + inflow_val)
+                cons_expr = @expression(model, -vq_state_dw[tu] + inflow_expr[tu])
             else
-                cons_expr = @expression(model, -vq_state_dw[tu] + inflow_val + sum(real_dw .* v_res[resd]))
+                cons_expr = @expression(model, -vq_state_dw[tu] + inflow_expr[tu] + sum(real_dw .* v_res[resd]))
             end
         else
             if isempty(resd)
-                cons_expr = @expression(model, -sum(v_flow[cons]) - vq_state_dw[tu] + inflow_val)
+                cons_expr = @expression(model, -sum(v_flow[cons]) - vq_state_dw[tu] + inflow_expr[tu])
             else
-                cons_expr = @expression(model, -sum(v_flow[cons]) - vq_state_dw[tu] + inflow_val + sum(real_dw .* v_res[resd]))
+                cons_expr = @expression(model, -sum(v_flow[cons]) - vq_state_dw[tu] + inflow_expr[tu] + sum(real_dw .* v_res[resd]))
             end
         end
         if isempty(prod)
@@ -937,6 +950,42 @@ function setup_reserve_participation(model_contents::OrderedDict, input_data::Pr
         model_contents["constraint"]["res_online_lo"] = res_online_lo
     end
 end
+
+
+"""
+    setup_inflow_blocks(model_contents::OrderedDict, input_data::Predicer.InputData)    
+
+Setup functionality, which can be used to model demand flexibility in Predicer.
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+"""
+function setup_inflow_blocks(model_contents::OrderedDict, input_data::Predicer.InputData)
+    model = model_contents["model"]
+    block_tuples = Predicer.block_tuples(input_data)
+    v_block = model_contents["variable"]["v_block"]
+    nodes = input_data.nodes
+    scenarios = collect(keys(input_data.scenarios))
+    temporals = input_data.temporals
+
+    node_block_expr = model_contents["expression"]["node_block_expr"] = OrderedDict()
+
+    for n in collect(keys(nodes))
+        for s in scenarios, t in temporals.t
+            b_tups = filter(x -> x[2] == n && x[3] == s && x[4] == t, block_tuples)
+            if !isempty(b_tups)
+                node_block_expr[(n, s, t)] = AffExpr(0.0)
+                for b_tup in b_tups
+                    add_to_expression!(node_block_expr[(n, s, t)], v_block[(b_tup[1], n, s)])
+                end
+            end
+        end
+    end
+    node_block_eq = @constraint(model, node_block_eq[tup in collect(keys(node_block_expr))], sum(node_block_expr[tup]) <= 1)
+    model_contents["constraint"]["node_block_eq"] = node_block_eq
+end
+
 
 """
     setup_generic_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
