@@ -36,9 +36,6 @@ using Predicer
     # In constraints, chekc if e.g. v_start even exists before trying to force start constraints. 
     # Chewck that all given values have reasonable values, ramp values >0 for example. 
 
-    # Check that all groups have matching types and member
-    # Check that the types of the groups of each process/node is compatible with the type of the entity? (exampel "process group" has no nodes, a node has no process groups)
-
     # Check that a process doesnät participate in two energy markets at the same time 
     # - should this be allowed, since the energy markets can be "blocked" using gen_constraints?
     # - Process should be fine, as long as topos are different. 
@@ -47,17 +44,204 @@ using Predicer
 
     # Check that a process is connected to a node in the given node group during market participation
     # 
-
-    # Check that gen_constraints are valid
-    # Check that inflow blocks are correct:
-    # timesteps after eachother, node has inflow, etc?
     
-# TODO
-# Need to add validation for delays!
-# If a transfer process has been given two delays, how should it be handled? Use the larger delay?
-# Add check that no reserve processes exist if no reserve nodes exist
-# Also check if reserve markets exist. If not, all reserve functionality is useless. 
 
+function validate_inflow_blocks(error_log::OrderedDict, input_data::Predicer.InputData)
+    is_valid = error_log["is_valid"] 
+    blocks = input_data.inflow_blocks
+    nodes = input_data.nodes
+    for b in collect(keys(blocks))
+        if !(blocks[b].node in collect(keys(nodes)))
+            # Check that the linked nodes exist, and that they are of the correct type
+            push!(error_log["errors"], "The Node linked to the block (" * b * ", " * blocks[b].node * ") is not found in Nodes.\n")
+            is_valid = false 
+        else
+            # Check that the linked node is of the correct type (not market or commodity)
+            if nodes[blocks[b].node].is_market
+                push!(error_log["errors"], "A market Node ("* blocks[b].node *") cannot be linked to a inflow block ("* b *").\n")
+                is_valid = false 
+            elseif nodes[blocks[b].node].is_commodity
+                push!(error_log["errors"], "A commodity Node ("* blocks[b].node *") cannot be linked to a inflow block ("* b *").\n")
+                is_valid = false 
+            end
+        end
+
+        # check that there aren't two series for the same scenario
+        if length(blocks[b].data.ts_data) != length(unique(map(x -> x.scenario, blocks[b].data.ts_data)))
+            push!(error_log["errors"], "Inflow block (" * b * ") has multiple series for the same scenario.\n")
+            is_valid = false 
+        end
+
+        for timeseries in blocks[b].data.ts_data
+            ts = map(x -> x[1], timeseries.series)
+            # Check that the timesteps in the block are unique
+            if length(unique(ts)) != length(ts)
+                push!(error_log["errors"], "Inflow block (" * b * ") timeseries data should only contain unique timesteps.\n")
+                is_valid = false 
+            end
+
+            # Check that ALL the timesteps in the block are either not found in temporals, or ALL found in the temporals. 
+            for i in 1:length(ts)
+                if (ts[i] in input_data.temporals.t) != (ts[1] in input_data.temporals.t)
+                    push!(error_log["errors"], "The timesteps of the block (" * b * ") should either all be found, or all not found in temporals. No partial blocks allowed.\n")
+                    is_valid = false 
+                end
+            end
+        end
+    end
+    error_log["is_valid"] = is_valid
+end
+
+function validate_groups(error_log::OrderedDict, input_data::Predicer.InputData)
+    is_valid = error_log["is_valid"] 
+    processes = input_data.processes
+    nodes = input_data.nodes
+    groups = input_data.groups
+
+    for g in collect(keys(groups))
+        # check that the groupnames are  not the same as any process, node
+        if g in [collect(keys(processes)); collect(keys(nodes))  ]
+            push!(error_log["errors"], "Invalid Groupname: ", g, ". The groupname must be unique and different from any node or process names.\n")
+            is_valid = false 
+        end
+        # check that node groups have nodes and process groups have processes
+        for m in groups[g].members
+            if groups[g].type == "node"
+                # check that node groups have nodes and process groups have processes
+                if !(m in collect(keys(nodes))  )
+                    push!(error_log["errors"], "Nodegroups (" * g * ") can only have Nodes as members!\n")
+                    is_valid = false 
+                end
+            elseif groups[g].type == "process"
+                # check that node groups have nodes and process groups have processes
+                if !(m in collect(keys(processes)))
+                    push!(error_log["errors"], "Processgroups (" * g * ") can only have Processes as members!\n")
+                    is_valid = false 
+                end
+            end
+        end
+    end
+
+    # Check that each entity in a groups member has the group as member
+    for g in collect(keys(groups))
+        for m in groups[g].members
+            if m in collect(keys(nodes))
+                if !(g in nodes[m].groups)
+                    push!(error_log["errors"], "The member (" * m * ") of a nodegroup must have the group given in node.groups!\n")
+                    is_valid = false 
+                end
+            elseif m in collect(keys(processes))
+                if !(g in processes[m].groups)
+                    push!(error_log["errors"], "The member (" * m * ") of a processgroup must have the group given in process.groups!\n")
+                    is_valid = false 
+                end
+            end
+        end
+    end
+
+    # check that each process and each node is part of a group of the correct type..
+    for n in collect(keys(nodes))
+        for ng in nodes[n].groups
+            if !(groups[ng].type == "node")
+                push!(error_log["errors"], "Nodes (" * n * ") can only be members of Nodegroups, not Processgroups!\n")
+                is_valid = false 
+            end
+        end
+    end
+    for p in collect(keys(processes))
+        for pg in processes[p].groups
+            if !(groups[pg].type == "process")
+                push!(error_log["errors"], "Processes (" * p * ") can only be members of Processgroups, not Nodegroups!\n")
+                is_valid = false 
+            end
+        end
+    end
+    error_log["is_valid"] = is_valid
+end
+
+function validate_gen_constraints(error_log::OrderedDict, input_data::Predicer.InputData)
+    is_valid = error_log["is_valid"]
+    gcs = input_data.gen_constraints
+    nodes = input_data.nodes
+    processes = input_data.processes
+
+    for gc in collect(keys(gcs))
+        # Check that the given operators are valid.
+        if !(gcs[gc].type in ["gt", "eq", "st"])
+            push!(error_log["errors"], "The operator '" * gcs[gc].type * "' is not valid for the gen_constraint '" * gc *"'.\n")
+            is_valid = false 
+        end
+
+        #check that the factors of the same gc are all of the same type
+        if length(unique(map(f -> f.var_type, gcs[gc].factors))) > 1
+            push!(error_log["errors"], "A gen_constraint (" * gc * ") cannot have factors of different types.\n")
+            is_valid = false 
+        end
+
+        # Check that gen_constraint has at least one factor. 
+        if isempty(gcs[gc].factors)
+            push!(error_log["errors"], "The gen_constraint (" * gc * ") must have at least one series for a 'factor' defined.\n")
+            is_valid = false 
+        else
+            for fac in gcs[gc].factors
+                if fac.var_type == "state"
+                    #check that the linked node exists
+                    if !(fac.var_tuple[1] in collect(keys(nodes)))
+                        push!(error_log["errors"], "The node '"* fac.var_tuple[1] * "' linked to gen_constraint (" * gc * ") is not a node.\n")
+                        is_valid = false 
+                    else
+                        # check that the linked node has a state
+                        if !nodes[fac.var_tuple[1]].is_state
+                            push!(error_log["errors"], "The node '"* fac.var_tuple[1] * "' linked to gen_constraint (" * gc * ") has no state variable.\n")
+                            is_valid = false 
+                        end
+                    end
+                elseif fac.var_type == "online"
+                    #check that the linked process exists
+                    if !(fac.var_tuple[1] in collect(keys(processes)))
+                        push!(error_log["errors"], "The process '"* fac.var_tuple[1] * "' linked to gen_constraint (" * gc * ") is not a process.\n")
+                        is_valid = false 
+                    else
+                        # check that the linked process has a state
+                        if !processes[fac.var_tuple[1]].is_online
+                            push!(error_log["errors"], "The process '"* fac.var_tuple[1] * "' linked to gen_constraint (" * gc * ") has no online functionality.\n")
+                            is_valid = false 
+                        end
+                    end
+                elseif fac.var_type == "flow"
+                    #check that the linked process exists
+                    if !(fac.var_tuple[1] in collect(keys(processes)))
+                        push!(error_log["errors"], "The process '"* fac.var_tuple[1] * "' linked to gen_constraint (" * gc * ") is not a process.\n")
+                        is_valid = false 
+                    else
+                        # check that the linked process has a relevant topo
+                        p = fac.var_tuple[1]
+                        c = fac.var_tuple[2]
+                        if length(filter(t -> t.source == c || t.sink == c, processes[fac.var_tuple[1]].topos)) < 1
+                            push!(error_log["errors"], "The flow ("* p * ", " * c * ") linked to gen_constraint (" * gc * ") could not be found.\n")
+                            is_valid = false 
+                        end
+                    end
+                end
+            end
+        end
+
+        # Check that setpoints have no constants, and non-setpoints have constants. 
+        if gcs[gc].is_setpoint
+            if !isempty(gcs[gc].constant)
+                push!(error_log["errors"], "The gen_constraint (" * gc * ") of the 'setpoint' can not have a series for a 'constant'.\n")
+                is_valid = false 
+            end
+        else
+            if isempty(gcs[gc].constant)
+                push!(error_log["errors"], "The gen_constraint (" * gc * ") of the 'normal' type must have a series for a 'constant'.\n")
+                is_valid = false 
+            end
+        end
+    end
+
+    error_log["is_valid"] = is_valid
+end
 
 """
     function validate_processes(error_log::OrderedDict, input_data::Predicer.InputData)
@@ -367,6 +551,9 @@ function validate_data(input_data)
     validate_nodes(error_log, input_data)
     validate_temporals(error_log, input_data)
     validate_unique_names(error_log, input_data)
+    validate_gen_constraints(error_log, input_data)
+    validate_inflow_blocks(error_log, input_data)
+    validate_groups(error_log, input_data)
     # Return log. 
     return error_log
 end
