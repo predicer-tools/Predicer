@@ -264,7 +264,7 @@ function validate_processes(error_log::OrderedDict, input_data::Predicer.InputDa
         # min_online >= 0
 
         p = processes[pname]
-        if 0 > p.eff
+        if 0 > p.eff && p.conversion != 3
             push!(error_log["errors"], "Invalid Process: ", p.name, ". The efficiency of a Process cannot be negative. .\n")
             is_valid = false
         end
