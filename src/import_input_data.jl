@@ -260,6 +260,11 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
                 c_col_index = filter(x -> c_col == map(y -> strip(y), split(x, ",")), ns)[1]
                 ts = filter(x -> typeof(x) != Missing, system_data["inflow_blocks"][!, t_col_index])
                 cs = filter(x -> typeof(x) != Missing, system_data["inflow_blocks"][!, c_col_index])
+
+                if length(ts) != length(cs)
+                    msg = "The data columns of the inflow block " * String(b) * " are not the same length!" 
+                    throw(ErrorException(msg))
+                end
                 series = TimeSeries(s)
                 for i = 1:length(ts)
                     push!(series.series, (string(ZonedDateTime(ts[i], tz"UTC")), cs[i]))
