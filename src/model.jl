@@ -216,6 +216,8 @@ function write_bid_matrix(model_contents::OrderedDict, input_data::Predicer.Inpu
     markets = input_data.markets
     scenarios = collect(keys(input_data.scenarios))
 
+    dfs = Dict()
+
     if !isdir(pwd()*"\\results")
         mkdir("results")
     end
@@ -244,8 +246,10 @@ function write_bid_matrix(model_contents::OrderedDict, input_data::Predicer.Inpu
                 df[!,v_name] = volume
             end
             XLSX.writetable!(xf[i+1], collect(eachcol(df)), names(df))
+            dfs[m] = df
         end
     end
+    return dfs
 end
 
 function resolve_delays(input_data::Predicer.InputData)
