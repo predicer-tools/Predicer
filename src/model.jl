@@ -7,19 +7,18 @@ using DataStructures
 using XLSX
 
 """
-    get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.InputData,type::String="",process::String="",node::String="",scenario::String="")
+    get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.InputData, type::String="", name::String="",scenario::String="")
 
-Returns a dataframe containing specific information for a variable in the model. 
+Returns a dataframe containing specific information for a variable in the model.
 
 # Arguments
 - `model_contents::OrderedDict`: Model contents dict.
 - `input_data::Predicer.InputData`: Input data used in model.
 - `type::String`: Type of variable to show, such as 'v_flow' or 'v_state'.
-- `process::String`: The name of the process connected to the variable.
-- `node::String`: The name of the node related to the variable.
-- `scenario::String`: The name of the scenario for which the value is to be shown.
+- `name::String`: The name of the entity (process, node, block,) connected to the variable. If left empty, return all relevant values. 
+- `scenario::String`: The name of the scenario for which the value is to be shown. If left empty, return all relevant values. 
 """
-function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.InputData,type::String="",process::String="",node::String="",scenario::String="")
+function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.InputData, type::String="", name::String="",scenario::String="")
     tuples = Predicer.create_tuples(input_data)
     temporals = input_data.temporals.t
     df = DataFrame(t = temporals)
@@ -32,8 +31,8 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
     end
     if type == "v_flow"
         v_flow = vars[type]
-        if !isempty(process)
-            tups = unique(map(x->(x[1],x[2],x[3]),filter(x->x[1]==process, vcat(tuples["process_tuple"], tuples["delay_tuple"]))))
+        if !isempty(name)
+            tups = unique(map(x->(x[1],x[2],x[3]),filter(x->x[1]==name, vcat(tuples["process_tuple"], tuples["delay_tuple"]))))
         else
             tups = unique(map(x->(x[1],x[2],x[3]), vcat(tuples["process_tuple"], tuples["delay_tuple"])))
         end
@@ -46,8 +45,8 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
         end
     elseif type == "v_reserve"
         v_res = vars[type]
-        if !isempty(process)
-            tups = unique(map(x->(x[1],x[2],x[3],x[5]),filter(x->x[3]==process, tuples["res_potential_tuple"])))
+        if !isempty(name)
+            tups = unique(map(x->(x[1],x[2],x[3],x[5]),filter(x->x[3]==name, tuples["res_potential_tuple"])))
         else
             tups = unique(map(x->(x[1],x[2],x[3],x[5]),tuples["res_potential_tuple"]))
         end
@@ -70,8 +69,8 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
         end
     elseif type == "v_online" || type == "v_start" || type == "v_stop"
         v_bin = vars[type]
-        if !isempty(process)
-            procs = unique(map(x->x[1],filter(y ->y[1] == process, tuples["process_tuple"])))
+        if !isempty(name)
+            procs = unique(map(x->x[1],filter(y ->y[1] == name, tuples["process_tuple"])))
         else
             procs = unique(map(x->x[1],tuples["process_tuple"]))
         end
@@ -84,8 +83,8 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
         end
     elseif type == "v_state"
         v_state = vars[type]
-        if !isempty(node)
-            nods = map(y -> y[1], filter(x->x[1]==node, tuples["node_state_tuple"]))
+        if !isempty(name)
+            nods = map(y -> y[1], filter(x->x[1]==name, tuples["node_state_tuple"]))
         else
             nods = map(y -> y[1] , tuples["node_state_tuple"])
         end
@@ -98,8 +97,8 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
         end
     elseif type == "vq_state_up" || type == "vq_state_dw"
         v_state = vars[type]
-        if !isempty(node)
-            nods = unique(map(x->x[1],filter(y -> y[1] == node, tuples["node_balance_tuple"])))
+        if !isempty(name)
+            nods = unique(map(x->x[1],filter(y -> y[1] == name, tuples["node_balance_tuple"])))
         else
             nods = unique(map(x->x[1],tuples["node_balance_tuple"]))
         end
@@ -112,8 +111,8 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
         end
     elseif type == "v_bid"
         v_bid = expr[type]
-        if !isempty(node)
-            bid_tups = map(x->(x[1]),filter(x->x[1]==node,tuples["balance_market_tuple"]))
+        if !isempty(name)
+            bid_tups = map(x->(x[1]),filter(x->x[1]==name,tuples["balance_market_tuple"]))
         else
             bid_tups = map(x->(x[1]),tuples["balance_market_tuple"])
         end
@@ -121,7 +120,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             col_tup = unique(map(x->(x[1],x[3],x[4]),filter(x->x[1]==bt && x[3]==s,tuples["balance_market_tuple"])))
             if !isempty(col_tup)
                 dat_vec = []
-                colname = node * "_" * s
+                colname = name * "_" * s
                 for tup in col_tup
                     push!(dat_vec,value(v_bid[tup]))
                 end
@@ -130,8 +129,8 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
         end
     elseif type == "v_flow_bal"
         v_bal = vars[type]
-        if !isempty(node)
-            nods = unique(map(y -> y[1], filter(x->x[1]==node, tuples["balance_market_tuple"])))
+        if !isempty(name)
+            nods = unique(map(y -> y[1], filter(x->x[1]==name, tuples["balance_market_tuple"])))
         else
             nods = unique(map(y -> y[1], tuples["balance_market_tuple"]))
         end
@@ -143,6 +142,52 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 df[!,colname] = value.(v_bal[col_tup].data)
             end
         end
+    elseif type == "v_block"
+        df = DataFrame()
+        v_block = vars[type]
+        if !isempty(name)
+            blocks = unique(map(y -> (y[1], y[2], y[3]), filter(x -> x[1] == name, tuples["block_tuples"])))
+        else
+            blocks = unique(map(x -> (x[1], x[2], x[3]), tuples["block_tuples"]))
+        end
+        for block in blocks, s in scenarios
+            colname = block[1] * "_" * block[2] * "_" * block[3]
+            df[!, colname] = [JuMP.value.(v_block[block])]
+        end
+    elseif type == "v_setpoint" || type == "v_set_up" || type == "v_set_down"
+        v_var = vars[type]
+        if !isempty(name)
+            setpoints = unique(map(x -> x[1], filter(y -> y[1] == name, tuples["setpoint_tuples"])))
+        else
+            setpoints = unique(map(x -> x[1], tuples["setpoint_tuples"]))
+        end
+        for sp in setpoints, s in scenarios
+            col_tup = filter(x -> x[1] == sp && x[2] == s, tuples["setpoint_tuples"])
+            if type == "v_set_up"
+                colname = "up_" * sp * "_" * s
+            elseif type == "v_set_down"
+                colname = "down_" *  sp * "_" * s
+            elseif type == "v_setpoint"
+                colname = sp * "_" * s
+            end
+            if !isempty(col_tup)
+                df[!,colname] = value.(v_var[col_tup].data)
+            end
+        end
+    elseif type == "v_reserve_online"
+        v_reserve_online = vars[type]
+        if !isempty(name)
+            ress = unique(map(y -> y[1], filter(x -> x[1] == name, tuples["reserve_limits"])))
+        else
+            ress = unique(map(y -> y[1], tuples["reserve_limits"]))
+        end
+        for r in ress, s in scenarios
+            col_tup = filter(x -> x[1] == r && x[2] == s, tuples["reserve_limits"])
+            colname = r * "_" * s
+            if !isempty(col_tup)
+                df[!,colname] = value.(v_reserve_online[col_tup].data)
+            end
+        end
     else
         println("ERROR: incorrect type")
     end
@@ -152,7 +197,11 @@ end
 """
     write_bid_matrix(model_contents::OrderedDict, input_data::OrderedDict)
 
-Returns the bid matric generated by the model?
+Outputs the bid matrix generated by the model. The matrix is output into an excel-file in the "\\results" folder. 
+
+# Arguments
+- `model_contents::OrderedDict`: Model contents dict.
+- `input_data::InputData`: Model input data. 
 """
 function write_bid_matrix(model_contents::OrderedDict, input_data::Predicer.InputData)
     println("Writing bid matrix...")
