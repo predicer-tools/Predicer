@@ -11,6 +11,7 @@ Create the variables used in the model, and save them in the model_contents dict
 """
 function create_variables(model_contents::OrderedDict, input_data::InputData)
     create_v_flow(model_contents, input_data)
+    create_v_load(model_contents, input_data)
     create_v_online(model_contents, input_data)
     create_v_reserve(model_contents, input_data)
     create_v_state(model_contents, input_data)
@@ -26,7 +27,7 @@ end
 """
     create_v_flow(model_contents::OrderedDict, input_data::InputData)
 
-Set up v_flow variables, which symbolise flows between nodes and processes.
+Set up v_flow variables, which symbolise flows between nodes and processes, accounting for reserve realisation. 
 
 # Arguments
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
@@ -37,6 +38,22 @@ function create_v_flow(model_contents::OrderedDict, input_data::InputData)
     model = model_contents["model"]
     v_flow = @variable(model, v_flow[tup in vcat(process_tuples, delay_tuples)] >= 0)
     model_contents["variable"]["v_flow"] = v_flow
+end
+
+
+"""
+    create_v_load(model_contents::OrderedDict, input_data::InputData)
+
+Set up v_load variables, which symbolise the flows of the processes between nodes and processes before accounting for reserve realisation. 
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+"""
+function create_v_load(model_contents::OrderedDict, input_data::InputData)
+    reserve_processes = unique(map(x -> (x[3:end]), reserve_process_tuples(input_data)))
+    model = model_contents["model"]
+    v_load = @variable(model, v_load[tup in reserve_processes] >= 0)
+    model_contents["variable"]["v_load"] = v_load
 end
 
 
@@ -96,7 +113,6 @@ function create_v_reserve(model_contents::OrderedDict, input_data::InputData)
     end
 end
 
-
 """
     create_v_state(model_contents::OrderedDict, input_data::InputData)
 
@@ -106,7 +122,6 @@ Set up state variables and surplus and shortage slack variables used for modelin
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 """
 function create_v_state(model_contents::OrderedDict, input_data::InputData)
-    
     model = model_contents["model"]
     node_state_tuple = state_node_tuples(input_data)
     node_balance_tuple = balance_node_tuples(input_data)
@@ -122,7 +137,6 @@ function create_v_state(model_contents::OrderedDict, input_data::InputData)
     vq_state_dw = @variable(model, vq_state_dw[tup in node_balance_tuple] >= 0)
     model_contents["variable"]["vq_state_up"] = vq_state_up
     model_contents["variable"]["vq_state_dw"] = vq_state_dw
-    
 end
 
 
