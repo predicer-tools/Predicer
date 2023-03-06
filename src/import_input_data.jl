@@ -6,7 +6,7 @@ using TimeZones
 import Predicer
 
 function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[])
-    sheetnames_system = ["nodes", "processes", "groups", "process_topology", "inflow_blocks", "markets", "scenarios","efficiencies", "reserve_type","risk"]
+    sheetnames_system = ["nodes", "processes", "groups", "process_topology", "inflow_blocks", "markets", "reserve_realisation", "scenarios","efficiencies", "reserve_type","risk"]
     sheetnames_timeseries = ["cf", "inflow", "market_prices", "price","eff_ts"]
 
     system_data = OrderedDict()
@@ -298,7 +298,7 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
    
     for i in 1:nrow(system_data["markets"])
         mm = system_data["markets"][i, :]
-        markets[mm.market] = Predicer.Market(mm.market, mm.type, mm.node, mm.direction, mm.realisation, mm.reserve_type, mm.is_bid, mm.is_limited, mm.min_bid, mm.max_bid, mm.fee)
+        markets[mm.market] = Predicer.Market(mm.market, mm.type, mm.node, mm.processgroup, mm.direction, mm.reserve_type, mm.is_bid, mm.is_limited, mm.min_bid, mm.max_bid, mm.fee)
         #
         for s in keys(scenarios)
             timesteps = map(t-> string(ZonedDateTime(t, tz"UTC")), timeseries_data["scenarios"][s]["market_prices"].t)
@@ -348,10 +348,14 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
         end
     end
 
-    
-
-
-
+    for i in 1:nrow(system_data["reserve_realisation"])
+        mm = system_data["reserve_realisation"][i, :]
+        m = mm.reserve_product
+        scens = names(mm)[2:end]
+        for s in scens
+            markets[mm.reserve_product].realisation[s] = mm[s]
+        end
+    end
 
     for i in 1:nrow(constraint_type)
         con = constraint_type[i,1]
