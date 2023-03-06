@@ -350,7 +350,6 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
 
     for i in 1:nrow(system_data["reserve_realisation"])
         mm = system_data["reserve_realisation"][i, :]
-        m = mm.reserve_product
         scens = names(mm)[2:end]
         for s in scens
             markets[mm.reserve_product].realisation[s] = mm[s]
