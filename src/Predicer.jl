@@ -48,11 +48,15 @@ module Predicer
     add_topology,
     add_load_limits
 
-    export reserve_nodes,
+    export create_tuples,
+    reserve_nodes,
     reserve_market_directional_tuples,
     process_topology_tuples,
     online_process_tuples,
+    reserve_groups,
     reserve_process_tuples,
+    nodegroup_reserves,
+    node_reserves,
     producer_reserve_process_tuples,
     consumer_reserve_process_tuples,
     state_node_tuples,
@@ -69,14 +73,18 @@ module Predicer
     fixed_market_tuples,
     process_topology_ramp_times_tuples,
     scenarios,
-    create_delay_tuple,
+    create_delay_process_tuple,
+    create_balance_market_tuple,
     state_reserves,
     create_reserve_limits,
     setpoint_tuples,
-    block_tuples
+    block_tuples,
+    create_group_tuples
+
 
     export create_variables,
     create_v_flow,
+    create_v_load,
     create_v_online,
     create_v_reserve,
     create_v_state,
