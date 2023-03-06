@@ -900,16 +900,17 @@ end
         name::String
         type::String
         node::Any
+        processgroup::Any
         direction::String
-        realisation::Float64
+        realisation::Dict{String, Float64}
         reserve_type::String
         is_bid::Bool
         price::TimeSeriesData
         up_price::TimeSeriesData
         down_price::TimeSeriesData
         fixed::Vector{Tuple{Any,Any}}
-        function Market(name, type, node, direction, realisation, reserve_type, is_bid)
-            return new(name, type, node, direction, realisation, reserve_type, is_bid, [], [])
+        function Market(name, type, node, pgroup, direction, realisation, reserve_type, is_bid)
+            return new(name, type, node, pgroup, direction, realisation, reserve_type, is_bid, [], [])
         end
     end
 
@@ -918,8 +919,9 @@ A struct for markets.
 - `name::String`: Name of the market. 
 - `type::String`: Type of the market (energy/reserve).
 - `node::Any`: Name of the node this market is connected to.
+- `processgroup::Any`: Name of the group containing information which processes can participate in the market. 
 - `direction::String`: Direction of the market (up/down/updown).
-- `realisation::Float64`: Realisation probability.
+- `realisation::Dict{String, Float64}`: Realisation probability for each scenario.
 - `reserve_type::String`: Type of the reserve market. 
 - `is_bid::Bool`: Is the market biddable. 
 - 'is_limited::Bool' : Is the reserve market limited
@@ -933,8 +935,9 @@ struct Market
     name::String
     type::String
     node::Any
+    processgroup::Any
     direction::String
-    realisation::Float64
+    realisation::Dict{String, Float64}
     reserve_type::String
     is_bid::Bool
     is_limited::Bool
@@ -945,8 +948,8 @@ struct Market
     up_price::TimeSeriesData
     down_price::TimeSeriesData
     fixed::Vector{Tuple{Any,Any}}
-    function Market(name, type, node, direction, realisation, reserve_type, is_bid, is_limited, min_bid, max_bid, fee)
-        return new(name, type, node, direction, realisation, reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
+    function Market(name, type, node, pgroup, direction, reserve_type, is_bid, is_limited, min_bid, max_bid, fee)
+        return new(name, type, node, pgroup, direction, Dict(), reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
     end
 end
 
