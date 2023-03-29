@@ -11,6 +11,7 @@ Create all constraints used in the model.
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
 function create_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
+    setup_reserve_realisation(model_contents, input_data)
     setup_node_balance(model_contents, input_data)
     setup_process_online_balance(model_contents, input_data)
     setup_process_balance(model_contents, input_data)
@@ -51,11 +52,17 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
     if input_data.contains_states
         v_state = model_contents["variable"]["v_state"]
     end
+    if input_data.contains_reserves
+        v_res_real = model_contents["expression"]["v_res_real"]
+        node_res = node_reserves(input_data)
+    end
+
+
+
     vq_state_up = model_contents["variable"]["vq_state_up"]
     vq_state_dw = model_contents["variable"]["vq_state_dw"]
     temporals = input_data.temporals  
     nodes = input_data.nodes
-    markets = input_data.markets
     scenarios = collect(keys(input_data.scenarios))
 
 
@@ -81,73 +88,39 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
     e_state = model_contents["expression"]["e_state"] = OrderedDict()
     
     for (i, tu) in enumerate(node_balance_tuple)
+        e_prod[tu] = AffExpr(0.0)
+        e_cons[tu] = AffExpr(0.0)
+        e_state[tu] = AffExpr(0.0)
+
         # tu of form (node, scenario, t)
         # process tuple of form (process_name, source, sink, scenario, t)
         cons = filter(x -> (x[2] == tu[1] && x[4] == tu[2] && x[5] == tu[3]), vcat(process_tuple, delay_tuple))
         prod = filter(x -> (x[3] == tu[1] && x[4] == tu[2] && x[5] == tu[3]), vcat(process_tuple, delay_tuple))
 
-        if input_data.contains_reserves
-            res_tuple = reserve_market_directional_tuples(input_data)
-            # get reserve markets for realisation
-            real_up = []
-            real_dw = []
-            # tu of form (node, scenario, t)
-            # res_tuple of form (res_market, node, res_dir, scenario, t)
-            resu = filter(x-> x[2] == tu[1] && x[3] == "res_up" && x[4] == tu[2] && x[5] == tu[3],res_tuple)
-            for ru in resu
-                push!(real_up,markets[ru[1]].realisation)
-            end
+        add_to_expression!(e_cons[tu], -vq_state_dw[tu])
+        add_to_expression!(e_cons[tu], inflow_expr[tu])
+        add_to_expression!(e_prod[tu], vq_state_up[tu])
 
-            resd = filter(x-> x[2] == tu[1] && x[3] == "res_down" && x[4] == tu[2] && x[5] == tu[3],res_tuple)
-            for rd in resd
-                push!(real_dw,markets[rd[1]].realisation)
-            end
-            v_res = model_contents["variable"]["v_res"]
-        else
-            resu = []
-            resd = []
-            v_res = []
+        if input_data.contains_reserves && tu in node_res
+            add_to_expression!(e_cons[tu], -v_res_real[tu])
         end
 
-        if isempty(cons)
-            if isempty(resd)
-                cons_expr = @expression(model, -vq_state_dw[tu] + inflow_expr[tu])
-            else
-                cons_expr = @expression(model, -vq_state_dw[tu] + inflow_expr[tu] + sum(real_dw .* v_res[resd]))
-            end
-        else
-            if isempty(resd)
-                cons_expr = @expression(model, -sum(v_flow[cons]) - vq_state_dw[tu] + inflow_expr[tu])
-            else
-                cons_expr = @expression(model, -sum(v_flow[cons]) - vq_state_dw[tu] + inflow_expr[tu] + sum(real_dw .* v_res[resd]))
-            end
+        if !isempty(cons)
+            add_to_expression!(e_cons[tu], -sum(v_flow[cons]))
         end
-        if isempty(prod)
-            if isempty(resu)
-                prod_expr = @expression(model, vq_state_up[tu])
-            else
-                prod_expr = @expression(model, vq_state_up[tu] - sum(real_up .* v_res[resu]))
-            end
-        else
-            if isempty(resu)
-                prod_expr = @expression(model, sum(v_flow[prod]) + vq_state_up[tu])
-            else
-                prod_expr = @expression(model, sum(v_flow[prod]) + vq_state_up[tu] - sum(real_up .* v_res[resu]))
-            end
+        if !isempty(prod)
+            add_to_expression!(e_prod[tu], sum(v_flow[prod]))
         end
+
         if nodes[tu[1]].is_state
+            add_to_expression!(e_state[tu], v_state[tu])
             if tu[3] == temporals.t[1]
-                state_expr = @expression(model, v_state[tu] - (1-nodes[tu[1]].state.state_loss_proportional*temporals(tu[3]))*nodes[tu[1]].state.initial_state)
+                add_to_expression!(e_state[tu], - (1-nodes[tu[1]].state.state_loss_proportional*temporals(tu[3]))*nodes[tu[1]].state.initial_state)
             else
-                state_expr = @expression(model, v_state[tu] - (1-nodes[tu[1]].state.state_loss_proportional*temporals(tu[3]))*v_state[node_balance_tuple[i-1]])
+                add_to_expression!(e_state[tu], - (1-nodes[tu[1]].state.state_loss_proportional*temporals(tu[3]))*v_state[node_balance_tuple[i-1]])
             end
-        else
-            state_expr = 0
         end
 
-        e_prod[tu] = prod_expr
-        e_cons[tu] = cons_expr
-        e_state[tu] = state_expr
     end
     node_bal_eq = @constraint(model, node_bal_eq[tup in node_balance_tuple], temporals(tup[3]) * (e_prod[tup] + e_cons[tup]) == e_state[tup])
     node_state_max_up = @constraint(model, node_state_max_up[tup in node_state_tuple], e_state[tup] <= nodes[tup[1]].state.in_max * temporals(tup[3]))
@@ -306,6 +279,7 @@ function setup_process_balance(model_contents::OrderedDict, input_data::Predicer
         end
         sources = filter(x -> (x[1] == tup[1] && x[3] == tup[1] && x[4] == tup[2] && x[5] == tup[3]), process_tuple)
         sinks = filter(x -> (x[1] == tup[1] && x[2] == tup[1] && x[4] == tup[2] && x[5] == tup[3]), process_tuple)
+
         nod_eff[tup] = sum(v_flow[sinks]) - (length(sources) > 0 ? eff * sum(v_flow[sources]) : 0)
     end
 
@@ -418,12 +392,14 @@ function setup_processes_limits(model_contents::OrderedDict, input_data::Predice
     cf_fac_fix = model_contents["expression"]["cf_fac_fix"] = OrderedDict()
     cf_fac_up = model_contents["expression"]["cf_fac_up"] = OrderedDict()
     for tup in cf_balance_tuple
+        cf_fac_fix[tup] = AffExpr(0.0)
+        cf_fac_up[tup] = AffExpr(0.0)
         cf_val = processes[tup[1]].cf(tup[4], tup[5])
         cap = filter(x -> (x.sink == tup[3]), processes[tup[1]].topos)[1].capacity
         if processes[tup[1]].is_cf_fix
-            cf_fac_fix[tup] = @expression(model, sum(v_flow[tup]) - cf_val * cap)
+            add_to_expression!(cf_fac_fix[tup], sum(v_flow[tup]) - cf_val * cap)
         else
-            cf_fac_up[tup] = @expression(model, sum(v_flow[tup]) - cf_val * cap)
+            add_to_expression!(cf_fac_up[tup], sum(v_flow[tup]) - cf_val * cap)
         end
     end
 
@@ -435,46 +411,17 @@ function setup_processes_limits(model_contents::OrderedDict, input_data::Predice
     # Base expressions as Dict:
     e_lim_max = model_contents["expression"]["e_lim_max"] = OrderedDict()
     e_lim_min = model_contents["expression"]["e_lim_min"] = OrderedDict()
+    e_lim_res_max = model_contents["expression"]["e_lim_res_max"] = OrderedDict()
+    e_lim_res_min = model_contents["expression"]["e_lim_res_min"] = OrderedDict()
     
     for tup in lim_tuple
         e_lim_max[tup] = AffExpr(0.0)
         e_lim_min[tup] = AffExpr(0.0)
+        e_lim_res_max[tup] = AffExpr(0.0)
+        e_lim_res_min[tup] = AffExpr(0.0)
     end
 
 
-
-    # reserve processes
-    if input_data.contains_reserves
-        res_pot_cons_tuple = consumer_reserve_process_tuples(input_data)
-        res_pot_prod_tuple = producer_reserve_process_tuples(input_data)
-        v_reserve = model_contents["variable"]["v_reserve"]
-        res_typ = collect(keys(input_data.reserve_type))
-        res_dir = model_contents["res_dir"]
-        p_reserve_cons = filter(x -> (res_dir[1], res_typ[1], x...) in res_pot_cons_tuple, lim_tuple)
-        p_reserve_prod = filter(x -> (res_dir[1], res_typ[1], x...) in res_pot_prod_tuple, lim_tuple)
-
-        for tup in p_reserve_prod
-            res_up_tup = filter(x->x[1] == "res_up" && x[3:end] == tup,res_pot_prod_tuple)
-            if !isempty(res_up_tup)
-                add_to_expression!(e_lim_max[tup], sum(v_reserve[(res_up_tup)]))
-            end
-            res_down_tup = filter(x->x[1] == "res_down" && x[3:end] == tup,res_pot_prod_tuple)
-            if !isempty(res_down_tup)
-                add_to_expression!(e_lim_min[tup], -sum(v_reserve[(res_down_tup)]))
-            end
-        end
-    
-        for tup in p_reserve_cons
-            res_up_tup = filter(x->x[1] == "res_down" && x[3:end] == tup,res_pot_cons_tuple)
-            if !isempty(res_up_tup)
-                add_to_expression!(e_lim_max[tup], sum(v_reserve[(res_up_tup)]))
-            end
-            res_down_tup = filter(x->x[1] == "res_up" && x[3:end] == tup,res_pot_cons_tuple)
-            if !isempty(res_down_tup)
-                add_to_expression!(e_lim_min[tup], -sum(v_reserve[(res_down_tup)]))
-            end
-        end
-    end
 
     # online processes
     if input_data.contains_online
@@ -505,21 +452,171 @@ function setup_processes_limits(model_contents::OrderedDict, input_data::Predice
         else
             cap = topo.cap_ts(tup[4], tup[5])
         end
-        if input_data.contains_reserves
-            if tup in p_reserve_prod || tup in p_reserve_cons
-                add_to_expression!(e_lim_max[tup], -cap)
-            else
-                add_to_expression!(e_lim_max[tup], -cap)
-            end
-        else
-            add_to_expression!(e_lim_max[tup], -cap)
-        end
+        add_to_expression!(e_lim_max[tup], -cap)
     end
 
-    max_eq = @constraint(model, max_eq[tup in collect(keys(e_lim_max))], v_flow[tup] + e_lim_max[tup] <= 0)
-    min_eq = @constraint(model, min_eq[tup in collect(keys(e_lim_min))], v_flow[tup] + e_lim_min[tup] >= 0)
-    model_contents["constraint"]["max_eq"] = max_eq
-    model_contents["constraint"]["min_eq"] = min_eq
+    # reserve processes
+    if input_data.contains_reserves
+        v_load = model_contents["variable"]["v_load"]
+        res_p_tuples = unique(map(x -> x[3:end], reserve_process_tuples(input_data)))
+        res_pot_cons_tuple = consumer_reserve_process_tuples(input_data)
+        res_pot_prod_tuple = producer_reserve_process_tuples(input_data)
+        v_reserve = model_contents["variable"]["v_reserve"]
+        res_typ = collect(keys(input_data.reserve_type))
+        res_dir = model_contents["res_dir"]
+        p_reserve_cons = filter(x -> (res_dir[1], res_typ[1], x...) in res_pot_cons_tuple, lim_tuple)
+        p_reserve_prod = filter(x -> (res_dir[1], res_typ[1], x...) in res_pot_prod_tuple, lim_tuple)
+
+        for tup in p_reserve_prod
+            res_up_tup = filter(x->x[1] == "res_up" && x[3:end] == tup,res_pot_prod_tuple)
+            if !isempty(res_up_tup)
+                add_to_expression!(e_lim_res_max[tup], sum(v_reserve[(res_up_tup)]))
+            end
+            res_down_tup = filter(x->x[1] == "res_down" && x[3:end] == tup,res_pot_prod_tuple)
+            if !isempty(res_down_tup)
+                add_to_expression!(e_lim_res_min[tup], -sum(v_reserve[(res_down_tup)]))
+            end
+        end
+    
+        for tup in p_reserve_cons
+            res_up_tup = filter(x->x[1] == "res_down" && x[3:end] == tup,res_pot_cons_tuple)
+            if !isempty(res_up_tup)
+                add_to_expression!(e_lim_res_max[tup], sum(v_reserve[(res_up_tup)]))
+            end
+            res_down_tup = filter(x->x[1] == "res_up" && x[3:end] == tup,res_pot_cons_tuple)
+            if !isempty(res_down_tup)
+                add_to_expression!(e_lim_res_min[tup], -sum(v_reserve[(res_down_tup)]))
+            end
+        end
+
+        v_load_max_eq = @constraint(model, v_load_max_eq[tup in res_p_tuples], v_load[tup] + e_lim_max[tup] + e_lim_res_max[tup] <= 0)
+        v_load_min_eq = @constraint(model, v_load_min_eq[tup in res_p_tuples], v_load[tup] + e_lim_min[tup] + e_lim_res_min[tup] >= 0)
+        model_contents["constraint"]["v_load_max_eq"] = v_load_max_eq
+        model_contents["constraint"]["v_load_min_eq"] = v_load_min_eq
+    end 
+
+    v_flow_max_eq = @constraint(model, v_flow_max_eq[tup in collect(keys(e_lim_max))], v_flow[tup] + e_lim_max[tup] <= 0)
+    v_flow_min_eq = @constraint(model, v_flow_min_eq[tup in collect(keys(e_lim_min))], v_flow[tup] + e_lim_min[tup] >= 0)
+
+    model_contents["constraint"]["v_flow_max_eq"] = v_flow_max_eq
+    model_contents["constraint"]["v_flow_min_eq"] = v_flow_min_eq
+end
+
+
+
+"""
+    setup_reserve_realisation(model_contents::OrderedDict, input_data::Predicer.InputData)
+
+Setup constraints for reserve realisation. 
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+"""
+function setup_reserve_realisation(model_contents::OrderedDict, input_data::Predicer.InputData)
+    if input_data.contains_reserves
+        model = model_contents["model"]
+
+        markets = input_data.markets
+        v_res_final = model_contents["variable"]["v_res_final"]
+        v_flow = model_contents["variable"]["v_flow"]
+        v_load = model_contents["variable"]["v_load"]
+
+        v_res_real_tot = model_contents["expression"]["v_res_real_tot"] = OrderedDict()
+        v_res_real = model_contents["expression"]["v_res_real"] = OrderedDict()
+        v_res_real_node = model_contents["expression"]["v_res_real_node"] = OrderedDict()
+        v_res_real_flow = model_contents["expression"]["v_res_real_flow"] = OrderedDict()
+        v_res_real_flow_tot = model_contents["expression"]["v_res_real_flow_tot"] = OrderedDict()
+    
+        res_market_dir_tups = reserve_market_directional_tuples(input_data)
+        res_market_tuples = reserve_market_tuples(input_data)
+        nodegroup_res = nodegroup_reserves(input_data)
+        node_res = node_reserves(input_data)
+        res_process_tuples = reserve_process_tuples(input_data)
+        process_tuples = process_topology_tuples(input_data)
+        res_groups = reserve_groups(input_data)
+        groups = create_group_tuples(input_data)
+
+
+        # Set realisation within nodegroup to be equal to total reserve * realisation
+        for tup in nodegroup_res
+            v_res_real_tot[tup] = AffExpr(0.0)
+            v_res_real_node[tup] = AffExpr(0.0)
+            for res_tup in filter(x -> x[2] == tup[1] && x[4] == tup[2] && x[5] == tup[3], res_market_dir_tups)
+                res_final_tup = (res_tup[1], res_tup[4:5]...)
+                real = markets[res_tup[1]].realisation[res_tup[4]]
+                if res_tup[3] == "res_up"
+                    add_to_expression!(v_res_real_tot[tup], real * v_res_final[res_final_tup])
+                elseif res_tup[3] == "res_down"
+                    add_to_expression!(v_res_real_tot[tup], -1.0 * real * v_res_final[res_final_tup])
+                end
+            end
+        end
+
+        # create process-wise reserve_realisation expression "v_res_real_flow"
+        for p_tup in process_tuples
+            v_res_real_flow[p_tup] = AffExpr(0.0)
+            res_p_tup = filter(y -> y == p_tup, unique(map(x -> (x[3:end]), res_process_tuples)))
+            if !isempty(res_p_tup)
+                add_to_expression!(v_res_real_flow[p_tup], v_flow[p_tup] - v_load[p_tup])
+            end
+        end
+
+        # create expression for node-wise realisation
+        for n_tup in node_res
+            n = n_tup[1]
+            s = n_tup[2]
+            t = n_tup[3]
+            v_res_real[n_tup] = AffExpr(0.0)
+            for p in unique(map(y -> y[5], filter(z -> z[4] == n, res_groups)))
+                prod_tups = unique(map(y -> (y[3:end]), filter(x -> x[3] == p && x[5] == n && x[6] == s && x[7] == t, res_process_tuples)))
+                cons_tups = unique(map(y -> (y[3:end]), filter(x -> x[3] == p && x[4] == n && x[6] == s && x[7] == t, res_process_tuples)))
+                for pt in prod_tups
+                    add_to_expression!(v_res_real[n_tup], v_res_real_flow[pt])
+                end
+                for ct in cons_tups
+                    add_to_expression!(v_res_real[n_tup], -v_res_real_flow[ct])
+                end
+            end
+        end
+
+        # set realisation within nodegroup to be equal to node-wise realisation within members of the nodegroup
+        # real(ng) == sumof real n for n in ng
+        for ng_tup in nodegroup_res
+            for n in unique(map(x -> x[3], filter(y -> y[2] == ng_tup[1], groups)))
+                add_to_expression!(v_res_real_node[ng_tup], v_res_real[(n, ng_tup[2], ng_tup[3])])
+            end
+        end
+
+        res_real_eq = @constraint(model, res_real_eq[tup in nodegroup_res], v_res_real_tot[tup] == v_res_real_node[tup])
+        model_contents["constraint"]["res_real_eq"] = res_real_eq
+
+
+        # enure that the realisation of reserve rp is equal to the realisation of processes in the processgroup of the reserve
+        # Ensures that the realisation is done by the "correct" processes. 
+        # reserve-specific realisation = sumof process_realisation for p in reserve processgroup. 
+        for res in unique(map(x -> x[1], res_market_tuples))
+            res_ng = input_data.markets[res].node
+            res_ns = unique(map(x -> x[3], filter(y -> y[2] == res_ng, groups)))
+            res_ps = unique(map(y -> y[5], filter(x -> x[3] == res, res_groups)))
+            for s in scenarios(input_data), t in input_data.temporals.t
+                v_res_real_flow_tot[(res_ng, s, t)] = AffExpr(0.0)
+                for res_p in res_ps
+                    prod_tups = unique(map(y -> (y[3:end]), filter(x -> x[3] == res_p && (x[5] in res_ns) && x[6] == s && x[7] == t, res_process_tuples)))
+                    for pt in prod_tups
+                        add_to_expression!(v_res_real_flow_tot[(res_ng, s, t)], v_res_real_flow[pt])
+                    end
+                    cons_tups = unique(map(y -> (y[3:end]), filter(x -> x[3] == res_p && (x[4] in res_ns) && x[6] == s && x[7] == t, res_process_tuples)))
+                    for ct in cons_tups
+                        add_to_expression!(v_res_real_flow_tot[(res_ng, s, t)], -1.0 * v_res_real_flow[ct])
+                    end
+                end
+            end
+        end
+        
+        res_production_eq = @constraint(model, res_production_eq[tup in nodegroup_res], v_res_real_tot[tup] == v_res_real_flow_tot[tup])
+        model_contents["constraint"]["res_production_eq"] = res_production_eq
+    end
 end
 
 
@@ -535,16 +632,16 @@ Setup constraints for reserves.
 function setup_reserve_balances(model_contents::OrderedDict, input_data::Predicer.InputData)
     if input_data.contains_reserves
         model = model_contents["model"]
-        res_eq_tuple = reserve_node_tuples(input_data)
-        res_eq_updn_tuple = up_down_reserve_market_tuples(input_data)
+        res_nodegroup = reserve_nodegroup_tuples(input_data)
+        group_tuples = create_group_tuples(input_data)
         res_potential_tuple = reserve_process_tuples(input_data)
         res_tuple = reserve_market_directional_tuples(input_data)
+        res_dir = model_contents["res_dir"]
+        res_eq_updn_tuple = up_down_reserve_market_tuples(input_data)
         res_final_tuple = reserve_market_tuples(input_data)
         res_nodes_tuple = reserve_nodes(input_data)
         node_state_tuple = state_node_tuples(input_data)
-        state_reserve_tuple = state_reserves(input_data)
-        res_typ = collect(keys(input_data.reserve_type))
-        res_dir = model_contents["res_dir"]
+        state_reserve_tuple = state_reserves(input_data)  
         scenarios = collect(keys(input_data.scenarios))
         temporals = input_data.temporals
         markets = input_data.markets
@@ -587,37 +684,43 @@ function setup_reserve_balances(model_contents::OrderedDict, input_data::Predice
         # Reserve balances (from reserve potential to reserve product):
         e_res_bal_up = model_contents["expression"]["e_res_bal_up"] = OrderedDict()
         e_res_bal_dn = model_contents["expression"]["e_res_bal_up"] = OrderedDict()
-        for n in res_nodes_tuple, r in res_typ, s in scenarios, t in temporals.t
-            tup = (n, r, s, t) # same as res_eq_tuple
+        for tup in res_nodegroup
+            ng = tup[1]
+            r = tup[2]
+            s = tup[3]
+            t = tup[4]
             e_res_bal_up[tup] = AffExpr(0.0)
             e_res_bal_dn[tup] = AffExpr(0.0)
 
-            res_pot_u = filter(x -> x[1] == "res_up" && x[2] == r && x[6] == s && x[7] == t && (x[4] == n || x[5] == n), res_potential_tuple)
-            res_u = filter(x -> x[3] == "res_up" && markets[x[1]].reserve_type == r && x[4] == s && x[5] == t && x[2] == n, res_tuple)
-            res_pot_d = filter(x -> x[1] == "res_down" && x[2] == r && x[6] == s && x[7] == t && (x[4] == n || x[5] == n), res_potential_tuple)
-            res_d = filter(x -> x[3] == "res_down" && markets[x[1]].reserve_type == r && x[4] == s && x[5] == t && x[2] == n, res_tuple)
-
-            if !isempty(res_pot_u)
-                add_to_expression!(e_res_bal_up[tup], sum(v_reserve[res_pot_u]))
-            end
-            if !isempty(res_pot_d)
-                add_to_expression!(e_res_bal_dn[tup], sum(v_reserve[res_pot_d]))
-            end
-
+            res_u = filter(x -> x[3] == "res_up" && markets[x[1]].reserve_type == r && x[4] == s && x[5] == t && x[2] == ng, res_tuple)
+            res_d = filter(x -> x[3] == "res_down" && markets[x[1]].reserve_type == r && x[4] == s && x[5] == t && x[2] == ng, res_tuple)
             if !isempty(res_u)
                 add_to_expression!(e_res_bal_up[tup], -sum(v_res[res_u]))
             end
             if !isempty(res_d)
                 add_to_expression!(e_res_bal_dn[tup], -sum(v_res[res_d]))
             end
+
+            for n in unique(map(y -> y[3], filter(x -> x[2] == ng, group_tuples)))
+                if n in res_nodes_tuple
+                    res_pot_u = filter(x -> x[1] == "res_up" && x[2] == r && x[6] == s && x[7] == t && (x[4] == n || x[5] == n), res_potential_tuple)
+                    res_pot_d = filter(x -> x[1] == "res_down" && x[2] == r && x[6] == s && x[7] == t && (x[4] == n || x[5] == n), res_potential_tuple)
+                    if !isempty(res_pot_u)
+                        add_to_expression!(e_res_bal_up[tup], sum(v_reserve[res_pot_u]))
+                    end
+                    if !isempty(res_pot_d)
+                        add_to_expression!(e_res_bal_dn[tup], sum(v_reserve[res_pot_d]))
+                    end
+                end
+            end
         end            
 
         # res_tuple is the tuple use for v_res (market, n, res_dir, s, t)
         # res_eq_updn_tuple (market, s, t)
-        # the previously used tuple is res_eq_tuple, of form (n, rt, s, t)
+        # the previously used tuple is res_eq_tuple, of form (ng, rt, s, t)
         res_eq_updn = @constraint(model, res_eq_updn[tup in res_eq_updn_tuple], v_res[(tup[1], markets[tup[1]].node, res_dir[1], tup[2], tup[3])] - v_res[(tup[1], markets[tup[1]].node, res_dir[2], tup[2], tup[3])] == 0)
-        res_eq_up = @constraint(model, res_eq_up[tup in res_eq_tuple], e_res_bal_up[tup] == 0)
-        res_eq_dn = @constraint(model, res_eq_dn[tup in res_eq_tuple], e_res_bal_dn[tup] == 0)
+        res_eq_up = @constraint(model, res_eq_up[tup in res_nodegroup], e_res_bal_up[tup] == 0)
+        res_eq_dn = @constraint(model, res_eq_dn[tup in res_nodegroup], e_res_bal_dn[tup] == 0)
         model_contents["constraint"]["res_eq_updn"] = res_eq_updn
         model_contents["constraint"]["res_eq_up"] = res_eq_up
         model_contents["constraint"]["res_eq_dn"] = res_eq_dn
@@ -656,104 +759,88 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
     ramp_tuple = process_topology_ramp_times_tuples(input_data)
     process_tuple = process_topology_tuples(input_data)
     v_flow = model_contents["variable"]["v_flow"]
+
     processes = input_data.processes
     temporals = input_data.temporals
-
 
     ramp_expr_up = model_contents["expression"]["ramp_expr_up"] = OrderedDict()
     ramp_expr_down = model_contents["expression"]["ramp_expr_down"] = OrderedDict()
 
     if input_data.contains_reserves
+        v_load = model_contents["variable"]["v_load"]
+        res_proc_tuples = filter(x -> x[5] != input_data.temporals.t[1], unique(map(y -> y[3:end], reserve_process_tuples(input_data))))
         res_nodes_tuple = reserve_nodes(input_data)
         res_potential_tuple = reserve_process_tuples(input_data)
         v_reserve = model_contents["variable"]["v_reserve"]
         reserve_types = input_data.reserve_type
+        ramp_expr_res_up = model_contents["expression"]["ramp_expr_res_up"] = OrderedDict()
+        ramp_expr_res_down = model_contents["expression"]["ramp_expr_res_down"] = OrderedDict()
     end
 
-    for tup in process_tuple
+    if input_data.contains_online
+        v_start = model_contents["variable"]["v_start"]
+        v_stop = model_contents["variable"]["v_stop"]
+    end
+
+    for tup in ramp_tuple
         if processes[tup[1]].conversion == 1 && !processes[tup[1]].is_cf
-            if tup[5] != temporals.t[1]
-                ramp_expr_up[tup] = AffExpr(0.0)
-                ramp_expr_down[tup] = AffExpr(0.0)        
-                topo = filter(x -> x.source == tup[2] && x.sink == tup[3], processes[tup[1]].topos)[1]
-                ramp_up_cap = topo.ramp_up * topo.capacity * temporals(tup[5])
-                ramp_dw_cap = topo.ramp_down * topo.capacity * temporals(tup[5])
-                start_cap = max(0,processes[tup[1]].load_min-topo.ramp_up)*topo.capacity
-                stop_cap = max(0,processes[tup[1]].load_min-topo.ramp_down)*topo.capacity
-                if processes[tup[1]].is_online
-                    v_start = model_contents["variable"]["v_start"]
-                    v_stop = model_contents["variable"]["v_stop"]
-                    if processes[tup[1]].is_res && input_data.contains_reserves
+            ramp_expr_up[tup] = AffExpr(0.0)
+            ramp_expr_down[tup] = AffExpr(0.0)
 
-                        res_tup_up = filter(x->x[1]=="res_up" && x[3:end]==tup,res_potential_tuple)
-                        res_tup_down = filter(x->x[1]=="res_down" && x[3:end]==tup,res_potential_tuple)
-                        if tup[2] in res_nodes_tuple
-                            if !isempty(res_tup_down)
-                                add_to_expression!(ramp_expr_up[tup], -1 * sum(values(reserve_types) .* v_reserve[res_tup_down]) + ramp_up_cap + start_cap * v_start[(tup[1], tup[4], tup[5])]) 
-                            else
-                                add_to_expression!(ramp_expr_up[tup], ramp_up_cap + start_cap * v_start[(tup[1], tup[4], tup[5])]) 
-                            end
-                            if !isempty(res_tup_up)
-                                add_to_expression!(ramp_expr_down[tup], sum(values(reserve_types) .* v_reserve[res_tup_up]) - ramp_dw_cap - stop_cap * v_stop[(tup[1], tup[4], tup[5])]) 
-                            else
-                                add_to_expression!(ramp_expr_down[tup], - ramp_dw_cap - stop_cap * v_stop[(tup[1], tup[4], tup[5])]) 
-                            end
-                        elseif tup[3] in res_nodes_tuple
-                            if !isempty(res_tup_up)
-                                add_to_expression!(ramp_expr_up[tup], -1 * sum(values(reserve_types) .* v_reserve[res_tup_up]) + ramp_up_cap + start_cap * v_start[(tup[1], tup[4], tup[5])]) 
-                            else
-                                add_to_expression!(ramp_expr_up[tup], ramp_up_cap + start_cap * v_start[(tup[1], tup[4], tup[5])]) 
-                            end
-                            if !isempty(res_tup_down)
-                                add_to_expression!(ramp_expr_down[tup], sum(values(reserve_types) .* v_reserve[res_tup_down]) - ramp_dw_cap - stop_cap * v_stop[(tup[1], tup[4], tup[5])]) 
-                            else   
-                                add_to_expression!(ramp_expr_down[tup], - ramp_dw_cap - stop_cap * v_stop[(tup[1], tup[4], tup[5])]) 
-                            end
-                        else
-                            add_to_expression!(ramp_expr_up[tup], ramp_up_cap + start_cap * v_start[(tup[1], tup[4], tup[5])]) 
-                            add_to_expression!(ramp_expr_down[tup], - ramp_dw_cap - stop_cap * v_stop[(tup[1], tup[4], tup[5])]) 
-                        end
-                    else
-                        add_to_expression!(ramp_expr_up[tup], ramp_up_cap + start_cap * v_start[(tup[1], tup[4], tup[5])]) 
-                        add_to_expression!(ramp_expr_down[tup], - ramp_dw_cap - stop_cap * v_stop[(tup[1], tup[4], tup[5])]) 
+            topo = filter(x -> x.source == tup[2] && x.sink == tup[3], processes[tup[1]].topos)[1]
+            ramp_up_cap = topo.ramp_up * topo.capacity * temporals(tup[5])
+            ramp_dw_cap = topo.ramp_down * topo.capacity * temporals(tup[5])
+            start_cap = max(0,processes[tup[1]].load_min-topo.ramp_up)*topo.capacity
+            stop_cap = max(0,processes[tup[1]].load_min-topo.ramp_down)*topo.capacity
+
+            # add ramp rate limit
+            add_to_expression!(ramp_expr_up[tup], ramp_up_cap) 
+            add_to_expression!(ramp_expr_down[tup], - ramp_dw_cap)
+
+            # if online process
+            if processes[tup[1]].is_online
+                add_to_expression!(ramp_expr_up[tup], start_cap * v_start[(tup[1], tup[4], tup[5])]) 
+                add_to_expression!(ramp_expr_down[tup], - stop_cap * v_stop[(tup[1], tup[4], tup[5])])
+            end
+
+            # if reserve process
+            if processes[tup[1]].is_res && input_data.contains_reserves && tup in res_proc_tuples
+                ramp_expr_res_up[tup] = AffExpr(0.0)
+                ramp_expr_res_down[tup] = AffExpr(0.0)
+                res_tup_up = filter(x->x[1]=="res_up" && x[3:end]==tup,res_potential_tuple)
+                res_tup_down = filter(x->x[1]=="res_down" && x[3:end]==tup,res_potential_tuple)
+                if tup[2] in res_nodes_tuple
+                    for rtd in res_tup_down
+                        add_to_expression!(ramp_expr_res_up[tup], -1 * sum(reserve_types[rtd[2]] .* v_reserve[rtd]))
                     end
-                else
-                    if processes[tup[1]].is_res && input_data.contains_reserves
-
-                        res_tup_up = filter(x->x[1]=="res_up" && x[3:end]==tup,res_potential_tuple)
-                        res_tup_down = filter(x->x[1]=="res_down" && x[3:end]==tup,res_potential_tuple)
-
-                        if tup[2] in res_nodes_tuple
-                            if !isempty(res_tup_down)
-                                add_to_expression!(ramp_expr_up[tup], -sum(values(reserve_types) .* v_reserve[res_tup_down]) + ramp_up_cap)
-                            end
-                            if !isempty(res_tup_up)
-                                add_to_expression!(ramp_expr_down[tup], sum(values(reserve_types) .* v_reserve[res_tup_up]) - ramp_dw_cap) 
-                            end
-                        elseif tup[3] in res_nodes_tuple
-                            if !isempty(res_tup_up)
-                                add_to_expression!(ramp_expr_up[tup], -sum(values(reserve_types) .* v_reserve[res_tup_up]) + ramp_up_cap)
-                            end 
-                            if !isempty(res_tup_down)
-                                add_to_expression!(ramp_expr_down[tup], sum(values(reserve_types) .* v_reserve[res_tup_down]) - ramp_dw_cap) 
-                            end
-                        else
-                            add_to_expression!(ramp_expr_up[tup], ramp_up_cap)
-                            add_to_expression!(ramp_expr_down[tup], - ramp_dw_cap)
-                        end
-                    else
-                        add_to_expression!(ramp_expr_up[tup], ramp_up_cap)
-                        add_to_expression!(ramp_expr_down[tup], - ramp_dw_cap)
+                    for rtu in res_tup_up
+                        add_to_expression!(ramp_expr_res_down[tup], sum(reserve_types[rtu[2]] .* v_reserve[rtu]))
+                    end
+                elseif tup[3] in res_nodes_tuple
+                    for rtu in res_tup_up
+                        add_to_expression!(ramp_expr_res_up[tup], -1 * sum(reserve_types[rtu[2]] .* v_reserve[rtu])) 
+                    end
+                    for rtd in res_tup_down
+                        add_to_expression!(ramp_expr_res_down[tup], sum(reserve_types[rtd[2]] .* v_reserve[rtd])) 
                     end
                 end
             end
         end
     end
-
-    ramp_up_eq = @constraint(model, ramp_up_eq[tup in ramp_tuple], v_flow[tup] - v_flow[process_tuple[findall(x->x==tup,process_tuple)[1]-1]] <= ramp_expr_up[tup])
-    ramp_down_eq = @constraint(model, ramp_down_eq[tup in ramp_tuple], v_flow[tup] - v_flow[process_tuple[findall(x->x==tup,process_tuple)[1]-1]] >= ramp_expr_down[tup])
-    model_contents["constraint"]["ramp_up_eq"] = ramp_up_eq
-    model_contents["constraint"]["ramp_down_eq"] = ramp_down_eq
+    
+    if input_data.contains_reserves
+        if !isempty(ramp_expr_res_up)
+            ramp_up_eq_v_load = @constraint(model, ramp_up_eq_v_load[tup in res_proc_tuples], v_load[tup] - v_load[process_tuple[findall(x->x==tup,process_tuple)[1]-1]] <= ramp_expr_up[tup] + ramp_expr_res_up[tup])
+            ramp_down_eq_v_load = @constraint(model, ramp_down_eq_v_load[tup in res_proc_tuples], v_load[tup] - v_load[process_tuple[findall(x->x==tup,process_tuple)[1]-1]] >= ramp_expr_down[tup] + ramp_expr_res_down[tup])
+            model_contents["constraint"]["ramp_up_eq_v_load"] = ramp_up_eq_v_load
+            model_contents["constraint"]["ramp_down_eq_v_load"] = ramp_down_eq_v_load
+        end
+    end
+        
+    ramp_up_eq_v_flow = @constraint(model, ramp_up_eq_v_flow[tup in ramp_tuple], v_flow[tup] - v_flow[process_tuple[findall(x->x==tup,process_tuple)[1]-1]] <= ramp_expr_up[tup])
+    ramp_down_eq_v_flow = @constraint(model, ramp_down_eq_v_flow[tup in ramp_tuple], v_flow[tup] - v_flow[process_tuple[findall(x->x==tup,process_tuple)[1]-1]] >= ramp_expr_down[tup])
+    model_contents["constraint"]["ramp_up_eq_v_flow"] = ramp_up_eq_v_flow
+    model_contents["constraint"]["ramp_down_eq_v_flow"] = ramp_down_eq_v_flow
 end
 
 
@@ -796,7 +883,6 @@ Setup constraints for setting fixed process values at certain timesteps.
 """
 function setup_fixed_values(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
-    process_tuple = process_topology_tuples(input_data)
     fixed_value_tuple = fixed_market_tuples(input_data)
     v_bid = model_contents["expression"]["v_bid"]
     markets = input_data.markets
@@ -955,7 +1041,8 @@ end
 """
     setup_inflow_blocks(model_contents::OrderedDict, input_data::Predicer.InputData)    
 
-Setup functionality, which can be used to model demand flexibility in Predicer.
+Setup functionality, which can be used to model demand flexibility in Predicer. Only one block can 
+be active per node per scenario. 
 
 # Arguments
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
