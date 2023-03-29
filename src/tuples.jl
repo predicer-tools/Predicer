@@ -15,7 +15,10 @@ function create_tuples(input_data::InputData) # unused, should be debricated
     tuplebook["res_tuple"] = reserve_market_directional_tuples(input_data)
     tuplebook["process_tuple"] = process_topology_tuples(input_data)
     tuplebook["proc_online_tuple"] = online_process_tuples(input_data)
+    tuplebook["reserve_groups"] =  reserve_groups(input_data)
     tuplebook["res_potential_tuple"] = reserve_process_tuples(input_data)
+    tuplebook["nodegroup_reserves"] = nodegroup_reserves(input_data)
+    tuplebook["node_reserves"] = node_reserves(input_data)
     tuplebook["res_pot_prod_tuple"] = producer_reserve_process_tuples(input_data)
     tuplebook["res_pot_cons_tuple"] = consumer_reserve_process_tuples(input_data)
     tuplebook["node_state_tuple"] = state_node_tuples(input_data)
@@ -38,6 +41,7 @@ function create_tuples(input_data::InputData) # unused, should be debricated
     tuplebook["reserve_limits"] = create_reserve_limits(input_data)
     tuplebook["setpoint_tuples"] = setpoint_tuples(input_data)
     tuplebook["block_tuples"] = block_tuples(input_data)
+    tuplebook["block_tuples"] = create_group_tuples(input_data)
     return tuplebook
 end
 
@@ -49,21 +53,24 @@ Return nodes which have a reserve. Form: (n).
 """
 function reserve_nodes(input_data::InputData) # original name: create_res_nodes_tuple()
     reserve_nodes = []
-
-    for n in values(input_data.nodes)
-        if n.is_res
-            push!(reserve_nodes, n.name)
+    markets = input_data.markets
+    for m in collect(keys(markets))
+        if markets[m].type == "reserve"
+            for n in unique(map(y -> y[3], filter(x -> x[2] == markets[m].node, create_group_tuples(input_data))))
+                if input_data.nodes[n].is_res
+                    push!(reserve_nodes, n)
+                end
+            end
         end
     end
-    return reserve_nodes
+    return unique(reserve_nodes)
 end
-
 
 
 """
     reserve_market_directional_tuples(input_data::InputData)
 
-Return tuples identifying each reserve market with its node and directions in each time step and scenario. Form: (r, n, d, s, t).
+Return tuples identifying each reserve market with its node and directions in each time step and scenario. Form: (r, ng, d, s, t).
 
 !!! note
     This function assumes that reserve markets' market type is formatted "reserve" and that the up and down reserve market directions are "res_up" and "res_down".
@@ -159,6 +166,82 @@ function online_process_tuples(input_data::InputData) # original name: create_pr
     end
 end
 
+"""
+    function reserve_groups(input_data::InputData)
+
+Build tuples containing the mapping of processes - nodes over each reserve. Form: (dir, res_type, reserve, node, process)
+"""
+function reserve_groups(input_data::InputData)
+    if !input_data.contains_reserves
+        return []
+    else
+        markets = input_data.markets
+        groups = input_data.groups
+        reserve_groups = []
+        for m in collect(keys(markets))
+            if markets[m].type == "reserve"
+                d = markets[m].direction
+                for p in groups[markets[m].processgroup].members, n in groups[markets[m].node].members
+                    if d == "up/down" || d == "up/dw" || d == "up/dn" ||d == "up_down" || d == "up_dw" || d == "up_dn"
+                        push!(reserve_groups, ("res_up", markets[m].reserve_type, m, n, p))
+                        push!(reserve_groups, ("res_down", markets[m].reserve_type, m, n, p))
+                    else
+                        push!(reserve_groups, (d, markets[m].reserve_type, m, n, p))
+                    end
+                end
+            end
+        end
+        return reserve_groups
+    end
+end
+
+
+
+
+"""
+    nodegroup_reserves(input_data::InputData)
+
+Return tuples for each nodegroup, scenario and timestep'. Form: (ng, s, t).
+"""
+function nodegroup_reserves(input_data::InputData)
+    if !input_data.contains_reserves
+        return []
+    else
+        res_nodegroups = []
+        scenarios = collect(keys(input_data.scenarios))
+        temporals = input_data.temporals
+        markets = input_data.markets
+        for res_m in unique(map(x -> x[3], reserve_groups(input_data)))
+            for s in scenarios, t in temporals.t
+                push!(res_nodegroups, (markets[res_m].node, s, t))
+            end
+        end
+        return unique(res_nodegroups)
+    end
+end
+
+"""
+    node_reserves(input_data::InputData)
+
+Return tuples for each node, scenario and timestep'. Form: (n, s, t).
+"""
+function node_reserves(input_data::InputData)
+    if !input_data.contains_reserves
+        return []
+    else
+        res_nodes = []
+        scenarios = collect(keys(input_data.scenarios))
+        temporals = input_data.temporals
+        markets = input_data.markets
+        for n in reserve_nodes(input_data)
+            for s in scenarios, t in temporals.t
+                push!(res_nodes, (n, s, t))
+            end
+        end
+        return unique(res_nodes)
+    end
+end
+
 
 """
     producer_reserve_process_tuples(input_data::InputData)
@@ -171,7 +254,6 @@ function producer_reserve_process_tuples(input_data::InputData) # original name:
     else
         res_nodes = reserve_nodes(input_data)
         res_process_tuples = reserve_process_tuples(input_data)
-        # filter those processes that have a reserve node as a sink
         producer_reserve_process_tuples = filter(x -> x[5] in res_nodes, res_process_tuples)
         return producer_reserve_process_tuples
     end
@@ -189,10 +271,58 @@ function consumer_reserve_process_tuples(input_data::InputData) # original name:
     else
         res_nodes = reserve_nodes(input_data)
         res_process_tuples = reserve_process_tuples(input_data)
-
-        # filter those processes that have a reserve node as a source
         consumer_reserve_process_tuples = filter(x -> x[4] in res_nodes, res_process_tuples)
         return consumer_reserve_process_tuples
+    end
+end
+
+
+"""
+    reserve_process_tuples(input_data::InputData)
+
+Return tuples containing information on process topologies with reserve potential for every time step and scenario. Form: (d, rt, p, so, si, s, t).
+
+!!! note 
+    This function assumes that the up and down reserve market directions are "res_up" and "res_down".
+"""
+function reserve_process_tuples(input_data::InputData) # original name: create_res_potential_tuple(), duplicate existed: create_proc_potential_tuple()
+    if !input_data.contains_reserves
+        return []
+    else
+        reserve_process_tuples = []
+        processes = input_data.processes
+        scenarios = collect(keys(input_data.scenarios))
+        temporals = input_data.temporals
+        res_groups = reserve_groups(input_data)
+        input_data_dirs = unique(map(m -> m.direction, collect(values(input_data.markets))))
+        res_dir = []
+        for d in input_data_dirs
+            if d == "up" || d == "res_up"
+                push!(res_dir, "res_up")
+            elseif d == "dw" || d == "res_dw" || d == "dn" || d == "res_dn" || d == "down" || d == "res_down"
+                push!(res_dir, "res_down")
+            elseif d == "up/down" || d == "up/dw" || d == "up/dn" ||d == "up_down" || d == "up_dw" || d == "up_dn"
+                push!(res_dir, "res_up")
+                push!(res_dir, "res_down")
+            elseif d != "none"
+                msg = "Invalid reserve direction given: " * d
+                throw(ErrorException(msg))
+            end
+        end
+        unique!(res_dir)
+        for p in collect(keys(processes))
+            res_cons = filter(x -> x[5] == p, res_groups)
+            for rc in res_cons
+                for topo in processes[p].topos
+                    if (topo.source == rc[4]|| topo.sink == rc[4])
+                        for s in scenarios, t in temporals.t
+                            push!(reserve_process_tuples, (rc[1], rc[2], p, topo.source, topo.sink, s, t))
+                        end
+                    end
+                end
+            end
+        end
+        return reserve_process_tuples
     end
 end
 
@@ -236,55 +366,6 @@ function balance_node_tuples(input_data::InputData) # original name: create_node
         end
     end
     return balance_node_tuples
-end
-
-
-"""
-    reserve_process_tuples(input_data::InputData)
-
-Return tuples containing information on process topologies with reserve potential for every time step and scenario. Form: (d, rt, p, so, si, s, t).
-
-!!! note 
-    This function assumes that the up and down reserve market directions are "res_up" and "res_down".
-"""
-function reserve_process_tuples(input_data::InputData) # original name: create_res_potential_tuple(), duplicate existed: create_proc_potential_tuple()
-    if !input_data.contains_reserves
-        return []
-    else
-        reserve_process_tuples = []
-        processes = input_data.processes
-        scenarios = collect(keys(input_data.scenarios))
-        temporals = input_data.temporals
-        res_nodes = reserve_nodes(input_data)
-        res_type = collect(keys(input_data.reserve_type))
-        input_data_dirs = unique(map(m -> m.direction, collect(values(input_data.markets))))
-        res_dir = []
-        for d in input_data_dirs
-            if d == "up" || d == "res_up"
-                push!(res_dir, "res_up")
-            elseif d == "dw" || d == "res_dw" || d == "dn" || d == "res_dn" || d == "down" || d == "res_down"
-                push!(res_dir, "res_down")
-            elseif d == "up/down" || d == "up/dw" || d == "up/dn" ||d == "up_down" || d == "up_dw" || d == "up_dn"
-                push!(res_dir, "res_up")
-                push!(res_dir, "res_down")
-            elseif d != "none"
-                msg = "Invalid reserve direction given: " * d
-                throw(ErrorException(msg))
-            end
-        end
-        unique!(res_dir)
-
-        for p in values(processes), s in scenarios, t in temporals.t
-            for topo in p.topos
-                if (topo.source in res_nodes|| topo.sink in res_nodes) && p.is_res
-                    for d in res_dir, rt in res_type
-                        push!(reserve_process_tuples, (d, rt, p.name, topo.source, topo.sink, s, t))
-                    end
-                end
-            end
-        end
-        return reserve_process_tuples
-    end
 end
 
 """
@@ -419,21 +500,19 @@ end
 
 
 """
-    reserve_node_tuples(input_data::InputData)
+    reserve_nodegroup_tuples(input_data::InputData)
 
-Return tuples for each node with reserves for each relevant reserve type, all time steps and scenarios. Form: (n, rt, s, t).
+Return tuples for each nodegroup with reserves for each relevant reserve type, all time steps and scenarios. Form: (ng, rt, s, t).
 """
-function reserve_node_tuples(input_data::InputData) # original name: create_res_eq_tuple()
+function reserve_nodegroup_tuples(input_data::InputData) # original name: create_res_eq_tuple()
     if !input_data.contains_reserves
         return []
     else
         reserve_node_tuples = []
-        res_nodes = reserve_nodes(input_data)
-        scenarios = collect(keys(input_data.scenarios))
-        temporals = input_data.temporals
-        res_type = collect(keys(input_data.reserve_type))
-        for n in res_nodes, r in res_type, s in scenarios, t in temporals.t
-            push!(reserve_node_tuples, (n, r, s, t))
+        res_nodegroup = nodegroup_reserves(input_data)
+        res_typ = collect(keys(input_data.reserve_type))
+        for ng_tup in res_nodegroup, rt in res_typ
+            push!(reserve_node_tuples, (ng_tup[1], rt, ng_tup[2], ng_tup[3]))
         end
         return reserve_node_tuples
     end
@@ -456,10 +535,14 @@ function up_down_reserve_market_tuples(input_data::InputData) # original name: c
         markets = input_data.markets
         scenarios = collect(keys(input_data.scenarios))
         temporals = input_data.temporals
-        for m in values(markets), s in scenarios, t in temporals.t
-            if m.direction == "up_down"
-                push!(up_down_reserve_market_tuples, (m.name, s, t))
-            end
+        res_ms = unique(map(x -> x[1], reserve_market_tuples(input_data)))
+        for rm in res_ms
+            d = markets[rm].direction
+            if d == "up/down" || d == "up/dw" || d == "up/dn" ||d == "up_down" || d == "up_dw" || d == "up_dn"
+                for s in scenarios, t in temporals.t
+                    push!(up_down_reserve_market_tuples, (rm, s, t))
+                end
+            end 
         end
         return up_down_reserve_market_tuples
     end
@@ -608,8 +691,6 @@ function state_reserves(input_data::InputData)
         res_nodes_tuple = reserve_nodes(input_data)
         res_potential_tuple = reserve_process_tuples(input_data)
         process_tuple = process_topology_tuples(input_data)
-        scenarios = collect(keys(input_data.scenarios))
-        temporals = input_data.temporals
         for n in res_nodes_tuple
             res_node_in_processes = unique(map(x -> (x[3], x[4], x[5]), filter(tup -> tup[5] == n, res_potential_tuple)))
             res_node_out_processes = unique(map(x -> (x[3], x[4], x[5]), filter(tup -> tup[4] == n, res_potential_tuple)))
@@ -665,7 +746,7 @@ function create_reserve_limits(input_data::InputData)
 end
 
 """
-    function setpoint_tuples(input_data::InputData)
+    setpoint_tuples(input_data::InputData)
 
 Function to create tuples for general constraints with setpoints. Form (c, s, t), where
 c is the name of the general constraint. 
@@ -685,7 +766,7 @@ function setpoint_tuples(input_data::InputData)
 end
 
 """
-    function block_tuples(input_data::InputData)
+    block_tuples(input_data::InputData)
 
 Function to create tuples for inflow blocks. Form (blockname, node, s, t).
 """
@@ -700,4 +781,21 @@ function block_tuples(input_data::InputData)
         end
     end
     return block_tuples
+end
+
+
+"""
+    create_group_tuples(input_data::InputData)
+
+Function to create tuples for groups and their members. Form (group_type, groupname, member_name)
+"""
+function create_group_tuples(input_data::InputData)
+    groups = input_data.groups
+    group_tuples = []
+    for gn in collect(keys(groups))
+        for gm in groups[gn].members
+            push!(group_tuples, (groups[gn].type, gn, gm))
+        end
+    end
+    return group_tuples
 end
