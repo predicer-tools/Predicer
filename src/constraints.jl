@@ -471,7 +471,7 @@ function setup_processes_limits(model_contents::OrderedDict, input_data::Predice
         if !isempty(proc_online_tuple)
             v_online = model_contents["variable"]["v_online"]
             for tup in p_online
-                topo = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1]
+                topo = filter(x->x.sink == tup[3] && x.source == tup[2], processes[tup[1]].topos)[1]
                 if isempty(topo.cap_ts)
                     cap = topo.capacity
                 else
