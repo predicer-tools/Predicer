@@ -44,7 +44,11 @@ using Predicer
 
     # Check that a process is connected to a node in the given node group during market participation
     # 
-    
+    # Check that the "node" connected to an energy market is a node, and that the 
+    # "node connected to a reserve market is a nodegroup. 
+    # Check that each node/process which is part of a node/process group referenced by a reserve has is_res
+    # Check that the node/process group of a reserve exists
+    # Check that the groups are not empty
 
 function validate_inflow_blocks(error_log::OrderedDict, input_data::Predicer.InputData)
     is_valid = error_log["is_valid"] 
