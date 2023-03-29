@@ -50,10 +50,12 @@ Set up v_load variables, which symbolise the flows of the processes between node
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 """
 function create_v_load(model_contents::OrderedDict, input_data::InputData)
-    reserve_processes = unique(map(x -> (x[3:end]), reserve_process_tuples(input_data)))
-    model = model_contents["model"]
-    v_load = @variable(model, v_load[tup in reserve_processes] >= 0)
-    model_contents["variable"]["v_load"] = v_load
+    if input_data.contains_reserves
+        reserve_processes = unique(map(x -> (x[3:end]), reserve_process_tuples(input_data)))
+        model = model_contents["model"]
+        v_load = @variable(model, v_load[tup in reserve_processes] >= 0)
+        model_contents["variable"]["v_load"] = v_load
+    end
 end
 
 
