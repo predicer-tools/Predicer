@@ -462,30 +462,24 @@ function setup_processes_limits(model_contents::OrderedDict, input_data::Predice
         res_pot_cons_tuple = consumer_reserve_process_tuples(input_data)
         res_pot_prod_tuple = producer_reserve_process_tuples(input_data)
         v_reserve = model_contents["variable"]["v_reserve"]
-        res_typ = collect(keys(input_data.reserve_type))
-        res_dir = model_contents["res_dir"]
-        p_reserve_cons = filter(x -> (res_dir[1], res_typ[1], x...) in res_pot_cons_tuple, lim_tuple)
-        p_reserve_prod = filter(x -> (res_dir[1], res_typ[1], x...) in res_pot_prod_tuple, lim_tuple)
 
-        for tup in p_reserve_prod
-            res_up_tup = filter(x->x[1] == "res_up" && x[3:end] == tup,res_pot_prod_tuple)
-            if !isempty(res_up_tup)
-                add_to_expression!(e_lim_res_max[tup], sum(v_reserve[(res_up_tup)]))
+        for tup in lim_tuple
+            p_reserve_cons_up = filter(x ->x[1] == "res_up" && x[3:end] == tup, res_pot_cons_tuple)
+            p_reserve_prod_up = filter(x ->x[1] == "res_up" && x[3:end] == tup, res_pot_prod_tuple)
+            p_reserve_cons_down = filter(x ->x[1] == "res_down" && x[3:end] == tup, res_pot_cons_tuple)
+            p_reserve_prod_down = filter(x ->x[1] == "res_down" && x[3:end] == tup, res_pot_prod_tuple)
+
+            if !isempty(p_reserve_cons_up)
+                add_to_expression!(e_lim_res_min[tup], -sum(v_reserve[p_reserve_cons_up]))
             end
-            res_down_tup = filter(x->x[1] == "res_down" && x[3:end] == tup,res_pot_prod_tuple)
-            if !isempty(res_down_tup)
-                add_to_expression!(e_lim_res_min[tup], -sum(v_reserve[(res_down_tup)]))
+            if !isempty(p_reserve_prod_up)
+                add_to_expression!(e_lim_res_max[tup], sum(v_reserve[p_reserve_prod_up]))
             end
-        end
-    
-        for tup in p_reserve_cons
-            res_up_tup = filter(x->x[1] == "res_down" && x[3:end] == tup,res_pot_cons_tuple)
-            if !isempty(res_up_tup)
-                add_to_expression!(e_lim_res_max[tup], sum(v_reserve[(res_up_tup)]))
+            if !isempty(p_reserve_cons_down)
+                add_to_expression!(e_lim_res_max[tup], sum(v_reserve[p_reserve_cons_down]))
             end
-            res_down_tup = filter(x->x[1] == "res_up" && x[3:end] == tup,res_pot_cons_tuple)
-            if !isempty(res_down_tup)
-                add_to_expression!(e_lim_res_min[tup], -sum(v_reserve[(res_down_tup)]))
+            if !isempty(p_reserve_prod_down)
+                add_to_expression!(e_lim_res_min[tup], -sum(v_reserve[p_reserve_prod_down]))
             end
         end
 
@@ -807,8 +801,11 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
             if processes[tup[1]].is_res && input_data.contains_reserves && tup in res_proc_tuples
                 ramp_expr_res_up[tup] = AffExpr(0.0)
                 ramp_expr_res_down[tup] = AffExpr(0.0)
-                res_tup_up = filter(x->x[1]=="res_up" && x[3:end]==tup,res_potential_tuple)
-                res_tup_down = filter(x->x[1]=="res_down" && x[3:end]==tup,res_potential_tuple)
+
+                # get reserve production for the previous timestep from tup
+                res_ramp_tup = process_tuple[findall( x -> x == tup, process_tuple)[1]-1]
+                res_tup_up = filter(x->x[1]=="res_up" && x[3:end]==res_ramp_tup,res_potential_tuple)
+                res_tup_down = filter(x->x[1]=="res_down" && x[3:end]==res_ramp_tup,res_potential_tuple)
                 if tup[2] in res_nodes_tuple
                     for rtd in res_tup_down
                         add_to_expression!(ramp_expr_res_up[tup], -1 * sum(reserve_types[rtd[2]] .* v_reserve[rtd]))
