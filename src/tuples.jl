@@ -29,7 +29,7 @@ function create_tuples(input_data::InputData) # unused, should be debricated
     tuplebook["cf_balance_tuple"] = cf_process_topology_tuples(input_data)
     tuplebook["lim_tuple"] = fixed_limit_process_topology_tuples(input_data)
     tuplebook["trans_tuple"] = transport_process_topology_tuples(input_data)
-    tuplebook["res_eq_tuple"] = reserve_node_tuples(input_data)
+    tuplebook["res_eq_tuple"] = reserve_nodegroup_tuples(input_data)
     tuplebook["res_eq_updn_tuple"] = up_down_reserve_market_tuples(input_data)
     tuplebook["res_final_tuple"] = reserve_market_tuples(input_data)
     tuplebook["fixed_value_tuple"] = fixed_market_tuples(input_data)
@@ -311,18 +311,20 @@ function reserve_process_tuples(input_data::InputData) # original name: create_r
         end
         unique!(res_dir)
         for p in collect(keys(processes))
-            res_cons = filter(x -> x[5] == p, res_groups)
-            for rc in res_cons
-                for topo in processes[p].topos
-                    if (topo.source == rc[4]|| topo.sink == rc[4])
-                        for s in scenarios, t in temporals.t
-                            push!(reserve_process_tuples, (rc[1], rc[2], p, topo.source, topo.sink, s, t))
+            if processes[p].is_res
+                res_cons = filter(x -> x[5] == p, res_groups)
+                for rc in res_cons
+                    for topo in processes[p].topos
+                        if (topo.source == rc[4]|| topo.sink == rc[4])
+                            for s in scenarios, t in temporals.t
+                                push!(reserve_process_tuples, (rc[1], rc[2], p, topo.source, topo.sink, s, t))
+                            end
                         end
                     end
                 end
             end
         end
-        return reserve_process_tuples
+        return unique(reserve_process_tuples)
     end
 end
 
