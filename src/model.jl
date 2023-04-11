@@ -43,6 +43,20 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 df[!, colname] = value.(v_flow[col_tup].data)
             end
         end
+    elseif type == "v_load"
+        v_load = vars[type]
+        if !isempty(name)
+            tups = unique(map(x->(x[1],x[2],x[3]),filter(x->x[1]==name, unique(map(x -> (x[3:end]), tuples["res_potential_tuple"])))))
+        else
+            tups = unique(map(x->(x[1],x[2],x[3]), unique(map(x -> (x[3:end]), tuples["res_potential_tuple"]))))
+        end
+        for tup in tups, s in scenarios
+            colname = join(tup,"_") * "_" *s
+            col_tup = filter(x->x[1:3]==tup && x[4]==s, unique(map(x -> (x[3:end]), tuples["res_potential_tuple"])))
+            if !isempty(col_tup)
+                df[!, colname] = value.(v_load[col_tup].data)
+            end
+        end
     elseif type == "v_reserve"
         v_res = vars[type]
         if !isempty(name)
