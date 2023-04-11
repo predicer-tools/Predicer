@@ -50,6 +50,12 @@ using Predicer
     # Check that the node/process group of a reserve exists
     # Check that the groups are not empty
 
+    # check that reserve processes and reserve nodes match, so that the processes of a reserve product process group
+    # actually connect to the nodes in the reserve nodegroup. Issue an warning if this isn't the case?
+    # check that the processes in groups that are linked to reserves are all is_res?
+    
+    
+
 function validate_inflow_blocks(error_log::OrderedDict, input_data::Predicer.InputData)
     is_valid = error_log["is_valid"] 
     blocks = input_data.inflow_blocks
