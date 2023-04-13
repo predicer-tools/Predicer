@@ -6,7 +6,7 @@ using TimeZones
 import Predicer
 
 function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[])
-    sheetnames_system = ["nodes", "processes", "groups", "process_topology", "inflow_blocks", "markets", "reserve_realisation", "scenarios","efficiencies", "reserve_type","risk"]
+    sheetnames_system = ["nodes", "processes", "groups", "process_topology", "node_diffusion", "inflow_blocks", "markets", "reserve_realisation", "scenarios","efficiencies", "reserve_type","risk"]
     sheetnames_timeseries = ["cf", "inflow", "market_prices", "price","eff_ts"]
 
     system_data = OrderedDict()
@@ -15,6 +15,7 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
 
     processes = OrderedDict{String, Predicer.Process}()
     nodes = OrderedDict{String, Predicer.Node}()
+    node_diffusion_tuples = []
     groups = OrderedDict{String, Predicer.Group}()
 
     markets = OrderedDict{String, Predicer.Market}()
@@ -105,13 +106,18 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
             end
         end
         if Bool(n.is_state)
-            Predicer.add_state(nodes[n.node], Predicer.State(n.in_max, n.out_max, n.state_loss_proportional, n.state_max, 0.0, n.initial_state, n.residual_value))
+            Predicer.add_state(nodes[n.node], Predicer.State(n.in_max, n.out_max, n.state_loss_proportional, n.state_max, n.state_min, n.initial_state, n.is_temp, n.T_E_conversion, n.residual_value))
         end
         if Bool(n.is_res)
             Predicer.add_node_to_reserve(nodes[n.node])
         end
     end
-    
+
+    for i in 1:nrow(system_data["node_diffusion"])
+        row = system_data["node_diffusion"][i, :]
+        tup = (row.node1, row.node2, row.diff_coeff)
+        push!(node_diffusion_tuples, tup)
+    end
 
     for i in 1:nrow(system_data["processes"])
         p = system_data["processes"][i, :]
@@ -420,6 +426,7 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
     contains_piecewise_eff = (false in map(p -> isempty(p.eff_ops), collect(values(processes))))
     contains_risk = (risk["beta"] > 0)
     contains_delay = !iszero(map(p -> p.delay, collect(values(processes))))
+    contains_diffusion = !isempty(node_diffusion_tuples)
 
-    return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, processes, nodes, markets, groups, scenarios, reserve_type, risk, inflow_blocks, gen_constraints)
+    return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, contains_diffusion,  processes, nodes, node_diffusion_tuples, markets, groups, scenarios, reserve_type, risk, inflow_blocks, gen_constraints)
 end
