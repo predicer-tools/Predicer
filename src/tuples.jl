@@ -42,6 +42,8 @@ function create_tuples(input_data::InputData) # unused, should be debricated
     tuplebook["setpoint_tuples"] = setpoint_tuples(input_data)
     tuplebook["block_tuples"] = block_tuples(input_data)
     tuplebook["block_tuples"] = create_group_tuples(input_data)
+    tuplebook["node_diffusion_tuple"] = node_diffusion_tuple(input_data)
+    tuplebook["diffusion_nodes"] = diffusion_nodes(input_data)
     return tuplebook
 end
 
@@ -800,4 +802,36 @@ function create_group_tuples(input_data::InputData)
         end
     end
     return group_tuples
+end
+
+"""
+    node_diffusion_tuple(input_data::InputData)
+
+Function to create tuples for "source" nodes with a diffusion functionality. Form (n, s, t)
+"""
+
+function node_diffusion_tuple(input_data::InputData)
+    node_diffusion_tup = []
+    if input_data.contains_diffusion
+        scenarios = collect(keys(input_data.scenarios))
+        temporals = input_data.temporals.t
+        nodes = unique(vcat(map(x -> x[1], input_data.node_diffusion), map(x -> x[2], input_data.node_diffusion)))
+        for n in nodes, s in scenarios, t in temporals
+            push!(node_diffusion_tup, (n, s, t))
+        end
+    end
+    return node_diffusion_tup
+end
+
+"""
+    diffusion_nodes(input_data::InputData)
+
+Function to obtain the nodes that are part of a diffusion relation. form (n)
+"""
+function diffusion_nodes(input_data::InputData)
+    if input_data.contains_diffusion
+        return unique(vcat(map(x -> x[1], input_data.node_diffusion), map(x -> x[2], input_data.node_diffusion)))
+    else
+        return []
+    end
 end
