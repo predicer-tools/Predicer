@@ -79,7 +79,9 @@ module Predicer
     create_reserve_limits,
     setpoint_tuples,
     block_tuples,
-    create_group_tuples
+    create_group_tuples,
+    node_diffusion_tuple,
+    diffusion_nodes
 
 
     export create_variables,
