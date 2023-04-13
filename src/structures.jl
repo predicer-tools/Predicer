@@ -113,9 +113,11 @@ end
         state_max::Float64
         state_min::Float64
         initial_state::Float64
+        is_temp::Bool
+        T_E_conversion::Float64
         residual_value::Float64
-        function State(in_max, out_max, state_loss_proportional, state_max, state_min=0, initial_state=0, residual_value=0)
-            return new(in_max, out_max, state_loss_proportional, state_max, state_min, initial_state, residual_value)
+        function State(in_max, out_max, state_loss_proportional, state_max, state_min=0, initial_state=0, is_temp=0, T_E_conversion=1, residual_value=0)
+            return new(in_max, out_max, state_loss_proportional, state_max, state_min, initial_state, is_temp, T_E_conversion, residual_value)
         end
     end
 
@@ -127,6 +129,8 @@ A struct for node states (storage), holds information on the parameters of the s
 - `state_max::Float64`: Maximum value for state variable. 
 - `state_min::Float64`: Minimum value for state variable. 
 - `initial_state::Float64`: Initial value of the state variable at t = 0.
+- `is_temp::Bool`: Indicates if the value of the state is temperature (true) or energy (false).
+- `T_E_conversion::Float64`: Conversion coefficient between temperature and energy. (E = T_E_conversion * T)
 - `residual_value::Float64`: Value of the product remaining in the state after time horizon. 
 
 """
@@ -137,9 +141,11 @@ mutable struct State
     state_max::Float64
     state_min::Float64
     initial_state::Float64
+    is_temp::Bool
+    T_E_conversion::Float64
     residual_value::Float64
-    function State(in_max, out_max, state_loss_proportional, state_max, state_min=0, initial_state=0, residual_value=0)
-        return new(in_max, out_max, state_loss_proportional, state_max, state_min, initial_state, residual_value)
+    function State(in_max, out_max, state_loss_proportional, state_max, state_min=0, initial_state=0, is_temp=0, T_E_conversion=1, residual_value=0)
+        return new(in_max, out_max, state_loss_proportional, state_max, state_min, initial_state, is_temp, T_E_conversion, residual_value)
     end
 end
 
@@ -304,7 +310,6 @@ Extends the Base.isempty() function for the TimeSeriesData struct. Returns true 
 function Base.:isempty(tsd::TimeSeriesData)
     return isempty(tsd.ts_data)
 end
-
 
 """ 
     struct Group
@@ -1077,8 +1082,10 @@ end
         contains_piecewise_eff::Bool
         contains_risk::Bool
         contains_delay::Bool
+        contains_diffusion::Bool
         processes::OrderedDict{String, Process}
         nodes::OrderedDict{String, Node}
+        node_diffusion::Vector{Any}
         markets::OrderedDict{String, Market}
         groups::OrderedDict{String, Group}
         scenarios::OrderedDict{String, Float64}
@@ -1097,8 +1104,10 @@ Struct containing the imported input data, based on which the Predicer is built.
 - `contains_piecewise_eff::Bool`: Boolean indicating whether the model (input_data) requires piecewise efficiency functionality structures. 
 - `contains_risk::Bool`: Boolean indicating whether the model (input_data) requires risk functionality structures. 
 - `contains_delay::Bool`: Boolean indicating whether the model (input_data) requires delay functionality structures. 
+- `contains_diffusion::Bool`: Boolean indicating whether the model (input_data) requires diffusion functionality structures. 
 - `processes::OrderedDict{String, Process}`: A dict containing the data relevant for processes.
 - `nodes::OrderedDict{String, Node}`: A dict containing the data relevant for nodes.
+- `node_diffusion::Vector{Any}`: Vector containing node diffusion connection details. 
 - `markets::OrderedDict{String, Market}`: A dict containing the data relevant for markets.
 - `groups::OrderedDict{String, Group}`: A dict containing the data relevant for groups
 - `scenarios::OrderedDict{String, Float64}`:  A dict containing the data relevant for scenarios, with scenario name as key and probability as value.
@@ -1114,8 +1123,10 @@ mutable struct InputData
     contains_piecewise_eff::Bool
     contains_risk::Bool
     contains_delay::Bool
+    contains_diffusion::Bool
     processes::OrderedDict{String, Process}
     nodes::OrderedDict{String, Node}
+    node_diffusion::Vector{Any}
     markets::OrderedDict{String, Market}
     groups::OrderedDict{String, Group}
     scenarios::OrderedDict{String, Float64}
@@ -1123,8 +1134,8 @@ mutable struct InputData
     risk::OrderedDict{String, Float64}
     inflow_blocks::OrderedDict{String, InflowBlock}
     gen_constraints::OrderedDict{String, GenConstraint}
-    function InputData(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, processes, nodes, markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
-        return new(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, processes, nodes, markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
+    function InputData(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, contains_diffusion, processes, nodes, node_diffusion,  markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
+        return new(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, contains_diffusion, processes, nodes, node_diffusion, markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
     end
 end
 
