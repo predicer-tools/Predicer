@@ -21,7 +21,6 @@ function create_variables(model_contents::OrderedDict, input_data::InputData)
     create_v_reserve_online(model_contents,input_data)
     create_v_setpoint(model_contents, input_data)
     create_v_block(model_contents, input_data)
-    create_v_diff(model_contents, input_data)
 end
 
 
@@ -244,13 +243,4 @@ function create_v_block(model_contents::OrderedDict, input_data::InputData)
     var_tups = unique(map(x -> (x[1], x[2], x[3]), block_tuples))
     v_block = @variable(model, v_block[tup in var_tups], Bin) 
     model_contents["variable"]["v_block"] = v_block
-end
-
-function create_v_diff(model_contents::OrderedDict, input_data::InputData)
-    if input_data.contains_diffusion
-        model = model_contents["model"]
-        node_diff_tuples = node_diffusion_tuple(input_data)
-        v_diff = @variable(model, v_diff[tup in node_diff_tuples])
-        model_contents["variable"]["v_diff"] = v_diff
-    end
 end
