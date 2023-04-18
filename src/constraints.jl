@@ -78,8 +78,60 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
             for b_tup in filter(x -> x[2] == n && x[3] == s && x[4] == t, block_tuples) # get tuples with blocks
                 add_to_expression!(inflow_expr[(n, s, t)], input_data.inflow_blocks[b_tup[1]].data(s,t) * v_block[(b_tup[1], b_tup[2], b_tup[3])])
             end
+            if nodes[n].state.is_temp
+                inflow_expr[(n, s, t)] = inflow_expr[(n, s, t)] * nodes[n].state.T_E_conversion
+            end
         end
     end
+
+    e_node_diff = model_contents["expression"]["e_node_diff"] = OrderedDict()
+    e_prod = model_contents["expression"]["e_prod"] = OrderedDict()
+    e_cons = model_contents["expression"]["e_cons"] = OrderedDict()
+    e_state = model_contents["expression"]["e_state"] = OrderedDict()
+    for tup in node_balance_tuple
+        e_node_diff[tup] = AffExpr(0.0)
+        e_prod[tup] = AffExpr(0.0)
+        e_cons[tup] = AffExpr(0.0)
+        e_state[tup] = AffExpr(0.0)
+    end
+
+    #setup diffusion expression
+    if input_data.contains_diffusion
+        for d_tup in node_diffusion_tuple(input_data)
+            d_node = d_tup[1]
+            s = d_tup[2]
+            t = d_tup[3]
+
+            d_node_state = v_state[d_tup]
+            if !nodes[d_node].state.is_temp
+                d_node_state /= nodes[d_node].state.T_E_conversion
+            end
+
+            from_diff = filter(x -> x[1] == d_node, input_data.node_diffusion) #diff direction "from" d_node
+            to_diff = filter(x -> x[2] == d_node, input_data.node_diffusion) #diff direction "to" d_node
+            for from_node in from_diff
+                c = from_node[3]
+                n_ = from_node[2]
+                n_node_state = v_state[(n_, s, t)]
+                if !nodes[n_].state.is_temp
+                    n_node_state /= nodes[n_].state.T_E_conversion
+                end
+                add_to_expression!(e_node_diff[d_tup], - c * (d_node_state - n_node_state))
+            end
+            for to_node in to_diff
+                c = to_node[3]
+                n_ = to_node[1]
+                n_node_state = v_state[(n_, s, t)]
+                if !nodes[n_].state.is_temp
+                    n_node_state /= nodes[n_].state.T_E_conversion
+                end
+                add_to_expression!(e_node_diff[d_tup], c * (n_node_state - d_node_state))
+            end
+        end
+    end
+
+
+
    
     # Balance constraints
     # gather data in dicts, e_prod, etc, now point to a Dict()
@@ -100,6 +152,7 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
         add_to_expression!(e_cons[tu], -vq_state_dw[tu])
         add_to_expression!(e_cons[tu], inflow_expr[tu])
         add_to_expression!(e_prod[tu], vq_state_up[tu])
+        add_to_expression!(e_prod[tu], e_node_diff[tu])
 
         if input_data.contains_reserves && tu in node_res
             add_to_expression!(e_cons[tu], -v_res_real[tu])
@@ -119,9 +172,12 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
             else
                 add_to_expression!(e_state[tu], - (1-nodes[tu[1]].state.state_loss_proportional*temporals(tu[3]))*v_state[node_balance_tuple[i-1]])
             end
+            if nodes[tu[1]].state.is_temp
+                e_state[tu] = e_state[tu] * nodes[tu[1]].state.T_E_conversion
+            end
         end
-
     end
+    
     node_bal_eq = @constraint(model, node_bal_eq[tup in node_balance_tuple], temporals(tup[3]) * (e_prod[tup] + e_cons[tup]) == e_state[tup])
     node_state_max_up = @constraint(model, node_state_max_up[tup in node_state_tuple], e_state[tup] <= nodes[tup[1]].state.in_max * temporals(tup[3]))
     node_state_max_dw = @constraint(model, node_state_max_dw[tup in node_state_tuple], -e_state[tup] <= nodes[tup[1]].state.out_max * temporals(tup[3]))  
