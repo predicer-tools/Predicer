@@ -815,7 +815,7 @@ function node_diffusion_tuple(input_data::InputData)
     if input_data.contains_diffusion
         scenarios = collect(keys(input_data.scenarios))
         temporals = input_data.temporals.t
-        nodes = unique(vcat(map(x -> x[1], input_data.node_diffusion), map(x -> x[2], input_data.node_diffusion)))
+        nodes = diffusion_nodes(input_data)
         for n in nodes, s in scenarios, t in temporals
             push!(node_diffusion_tup, (n, s, t))
         end
