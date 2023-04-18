@@ -78,8 +78,10 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
             for b_tup in filter(x -> x[2] == n && x[3] == s && x[4] == t, block_tuples) # get tuples with blocks
                 add_to_expression!(inflow_expr[(n, s, t)], input_data.inflow_blocks[b_tup[1]].data(s,t) * v_block[(b_tup[1], b_tup[2], b_tup[3])])
             end
-            if nodes[n].state.is_temp
-                inflow_expr[(n, s, t)] = inflow_expr[(n, s, t)] * nodes[n].state.T_E_conversion
+            if nodes[n].is_state
+                if nodes[n].state.is_temp
+                    inflow_expr[(n, s, t)] = inflow_expr[(n, s, t)] * nodes[n].state.T_E_conversion
+                end
             end
         end
     end
@@ -177,7 +179,7 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
             end
         end
     end
-    
+
     node_bal_eq = @constraint(model, node_bal_eq[tup in node_balance_tuple], temporals(tup[3]) * (e_prod[tup] + e_cons[tup]) == e_state[tup])
     node_state_max_up = @constraint(model, node_state_max_up[tup in node_state_tuple], e_state[tup] <= nodes[tup[1]].state.in_max * temporals(tup[3]))
     node_state_max_dw = @constraint(model, node_state_max_dw[tup in node_state_tuple], -e_state[tup] <= nodes[tup[1]].state.out_max * temporals(tup[3]))  
