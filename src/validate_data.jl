@@ -42,6 +42,8 @@ using Predicer
 
     # Check that each entity (node, process, market, etc) has all relevant information defined. 
 
+
+    #TODO!
     # Check that a process is connected to a node in the given node group during market participation
     # 
     # Check that the "node" connected to an energy market is a node, and that the 
@@ -53,8 +55,9 @@ using Predicer
     # check that reserve processes and reserve nodes match, so that the processes of a reserve product process group
     # actually connect to the nodes in the reserve nodegroup. Issue an warning if this isn't the case?
     # check that the processes in groups that are linked to reserves are all is_res?
-    
-    
+
+    # check that the minimum state of each node > 0. Temperatures should be in Kelvin.
+    # Check that the T_E_conversion != 0 and > 0
 
 function validate_inflow_blocks(error_log::OrderedDict, input_data::Predicer.InputData)
     is_valid = error_log["is_valid"] 
