@@ -140,11 +140,13 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
     e_prod = model_contents["expression"]["e_prod"] = OrderedDict()
     e_cons = model_contents["expression"]["e_cons"] = OrderedDict()
     e_state = model_contents["expression"]["e_state"] = OrderedDict()
+    e_state_losses = model_contents["expression"]["e_state_losses"] = OrderedDict()
     
     for (i, tu) in enumerate(node_balance_tuple)
         e_prod[tu] = AffExpr(0.0)
         e_cons[tu] = AffExpr(0.0)
         e_state[tu] = AffExpr(0.0)
+        e_state_losses[tu] = AffExpr(0.0)
 
         # tu of form (node, scenario, t)
         # process tuple of form (process_name, source, sink, scenario, t)
@@ -170,17 +172,20 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
         if nodes[tu[1]].is_state
             add_to_expression!(e_state[tu], v_state[tu])
             if tu[3] == temporals.t[1]
-                add_to_expression!(e_state[tu], - (1-nodes[tu[1]].state.state_loss_proportional*temporals(tu[3]))*nodes[tu[1]].state.initial_state)
+                add_to_expression!(e_state[tu], - nodes[tu[1]].state.initial_state)
+                add_to_expression!(e_state_losses[tu], nodes[tu[1]].state.state_loss_proportional*temporals(tu[3])*nodes[tu[1]].state.initial_state)
             else
-                add_to_expression!(e_state[tu], - (1-nodes[tu[1]].state.state_loss_proportional*temporals(tu[3]))*v_state[node_balance_tuple[i-1]])
+                add_to_expression!(e_state[tu], - v_state[node_balance_tuple[i-1]])
+                add_to_expression!(e_state_losses[tu], nodes[tu[1]].state.state_loss_proportional*temporals(tu[3])*v_state[node_balance_tuple[i-1]])
             end
             if nodes[tu[1]].state.is_temp
                 e_state[tu] = e_state[tu] * nodes[tu[1]].state.T_E_conversion
+                e_state_losses[tu] = e_state_losses[tu] * nodes[tu[1]].state.T_E_conversion
             end
         end
     end
 
-    node_bal_eq = @constraint(model, node_bal_eq[tup in node_balance_tuple], temporals(tup[3]) * (e_prod[tup] + e_cons[tup]) == e_state[tup])
+    node_bal_eq = @constraint(model, node_bal_eq[tup in node_balance_tuple], temporals(tup[3]) * (e_prod[tup] + e_cons[tup]) == e_state[tup] + e_state_losses[tup])
     node_state_max_up = @constraint(model, node_state_max_up[tup in node_state_tuple], e_state[tup] <= nodes[tup[1]].state.in_max * temporals(tup[3]))
     node_state_max_dw = @constraint(model, node_state_max_dw[tup in node_state_tuple], -e_state[tup] <= nodes[tup[1]].state.out_max * temporals(tup[3]))  
     model_contents["constraint"]["node_bal_eq"] = node_bal_eq
