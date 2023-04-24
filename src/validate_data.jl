@@ -56,8 +56,53 @@ using Predicer
     # actually connect to the nodes in the reserve nodegroup. Issue an warning if this isn't the case?
     # check that the processes in groups that are linked to reserves are all is_res?
 
-    # check that the minimum state of each node > 0. Temperatures should be in Kelvin.
-    # Check that the T_E_conversion != 0 and > 0
+function validate_node_diffusion(error_log::OrderedDict, input_data::Predicer.InputData)
+    is_valid = error_log["is_valid"]
+    nodes = input_data.nodes
+
+    for n in collect(keys(nodes))
+        if nodes[n].is_state
+            if nodes[n].state.T_E_conversion <= 0.0
+                # Check that the T_E_conversion coefficient is larger than 0
+                push!(error_log["errors"], "The T_E_conversion coefficient of Node: (" * n * ") must be larger than 0.\n")
+                is_valid = false 
+            end
+        end
+    end
+    for node_conn in input_data.node_diffusion
+        if node_conn[3] <= 0 
+            # Check that the node diffusion coeff is larger than 0
+            push!(error_log["errors"], "The node diffusion coefficient of Node diffusion coefficient: (" * string(node_conn) * ") must be larger than 0.\n")
+            is_valid = false 
+        end
+        if !(node_conn[1] in collect(keys(nodes)))
+            # Check that the nodes in node diffusion connection exist
+            push!(error_log["errors"], "The node: ("*node_conn[1]*") of node diffusion connection : (" * string(node_conn) * ") is not defined.\n")
+            is_valid = false 
+        elseif !(node_conn[2] in collect(keys(nodes)))
+            # Check that the nodes in node diffusion connection exist
+            push!(error_log["errors"], "The node: ("*node_conn[2]*") of node diffusion connection : (" * string(node_conn) * ") is not defined.\n")
+            is_valid = false 
+        elseif node_conn[1] == node_conn[2]
+            # Check that the nodes in the connection are not the same
+            push!(error_log["errors"], "The node: ("*node_conn[1]*") in the node diffusion connection : (" * string(node_conn) * ") is given twice.\n")
+            is_valid = false
+        else
+            if !nodes[node_conn[1]].is_state
+                # Check that the nodes on node diffusion connections have states
+                push!(error_log["errors"], "The node: ("*node_conn[1]*") of Node diffusion connection: (" * string(node_conn) * ") has no state.\n")
+                is_valid = false
+            end
+            if !nodes[node_conn[2]].is_state
+                # Check that the nodes on node diffusion connections have states
+                push!(error_log["errors"], "The node: ("*node_conn[1]*") of Node diffusion connection: (" * string(node_conn) * ") has no state.\n")
+                is_valid = false
+            end
+        end
+    end
+
+    error_log["is_valid"] = is_valid
+end
 
 function validate_inflow_blocks(error_log::OrderedDict, input_data::Predicer.InputData)
     is_valid = error_log["is_valid"] 
@@ -404,8 +449,8 @@ function validate_state(error_log::OrderedDict, s::Predicer.State)
         push!(error_log["errors"], "Invalid state parameters. State max cannot be smaller than 0.\n")
         is_valid = false
     end
-    if s.state_max < 0
-        push!(error_log["errors"], "Invalid state parameters. State max cannot be smaller than 0.\n")
+    if s.state_min < 0
+        push!(error_log["errors"], "Invalid state parameters. State min cannot be smaller than 0.\n")
         is_valid = false
     end
     if s.state_max < s.state_min
@@ -567,6 +612,7 @@ function validate_data(input_data)
     validate_gen_constraints(error_log, input_data)
     validate_inflow_blocks(error_log, input_data)
     validate_groups(error_log, input_data)
+    validate_node_diffusion(error_log, input_data)
     # Return log. 
     return error_log
 end
