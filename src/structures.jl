@@ -153,8 +153,8 @@ end
 # --- TimeSeries ---
 """
     struct TimeSeries
-        scenario::Any
-        series::Vector{Tuple{Any, Any}}
+        scenario::AbstractString
+        series::Vector{Tuple{AbstractString, Number}}
         function TimeSeries(scenario="", series=0)
             if series != 0
                 return new(scenario, series)
@@ -167,8 +167,8 @@ end
 A struct for time series. Includes linked scenario and a vector containing tuples of time and value.
 """
 struct TimeSeries
-    scenario::Any
-    series::Vector{Tuple{Any, Any}}
+    scenario::AbstractString
+    series::Vector{Tuple{AbstractString, Number}}
     function TimeSeries(scenario="", series=0)
         if series != 0
             return new(scenario, series)
@@ -657,8 +657,8 @@ end
         topos::Vector{Topology}
         cf::TimeSeriesData
         eff_ts::TimeSeriesData
-        eff_ops::Vector{Any}
-        eff_fun::Vector{Tuple{Any,Any}}
+        eff_ops::Vector{AbstractString}
+        eff_fun::Vector{Tuple{Number, Number}}
     end
 
 A struct for a process (unit).
@@ -684,8 +684,8 @@ A struct for a process (unit).
 - `topos::Vector{Topology}`: Vector containing the topologies of the process.
 - `cf::TimeSeriesData`: Vector containing TimeSeries limiting a cf process.
 - `eff_ts::TimeSeriesData`: Vector of TimeSeries containing information on efficiency depending on time.
-- `eff_ops::Vector{Any}`: Vector containing operating points for a piecewise efficiency function.
-- `eff_fun::Vector{Tuple{Any,Any}}`: Vector containing efficiencies for a piecewise efficiency function.
+- `eff_ops::Vector{AbstractString}`: Vector containing operating points for a piecewise efficiency function.
+- `eff_fun::Vector{Tuple{Number, Number}}`: Vector containing efficiencies for a piecewise efficiency function.
 """
 mutable struct Process
     name::String
@@ -708,8 +708,8 @@ mutable struct Process
     topos::Vector{Topology}
     cf::TimeSeriesData
     eff_ts::TimeSeriesData
-    eff_ops::Vector{Any}
-    eff_fun::Vector{Tuple{Any,Any}}
+    eff_ops::Vector{AbstractString}
+    eff_fun::Vector{Tuple{Number, Number}}
 end
 
 
@@ -904,8 +904,8 @@ end
     struct Market
         name::String
         type::String
-        node::Any
-        processgroup::Any
+        node::AbstractString
+        processgroup::AbstractString
         direction::String
         realisation::Dict{String, Float64}
         reserve_type::String
@@ -913,7 +913,7 @@ end
         price::TimeSeriesData
         up_price::TimeSeriesData
         down_price::TimeSeriesData
-        fixed::Vector{Tuple{Any,Any}}
+        fixed::Vector{Tuple{AbstractString, Number}}
         function Market(name, type, node, pgroup, direction, realisation, reserve_type, is_bid)
             return new(name, type, node, pgroup, direction, realisation, reserve_type, is_bid, [], [])
         end
@@ -923,8 +923,8 @@ A struct for markets.
 # Fields
 - `name::String`: Name of the market. 
 - `type::String`: Type of the market (energy/reserve).
-- `node::Any`: Name of the node this market is connected to.
-- `processgroup::Any`: Name of the group containing information which processes can participate in the market. 
+- `node::AbstractString`: Name of the node this market is connected to.
+- `processgroup::AbstractString`: Name of the group containing information which processes can participate in the market. 
 - `direction::String`: Direction of the market (up/down/updown).
 - `realisation::Dict{String, Float64}`: Realisation probability for each scenario.
 - `reserve_type::String`: Type of the reserve market. 
@@ -934,13 +934,13 @@ A struct for markets.
 - 'max_bid::Float64' : Minimum bid for reserve
 - 'fee::Float64' : Fee for reserve particiapation
 - `price::TimeSeriesData`: Vector containing TimeSeries of the market price in different scenarios. 
-- `fixed::Vector{Tuple{Any,Any}}`: Vector containing information on the market being fixed. 
+- `fixed::Vector{Tuple{AbstractString, Number}}`: Vector containing information on the market being fixed. 
 """
 struct Market
     name::String
     type::String
-    node::Any
-    processgroup::Any
+    node::AbstractString
+    processgroup::AbstractString
     direction::String
     realisation::Dict{String, Float64}
     reserve_type::String
@@ -952,7 +952,7 @@ struct Market
     price::TimeSeriesData
     up_price::TimeSeriesData
     down_price::TimeSeriesData
-    fixed::Vector{Tuple{Any,Any}}
+    fixed::Vector{Tuple{AbstractString, Number}}
     function Market(name, type, node, pgroup, direction, reserve_type, is_bid, is_limited, min_bid, max_bid, fee)
         return new(name, type, node, pgroup, direction, Dict(), reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
     end
@@ -963,7 +963,7 @@ end
 """
     struct ConFactor
         var_type::String
-        var_tuple::Union{Tuple{Any,Any}, String}
+        var_tuple::Union{Tuple{AbstractString, AbstractString}, String}
         data::TimeSeriesData
         function ConFactor(var_type, var_tuple)
             return new(var_type, var_tuple, TimeSeriesData())
@@ -973,12 +973,12 @@ end
 Struct for general constraints factors.
 # Fields
 - `var_type::String`: Type of the variable (v_flow, v_state, v_online)
-- `var_tuple::Tuple{Any,Any}`: Name/ID of the variable. (p, flow) for v_flow, (n, "") for v_state and (p, "") for v_online.
+- `var_tuple::Tuple{AbstractString, AbstractString}`: Name/ID of the variable. (p, flow) for v_flow, (n, "") for v_state and (p, "") for v_online.
 - `data::TimeSeriesData`: Timeseries containing the coefficients for the variable. 
 """
 struct ConFactor
     var_type::String
-    var_tuple::Tuple{Any,Any}
+    var_tuple::Tuple{AbstractString, AbstractString}
     data::TimeSeriesData
     function ConFactor(var_type, var_tuple)
         return new(var_type, var_tuple, TimeSeriesData())
@@ -987,7 +987,7 @@ end
 
 
 """
-    function OnlineConFactor(var_tuple::Tuple{Any, Any})
+    function OnlineConFactor(var_tuple::Tuple{AbstractString, AbstractString})
 
 Function to create a confactor for an online variable. 
 """
@@ -997,7 +997,7 @@ end
 
 
 """
-    function StateConFactor(var_tuple::Tuple{Any, Any})
+    function StateConFactor(var_tuple::Tuple{AbstractString, AbstractString})
 
 Function to create a confactor for a state variable. 
 """
@@ -1007,7 +1007,7 @@ end
 
 
 """
-    function FlowConFactor(var_tuple::Tuple{Any, Any})
+    function FlowConFactor(var_tuple::Tuple{AbstractString, AbstractString})
 
 Function to create a confactor for a flow variable. 
 """
@@ -1085,7 +1085,7 @@ end
         contains_diffusion::Bool
         processes::OrderedDict{String, Process}
         nodes::OrderedDict{String, Node}
-        node_diffusion::Vector{Any}
+        node_diffusion::Vector{Tuple{AbstractString, AbstractString, Number}}
         markets::OrderedDict{String, Market}
         groups::OrderedDict{String, Group}
         scenarios::OrderedDict{String, Float64}
@@ -1107,7 +1107,7 @@ Struct containing the imported input data, based on which the Predicer is built.
 - `contains_diffusion::Bool`: Boolean indicating whether the model (input_data) requires diffusion functionality structures. 
 - `processes::OrderedDict{String, Process}`: A dict containing the data relevant for processes.
 - `nodes::OrderedDict{String, Node}`: A dict containing the data relevant for nodes.
-- `node_diffusion::Vector{Any}`: Vector containing node diffusion connection details. 
+- `node_diffusion::Vector{Tuple{AbstractString, AbstractString, Number}}`: Vector containing node diffusion connection details. 
 - `markets::OrderedDict{String, Market}`: A dict containing the data relevant for markets.
 - `groups::OrderedDict{String, Group}`: A dict containing the data relevant for groups
 - `scenarios::OrderedDict{String, Float64}`:  A dict containing the data relevant for scenarios, with scenario name as key and probability as value.
@@ -1126,7 +1126,7 @@ mutable struct InputData
     contains_diffusion::Bool
     processes::OrderedDict{String, Process}
     nodes::OrderedDict{String, Node}
-    node_diffusion::Vector{Any}
+    node_diffusion::Vector{Tuple{AbstractString, AbstractString, Number}}
     markets::OrderedDict{String, Market}
     groups::OrderedDict{String, Group}
     scenarios::OrderedDict{String, Float64}
