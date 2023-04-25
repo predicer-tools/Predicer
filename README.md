@@ -90,28 +90,32 @@ Further, the factors for the constraint are defined in the *gen_constraint* shee
 
 The basic parameters and usage of the excel-format input data are described here. The input data has to be given to Predicer in a specific form, and the excel-format input data files are not a requirement. Excel has been used during development, since they were considered more convenient than databases or other forms of data structures.
 
-### Node
+
+### nodes
 
 Nodes are fundamental building blocks in Predicer, along with Processes.
 
-| Parameter               | Type   | Description                                                |
-|-------------------------|--------|------------------------------------------------------------|
-| node                    | String | Name of the node                                           |
-| is_commodity            | Bool   | Indicates if the node is a commodity node                  |
-| is_state                | Bool   | Indicates if the node has a state (storage)                |
-| is_res                  | Bool   | Indicates if the node is involved in reserve markets       |
-| is_market               | Bool   | Indicates if the node is a market node                     |
-| is_inflow               | Bool   | Indicates if the node has an inflow                        |
-| state_max               | Float  | Storage state capacity (if node has a state)               |
-| in_max                  | Float  | Storage state charge capacity                              |
-| out_max                 | Float  | Storage state discharge capacity                           |
-| initial_state           | Float  | Initial state of the storage                               |
-| state_loss_proportional | Float  | Hourly storage loss relative to the state of the storage   |
-| residual_value          | Float  | Value of the storage contents at the end of the time range |
+| Parameter               | Type   | Description                                                      |
+|-------------------------|--------|------------------------------------------------------------------|
+| node                    | String | Name of the node                                                 |
+| is_commodity            | Bool   | Indicates if the node is a commodity node                        |
+| is_state                | Bool   | Indicates if the node has a state (storage)                      |
+| is_res                  | Bool   | Indicates if the node is involved in reserve markets             |
+| is_market               | Bool   | Indicates if the node is a market node                           |
+| is_inflow               | Bool   | Indicates if the node has an inflow                              |
+| state_max               | Float  | Storage state capacity (if node has a state)                     |
+| state_min               | Float  | Storage state minimum level (if node has a state)                |
+| in_max                  | Float  | Storage state charge capacity                                    |
+| out_max                 | Float  | Storage state discharge capacity                                 |
+| initial_state           | Float  | Initial state of the storage                                     |
+| state_loss_proportional | Float  | Hourly storage loss relative to the state of the storage         |
+| is_temp                 | Bool   | Flag indicating whether the state of the node models temperature |
+| T_E_conversion          | Float  | Conversion coefficient from temperature to energy (kWh/K)        |
+| residual_value          | Float  | Value of the storage contents at the end of the time range       |
 
 
 
-### Processes
+### processes
 
 Processes are fundamental building blocks in Predicer, along with Nodes. They are used to convert or transfer electricity or heat, or etc. between nodes in the modelled system.
 
@@ -135,7 +139,30 @@ Processes are fundamental building blocks in Predicer, along with Nodes. They ar
 
 
 
-### Process topology
+### groups
+
+The user can define groups of either nodes or processes. Groups are used to define which processes or which nodes can for example participate in the realisation of a reserve. Group membership is defined row by row, with the first column being the type of the group, which is either node or process. The second column is the name of the entit (either a node or a process) which is to be part of the group named in the third column. A group can only contain entities of the specified type, for example adding the node "ng" to a process group will result in an error. Entities can be a part of several groups, and there is no limitation to the number of member sin a group.
+
+| Parameter     | Type    | Description                                                      |
+|---------------|---------|------------------------------------------------------------------|
+| type          | String  | Type of the group (node/process)                                 |
+| entity        | String  | The name of the node or process which is to be a part of a group |
+| group         | String  | The name of the group                                            |
+
+
+### node_diffusion
+
+Node diffusion is used to model flow of energy between nodes with states, with the size of the flow depending on the level of the node state and the given diffusion coefficient. One possible application of this could be the flow of heat from the inside of a building to the outside during heating season. The flow of energy between nodes *N1* and *N2* is simply calculated as *E = k (T1 - T2)*, with *T1* and *T2* being the temperatures of the nodes. If the temperature difference is negative *(T2 > T1)*, the flow of energy goes from *N2* to *N1*, and if *(T1 > T2)*, the energy flows from *N1* to *N2*. The temperatures of the nodes are linked to the level of the node states, either directly if the *is_temp* flag for the state is 1, or alternatively using the *T_E_converison* coefficient if the state is modelled as energy. 
+
+| Parameter   | Type   | Description                                                                       |
+|-------------|--------|-----------------------------------------------------------------------------------|
+| node1       | String | The node from which heat flows if the temperature difference T1 - T2 is positive  |
+| node1       | String | The node to which heat flows if the temperature difference T1 - T2 is positive    |
+| diff_coeff  | Float  | The diffusion coefficient between the nodes. Must be positive.                    |
+
+
+
+### process_topology
 
 Process topologies are used to define the process flows and capacities in the modelled system. Flows are connections between nodes and processes, and are used to balance the modelled system.
 
@@ -151,7 +178,7 @@ Process topologies are used to define the process flows and capacities in the mo
 
 
 
-### Efficiencies
+### efficiencies
 Unit-based processes can have a flat efficiency, as defined in the *processes* sheet, or an efficiency which depends on the load of the process. Load-based efficiency can be defined in the sheet *efficiencies*. Defining an efficiency in the *efficiencies* sheet overrides the value given in the *processes* sheet. The efficiency of a process is  defined on two rows; one row for the *operating point*, *op*, and one row for the corresponding *efficiency*, *eff*.  In the example table below, the efficiency of an imaginary gas turbine *gas_turb* has been defined for four load intervals. The number of given operating points and corresponding efficiencies is chosen by the user, simply by adding or removing columns The operating points are defined on a row, where the first column has the value ***process,op***, and the efficiencies are defined on a row where the value of the first column is ***process,eff***. 
 
 
@@ -161,8 +188,7 @@ Unit-based processes can have a flat efficiency, as defined in the *processes* s
 | gas_turb,eff | 0.27 | 0.31 | 0.33 | 0.34 |
 
 
-
-### Reserve type
+### reserve_type
 
 The sheet *reserve_type* is used to define the types of reserve used in the model, mainly differing based on reserve activation speed. 
 
@@ -173,7 +199,7 @@ The sheet *reserve_type* is used to define the types of reserve used in the mode
 
 
 
-### Market
+### markets
 
 Markets are a type of node, with which the modelled system can be balanced by buying or selling of a product such as electricity. Markets can either be of the *energy* type, or of the *reserve* type. 
 
@@ -181,15 +207,28 @@ Markets are a type of node, with which the modelled system can be balanced by bu
 |--------------|--------|----------------------------------------------------------------------------------|
 | market       | String | Name of the market                                                               |
 | type         | String | type of the market (energy or reserve)                                           |
-| node         | String | Node the market is connected to                                                  |
+| node         | String | Node a market is connected to, or nodegroup a reserve market is ocnnected to.    |
+| processgroup | String | The processgroup the reserve market is connected to. Not used for energy markets.|
 | direction    | String | Direction of the market, only for reserve markets                                |
-| realisation  | Float  | Determines the fraction of offered reserve product that activates each time step |
 | reserve_type | String | Determines the type of the reserve                                               |
 | is_bid       | Bool   | Determines if bids can be offered to the market                                  |
 | is_limited   | Bool   | Determines if reserve markets are limited                                        |
 | min_bid      | Float  | Minimum reserve offer if limited                                                 |
 | max_bid      | Float  | Maximum reserve offer if limited                                                 |
 | fee          | Float  | Reserve participation fee (per time period) if limited                           |
+
+
+
+### reserve_realisation
+
+reserve realisation is defined for each defined reserve market separately for each defined scenario. The realisation of the reserve is the expected share of activation for the offered reserve capacity for each timestep. A value of 0.0 means that none of the offered reserve capacity is activated, and 1.0 means that 100% of the offered capacity is activated, and the corresponding energy produced by reserve processes defined by the user. The notation of the *reserve_realisation* sheet is as such: the reserve markets are given on rows 2:n in the first column, with the scenarios being defined on the first row from column B forward. The realisation probability is given in the intersection of the reserve markets and the scenarios. An example of the layout of the sheet is shown below. The model contains two reserve markets (*res_up* and *res_down*), and 3 scenarios (*s1*, *s2* and *s3*).
+
+The energy imbalanced caused by the realisated reserve is allocated to the nodes that are members in the nodegroup linked to the reserve market, defined in the *markets* sheet. The necessary actions to produce the reserve are taken by the members of the processgroup defined in the *markets* sheet.
+
+| reserve_products | s1  | s2  | s3  |
+|------------------|-----|-----|-----|
+| res_up           | 0.3 | 0.2 | 0.3 |
+| res_down         | 0.1 | 0.2 | 0.4 |
 
 
 
@@ -218,7 +257,7 @@ As an example the inflow for the node *nn* can be given as ***nn,s1*** if the va
 
 
 
-### Scenario
+### scenario
 
 The scenarios in Predicer are separate versions of the future, with potentially differing parameter values. Predicer optimizes the optimal course of action, based on the probability of the defined scenarios.
 
@@ -229,7 +268,7 @@ The scenarios in Predicer are separate versions of the future, with potentially 
 
 
 
-### Risk
+### risk
 
 The *risk* sheet in the excel-format input data contains information about the CVaR (conditional value at risk). For details, see [[1]](#1) and [[2]](#2)
 
@@ -240,7 +279,7 @@ The *risk* sheet in the excel-format input data contains information about the C
 | beta           | Share of CVaR in objective function |
 
 
-### Inflow blocks
+### inflow_blocks
 
 *Inflow blocks*, or simply *blocks*, are potential flexibility which can be modelled with *Predicer*. A block has generally been thought of as "if a demand response action is taken on time *t* by reducing/increasing *inflow* to *node* *n* by amount x, how must the system compensate on times- t-1, t-2.. or t+1, t+2...", or "if the heating for a building is turned off on time t, what has to be done in the following hours to compensate?". The blocks can thus be seen as a potential for flexibility, and how the system has to be compensated as a consequence of using the potential.
 
