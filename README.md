@@ -157,7 +157,7 @@ Node diffusion is used to model flow of energy between nodes with states, with t
 | Parameter   | Type   | Description                                                                       |
 |-------------|--------|-----------------------------------------------------------------------------------|
 | node1       | String | The node from which heat flows if the temperature difference T1 - T2 is positive  |
-| node1       | String | The node to which heat flows if the temperature difference T1 - T2 is positive    |
+| node2       | String | The node to which heat flows if the temperature difference T1 - T2 is positive    |
 | diff_coeff  | Float  | The diffusion coefficient between the nodes. Must be positive.                    |
 
 
@@ -223,7 +223,7 @@ Markets are a type of node, with which the modelled system can be balanced by bu
 
 reserve realisation is defined for each defined reserve market separately for each defined scenario. The realisation of the reserve is the expected share of activation for the offered reserve capacity for each timestep. A value of 0.0 means that none of the offered reserve capacity is activated, and 1.0 means that 100% of the offered capacity is activated, and the corresponding energy produced by reserve processes defined by the user. The notation of the *reserve_realisation* sheet is as such: the reserve markets are given on rows 2:n in the first column, with the scenarios being defined on the first row from column B forward. The realisation probability is given in the intersection of the reserve markets and the scenarios. An example of the layout of the sheet is shown below. The model contains two reserve markets (*res_up* and *res_down*), and 3 scenarios (*s1*, *s2* and *s3*).
 
-The energy imbalanced caused by the realisated reserve is allocated to the nodes that are members in the nodegroup linked to the reserve market, defined in the *markets* sheet. The necessary actions to produce the reserve are taken by the members of the processgroup defined in the *markets* sheet.
+The energy imbalance caused by reserve activation is allocated to the nodes that are members in the nodegroup linked to the reserve market, defined in the *markets* sheet. The necessary actions to produce the reserve are taken by the members of the processgroup defined in the *markets* sheet.
 
 | reserve_products | s1  | s2  | s3  |
 |------------------|-----|-----|-----|
@@ -351,7 +351,7 @@ As another example, assume that the operation of two online processes, **proc_1*
 If both the processes should be either online or offline at the same time, the coefficients for one process should be *1*, and the other should be *-1*, weith the constant set to 0. This would result in the constraint **proc_1* - *proc_2* + 0 == 0*. 
 
 
-As an example of a setpoint general constraint, assume the value of the electricity, **elc**, production of the process **gas_turb** has to be between 3 and 8. To do this, two setpoint constraints are defined, **c_up** and **c_dw**, for defining an upper and lower boundary for the process flow. As above, the constraints are defined in the *gen_constraint* sheet. The operator for *c_up* should be *st* (= smaller than), and the operator for *c_dw* should be *gt* (=greater than). Both constraints are defined as setpoint constraints, with a deviation penalty of 100. The unit of the penalty is simply per iunit of variable, meaning a variable deviation of 2 would increase the costs in the model with 200.
+As an example of a setpoint general constraint, assume the value of the electricity, **elc**, production of the process **gas_turb** has to be between 3 and 8. To do this, two setpoint constraints are defined, **c_up** and **c_dw**, for defining an upper and lower boundary for the process flow. As above, the constraints are defined in the *gen_constraint* sheet. The operator for *c_up* should be *st* (= smaller than), and the operator for *c_dw* should be *gt* (=greater than). Both constraints are defined as setpoint constraints, with a deviation penalty of 100. The unit of the penalty is simply per unit of variable, meaning a variable deviation of 2 would increase the costs in the model with 200.
 
 | name  | operator | is_setpoint | penalty |
 |-------|----------|-------------|---------|
