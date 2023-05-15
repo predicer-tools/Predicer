@@ -202,6 +202,24 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 df[!,colname] = value.(v_reserve_online[col_tup].data)
             end
         end
+    elseif type == "v_node_diffusion" # only returns an expression with node diff info, no variable. 
+        node_diffs = model_contents["expression"]["e_node_diff"]
+        if isempty(name)
+            nodenames = unique(map(y -> y[1], collect(keys(node_diffs))))
+        else
+            nodenames = unique(map(y -> y[1], filter(x -> x[1] == name, collect(keys(node_diffs)))))
+        end
+        for n in nodenames, s in scenarios
+            diffs = []
+            colname = n * "_" * s
+            for t in input_data.temporals.t
+                diff_k = filter(x -> x == (n, s, t),  collect(keys(node_diffs)))[1]
+                push!(diffs, value.(node_diffs[diff_k]))
+            end
+            if !isempty(diffs)
+                df[!, colname] = diffs
+            end
+        end
     else
         println("ERROR: incorrect type")
     end
