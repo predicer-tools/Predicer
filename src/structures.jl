@@ -296,8 +296,6 @@ Returns the TimeSeries for scenario s. If the scenario is not found, return Time
 function (tsd::TimeSeriesData)(s::String)
     if s in map(x -> x.scenario, tsd.ts_data)
         return filter(ts -> ts.scenario == s, tsd.ts_data)[1]
-    else
-        return tsd.ts_data[1] # is this a "risky" approach, leading to unwanted and difficult to detect errors?
     end
 end
 
