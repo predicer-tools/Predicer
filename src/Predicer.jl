@@ -68,6 +68,7 @@ module Predicer
     fixed_limit_process_topology_tuples,
     transport_process_topology_tuples,
     reserve_node_tuples,
+    reserve_nodegroup_tuples,
     up_down_reserve_market_tuples,
     reserve_market_tuples,
     fixed_market_tuples,
