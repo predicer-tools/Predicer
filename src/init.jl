@@ -62,14 +62,14 @@ function generate_model(fpath::String, t_horizon::Vector{ZonedDateTime}=ZonedDat
     end
     # Build market structures
     input_data = Predicer.resolve_market_nodes(input_data)
-    # create mc
-    mc = build_model_contents_dict(input_data)
-    mc["model"] = setup_optimizer(HiGHS.Optimizer)
+    # create model_contents
+    model_contents = build_model_contents_dict(input_data)
+    model_contents["model"] = setup_optimizer(HiGHS.Optimizer)
     # build model
-    build_model(mc, input_data)
-    return mc, input_data
+    build_model(model_contents, input_data)
+    return model_contents, input_data
 end
 
-function solve_model(mc)
-    optimize!(mc["model"])
+function solve_model(model_contents::OrderedDict)
+    optimize!(model_contents["model"])
 end
