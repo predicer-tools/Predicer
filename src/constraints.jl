@@ -509,7 +509,7 @@ function setup_processes_limits(model_contents::OrderedDict, input_data::Predice
     # non-online, non-cf processes
     p_offline = filter(x -> !(processes[x[1]].is_online), lim_tuple)
     for tup in p_offline
-        topo = filter(x->x.sink == tup[3] || x.source == tup[2], processes[tup[1]].topos)[1]
+        topo = filter(x->x.sink == tup[3] && x.source == tup[2], processes[tup[1]].topos)[1]
         if isempty(topo.cap_ts)
             cap = topo.capacity
         else
