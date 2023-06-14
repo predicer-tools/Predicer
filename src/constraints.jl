@@ -611,9 +611,10 @@ function setup_reserve_realisation(model_contents::OrderedDict, input_data::Pred
         end
 
         # create process-wise reserve_realisation expression "v_res_real_flow"
+        rpt = unique(map(x -> (x[3:end]), res_process_tuples))
         for p_tup in process_tuples
             v_res_real_flow[p_tup] = AffExpr(0.0)
-            res_p_tup = filter(y -> y == p_tup, unique(map(x -> (x[3:end]), res_process_tuples)))
+            res_p_tup = unique(filter(y -> y == p_tup, rpt))
             if !isempty(res_p_tup)
                 add_to_expression!(v_res_real_flow[p_tup], v_flow[p_tup] - v_load[p_tup])
             end
@@ -625,17 +626,17 @@ function setup_reserve_realisation(model_contents::OrderedDict, input_data::Pred
             s = n_tup[2]
             t = n_tup[3]
             v_res_real[n_tup] = AffExpr(0.0)
-            for p in unique(map(y -> y[5], filter(z -> z[4] == n, res_groups)))
-                prod_tups = unique(map(y -> (y[3:end]), filter(x -> x[3] == p && x[5] == n && x[6] == s && x[7] == t, res_process_tuples)))
-                cons_tups = unique(map(y -> (y[3:end]), filter(x -> x[3] == p && x[4] == n && x[6] == s && x[7] == t, res_process_tuples)))
-                for pt in prod_tups
-                    add_to_expression!(v_res_real[n_tup], v_res_real_flow[pt])
-                end
-                for ct in cons_tups
-                    add_to_expression!(v_res_real[n_tup], -v_res_real_flow[ct])
-                end
+            prod_tups = unique(filter(x -> x[3] == n && x[4] == s && x[5] == t, rpt))
+            cons_tups = unique(filter(x -> x[2] == n && x[4] == s && x[5] == t, rpt))
+            for pt in prod_tups
+                add_to_expression!(v_res_real[n_tup], v_res_real_flow[pt])
+            end
+            for ct in cons_tups
+                add_to_expression!(v_res_real[n_tup], -v_res_real_flow[ct])
             end
         end
+
+
 
         # set realisation within nodegroup to be equal to node-wise realisation within members of the nodegroup
         # real(ng) == sumof real n for n in ng
@@ -649,7 +650,7 @@ function setup_reserve_realisation(model_contents::OrderedDict, input_data::Pred
         model_contents["constraint"]["res_real_eq"] = res_real_eq
 
 
-        # enure that the realisation of reserve rp is equal to the realisation of processes in the processgroup of the reserve
+        # ensure that the realisation of reserve rp is equal to the realisation of processes in the processgroup of the reserve
         # Ensures that the realisation is done by the "correct" processes. 
         # reserve-specific realisation = sumof process_realisation for p in reserve processgroup. 
         for res in unique(map(x -> x[1], res_market_tuples))
@@ -825,7 +826,7 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
 
     if input_data.contains_reserves
         v_load = model_contents["variable"]["v_load"]
-        res_proc_tuples = filter(x -> x[5] != input_data.temporals.t[1], unique(map(y -> y[3:end], reserve_process_tuples(input_data))))
+        res_proc_tuples =  unique(filter(x -> x[5] != input_data.temporals.t[1], map(y -> y[3:end], reserve_process_tuples(input_data))))
         res_nodes_tuple = reserve_nodes(input_data)
         res_potential_tuple = reserve_process_tuples(input_data)
         v_reserve = model_contents["variable"]["v_reserve"]
@@ -838,6 +839,8 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
         v_start = model_contents["variable"]["v_start"]
         v_stop = model_contents["variable"]["v_stop"]
     end
+
+    previous_proc_tups = previous_process_topology_tuples(input_data)
 
     for tup in ramp_tuple
         if processes[tup[1]].conversion == 1 && !processes[tup[1]].is_cf
@@ -866,7 +869,7 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
                 ramp_expr_res_down[tup] = AffExpr(0.0)
 
                 # get reserve production for the previous timestep from tup
-                res_ramp_tup = process_tuple[findall( x -> x == tup, process_tuple)[1]-1]
+                res_ramp_tup = previous_proc_tups[tup]
                 res_tup_up = filter(x->x[1]=="res_up" && x[3:end]==res_ramp_tup,res_potential_tuple)
                 res_tup_down = filter(x->x[1]=="res_down" && x[3:end]==res_ramp_tup,res_potential_tuple)
                 if tup[2] in res_nodes_tuple
@@ -890,15 +893,15 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
     
     if input_data.contains_reserves
         if !isempty(ramp_expr_res_up)
-            ramp_up_eq_v_load = @constraint(model, ramp_up_eq_v_load[tup in res_proc_tuples], v_load[tup] - v_load[process_tuple[findall(x->x==tup,process_tuple)[1]-1]] <= ramp_expr_up[tup] + ramp_expr_res_up[tup])
-            ramp_down_eq_v_load = @constraint(model, ramp_down_eq_v_load[tup in res_proc_tuples], v_load[tup] - v_load[process_tuple[findall(x->x==tup,process_tuple)[1]-1]] >= ramp_expr_down[tup] + ramp_expr_res_down[tup])
+            ramp_up_eq_v_load = @constraint(model, ramp_up_eq_v_load[tup in res_proc_tuples], v_load[tup] - v_load[previous_proc_tups[tup]] <= ramp_expr_up[tup] + ramp_expr_res_up[tup])
+            ramp_down_eq_v_load = @constraint(model, ramp_down_eq_v_load[tup in res_proc_tuples], v_load[tup] - v_load[previous_proc_tups[tup]] >= ramp_expr_down[tup] + ramp_expr_res_down[tup])
             model_contents["constraint"]["ramp_up_eq_v_load"] = ramp_up_eq_v_load
             model_contents["constraint"]["ramp_down_eq_v_load"] = ramp_down_eq_v_load
         end
     end
         
-    ramp_up_eq_v_flow = @constraint(model, ramp_up_eq_v_flow[tup in ramp_tuple], v_flow[tup] - v_flow[process_tuple[findall(x->x==tup,process_tuple)[1]-1]] <= ramp_expr_up[tup])
-    ramp_down_eq_v_flow = @constraint(model, ramp_down_eq_v_flow[tup in ramp_tuple], v_flow[tup] - v_flow[process_tuple[findall(x->x==tup,process_tuple)[1]-1]] >= ramp_expr_down[tup])
+    ramp_up_eq_v_flow = @constraint(model, ramp_up_eq_v_flow[tup in ramp_tuple], v_flow[tup] - v_flow[previous_proc_tups[tup]] <= ramp_expr_up[tup])
+    ramp_down_eq_v_flow = @constraint(model, ramp_down_eq_v_flow[tup in ramp_tuple], v_flow[tup] - v_flow[previous_proc_tups[tup]] >= ramp_expr_down[tup])
     model_contents["constraint"]["ramp_up_eq_v_flow"] = ramp_up_eq_v_flow
     model_contents["constraint"]["ramp_down_eq_v_flow"] = ramp_down_eq_v_flow
 end
