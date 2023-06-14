@@ -17,7 +17,6 @@ module Predicer
     export_model_contents,
     get_result_dataframe,
     write_bid_matrix,
-    resolve_delays,
     resolve_market_nodes
 
     export Node,
@@ -74,7 +73,6 @@ module Predicer
     fixed_market_tuples,
     process_topology_ramp_times_tuples,
     scenarios,
-    create_delay_process_tuple,
     create_balance_market_tuple,
     state_reserves,
     create_reserve_limits,

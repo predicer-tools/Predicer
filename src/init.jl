@@ -56,10 +56,6 @@ function generate_model(fpath::String, t_horizon::Vector{ZonedDateTime}=ZonedDat
     if !validation_result["is_valid"]
         return validation_result["errors"]
     end
-    # Resolve potential delays
-    if input_data.contains_delay
-        input_data = Predicer.resolve_delays(input_data)
-    end
     # Build market structures
     input_data = Predicer.resolve_market_nodes(input_data)
     # create model_contents

@@ -32,13 +32,13 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
     if type == "v_flow"
         v_flow = vars[type]
         if !isempty(name)
-            tups = unique(map(x->(x[1],x[2],x[3]),filter(x->x[1]==name, vcat(tuples["process_tuple"], tuples["delay_tuple"]))))
+            tups = unique(map(x->(x[1],x[2],x[3]),filter(x->x[1]==name, tuples["process_tuple"])))
         else
-            tups = unique(map(x->(x[1],x[2],x[3]), vcat(tuples["process_tuple"], tuples["delay_tuple"])))
+            tups = unique(map(x->(x[1],x[2],x[3]), tuples["process_tuple"]))
         end
         for tup in tups, s in scenarios
             colname = join(tup,"_") * "_" *s
-            col_tup = filter(x->x[1:3]==tup && x[4]==s, vcat(tuples["process_tuple"], tuples["delay_tuple"]))
+            col_tup = filter(x->x[1:3]==tup && x[4]==s, tuples["process_tuple"])
             if !isempty(col_tup)
                 df[!, colname] = value.(v_flow[col_tup].data)
             end
@@ -284,14 +284,6 @@ function write_bid_matrix(model_contents::OrderedDict, input_data::Predicer.Inpu
     return dfs
 end
 
-function resolve_delays(input_data::Predicer.InputData)
-    processes = input_data.processes
-    for p in keys(processes)
-        Predicer.add_delay(input_data.temporals, processes[p].delay)
-    end
-    input_data.temporals.t = input_data.temporals.delay_ts
-    return input_data
-end
 
 
 """

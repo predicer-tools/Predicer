@@ -122,7 +122,7 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
     for i in 1:nrow(system_data["processes"])
         p = system_data["processes"][i, :]
         if p.conversion == 1
-            processes[p.process] = Predicer.Process(p.process, 1, Float64(p.delay))
+            processes[p.process] = Predicer.Process(p.process, 1)
         elseif p.conversion == 2
             processes[p.process] = Predicer.TransferProcess(p.process)
         elseif p.conversion == 3
@@ -425,8 +425,7 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
     contains_states = (true in map(n -> n.is_state, collect(values(nodes))))
     contains_piecewise_eff = (false in map(p -> isempty(p.eff_ops), collect(values(processes))))
     contains_risk = (risk["beta"] > 0)
-    contains_delay = !iszero(map(p -> p.delay, collect(values(processes))))
     contains_diffusion = !isempty(node_diffusion_tuples)
 
-    return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, contains_diffusion,  processes, nodes, node_diffusion_tuples, markets, groups, scenarios, reserve_type, risk, inflow_blocks, gen_constraints)
+    return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion,  processes, nodes, node_diffusion_tuples, markets, groups, scenarios, reserve_type, risk, inflow_blocks, gen_constraints)
 end

@@ -8,8 +8,6 @@ using TimeZones
         is_variable_dt::Bool
         variable_dt::Vector{Tuple{String, Float64}}
         ts_format::String
-        delay::Float64
-        delay_ts::Vector{String}
     end
 
 Struct used for storing information about the timesteps in the model.
@@ -25,8 +23,6 @@ mutable struct Temporals
     is_variable_dt::Bool
     variable_dt::Vector{Tuple{String, Float64}}
     ts_format::String
-    delay::Float64
-    delay_ts::Vector{String}
 end
 
 
@@ -42,40 +38,11 @@ function Temporals(ts::Vector{String}, ts_format="yyyy-mm-ddTHH:MM:SSzzzz")
         push!(dts, (ts[i], Dates.Minute(zdt_ts[i+1] - zdt_ts[i])/Dates.Minute(60)))
     end
     if length(unique(map(t -> t[2], dts))) == 1
-        return Temporals(ts, dts[1][2], false, [], ts_format, 0, [])
+        return Temporals(ts, dts[1][2], false, [], ts_format)
     elseif length(unique(map(t -> t[2], dts))) > 1
-        return Temporals(ts, 0.0, true, dts, ts_format, 0, [])
+        return Temporals(ts, 0.0, true, dts, ts_format)
     end
 end
-
-
-
-"""
-    function add_delay(t::Temporals, d::Float64)
-
-Sets the delay of the temporals to the provided value. If a delay already exists, the larger delay is used. 
-"""
-
-function add_delay(t::Temporals, d::Float64, force::Bool=false)
-    d_diff = d - t.delay
-    if d_diff > 0.0 || force
-        t.delay = d
-        additional_ts = round(max(1, abs(t.delay)/t.dtf))
-        extra_ts = t.t
-        for i = 1:additional_ts
-            if t.delay > 0
-                extra_ts = vcat(string(ZonedDateTime(extra_ts[1], t.ts_format) - Minute(60*t.dtf)), extra_ts)
-                extra_ts = vcat(extra_ts, string(ZonedDateTime(extra_ts[end], t.ts_format) + Minute(60*t.dtf)))
-            else
-                extra_ts = vcat(string(ZonedDateTime(extra_ts[1], t.ts_format) + Minute(60*t.dtf)), extra_ts)
-                extra_ts = vcat(extra_ts, string(ZonedDateTime(extra_ts[end], t.ts_format) - Minute(60*t.dtf)))
-            end
-        end
-        t.delay_ts = extra_ts
-    end
-    return t
-end
-
 
 """
     function (t::Temporals)(ts::ZonedDateTime)
@@ -92,7 +59,7 @@ end
 
 
 """
-    function (t::Temporals)(ts::String)
+    function (t::Temporals)(ts::String).
 
 Returns the length of the timesteps between t and t+1 as a measure how many can fit into 60 minutes.
 """
@@ -638,7 +605,6 @@ end
         name::String
         groups::Vector{String}
         conversion::Integer # change to string-based: unit_based, market_based, transfer_based
-        delay::Float64
         is_cf::Bool
         is_cf_fix::Bool
         is_online::Bool
@@ -664,7 +630,6 @@ A struct for a process (unit).
 - `name::String`: Name of the process.
 - `groups::Vector{String}`: names of the groups this process is a member of. 
 - `conversion::String`: Process type; unit, market, or transport based. 
-- `delay::Float64`: The delay over the process, in hours.
 - `is_cf::Bool`: Flag indicating if the process is a cf (capacity factor) process, aka depends on a TimeSeries.
 - `is_cf_fix::Bool`: Flag indicating if the cf TimeSeries is a upper limit (false) or a set value (true).
 - `is_online::Bool`: Flag indicating if the process has an binary online variable.
@@ -689,7 +654,6 @@ mutable struct Process
     name::String
     groups::Vector{String}
     conversion::Integer # change to string-based: unit_based, market_based, transfer_based
-    delay::Float64
     is_cf::Bool
     is_cf_fix::Bool
     is_online::Bool
@@ -720,8 +684,8 @@ The constructor for the Process struct.
 - `name::String`: The name of the process.
 - `conversion::Int`: Used to differentiate between types of process. 1 = unit based, 2 = transfer process, 3 = market process.
 """
-function Process(name::String, conversion::Int=1, delay::Float64=0.0)
-    return Process(name, [], conversion, delay, false, false, false, false, -1.0, 0.0, 1.0, 0.0, 0, 0, 0, 0, true, [], TimeSeriesData(), TimeSeriesData(), [], [])
+function Process(name::String, conversion::Int=1)
+    return Process(name, [], conversion, false, false, false, false, -1.0, 0.0, 1.0, 0.0, 0, 0, 0, 0, true, [], TimeSeriesData(), TimeSeriesData(), [], [])
 end
 
 
@@ -752,22 +716,6 @@ Add a group to the process.
 """
 function add_group(p::Process, g::String)
     push!(p.groups, g)
-end
-
-
-"""
-    function add_delay(p::Process, delay::Float64)
-
-Adds a delay to the chosen Transport process (conversion == 2). 
-"""
-function add_delay(p::Process, delay::Real)
-    if p.conversion == 2    
-        p.delay = Float64(delay)
-    elseif p.conversion == 1
-        return error("Cannot add a delay to unit based processes, only transfer processes.")
-    elseif p.conversion == 2
-        return error("Cannot add a delay to market processes, only transfer processes.")
-    end
 end
 
 """
@@ -1079,7 +1027,6 @@ end
         contains_states::Bool
         contains_piecewise_eff::Bool
         contains_risk::Bool
-        contains_delay::Bool
         contains_diffusion::Bool
         processes::OrderedDict{String, Process}
         nodes::OrderedDict{String, Node}
@@ -1101,7 +1048,6 @@ Struct containing the imported input data, based on which the Predicer is built.
 - `contains_states::Bool`: Boolean indicating whether the model (input_data) requires state functionality structures. 
 - `contains_piecewise_eff::Bool`: Boolean indicating whether the model (input_data) requires piecewise efficiency functionality structures. 
 - `contains_risk::Bool`: Boolean indicating whether the model (input_data) requires risk functionality structures. 
-- `contains_delay::Bool`: Boolean indicating whether the model (input_data) requires delay functionality structures. 
 - `contains_diffusion::Bool`: Boolean indicating whether the model (input_data) requires diffusion functionality structures. 
 - `processes::OrderedDict{String, Process}`: A dict containing the data relevant for processes.
 - `nodes::OrderedDict{String, Node}`: A dict containing the data relevant for nodes.
@@ -1120,7 +1066,6 @@ mutable struct InputData
     contains_states::Bool
     contains_piecewise_eff::Bool
     contains_risk::Bool
-    contains_delay::Bool
     contains_diffusion::Bool
     processes::OrderedDict{String, Process}
     nodes::OrderedDict{String, Node}
@@ -1132,8 +1077,8 @@ mutable struct InputData
     risk::OrderedDict{String, Float64}
     inflow_blocks::OrderedDict{String, InflowBlock}
     gen_constraints::OrderedDict{String, GenConstraint}
-    function InputData(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, contains_diffusion, processes, nodes, node_diffusion,  markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
-        return new(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, contains_diffusion, processes, nodes, node_diffusion, markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
+    function InputData(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, processes, nodes, node_diffusion,  markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
+        return new(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, processes, nodes, node_diffusion, markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
     end
 end
 

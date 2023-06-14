@@ -35,7 +35,6 @@ function create_tuples(input_data::InputData) # unused, should be debricated
     tuplebook["fixed_value_tuple"] = fixed_market_tuples(input_data)
     tuplebook["ramp_tuple"] = process_topology_ramp_times_tuples(input_data)
     tuplebook["risk_tuple"] = scenarios(input_data)
-    tuplebook["delay_tuple"] = create_delay_process_tuple(input_data)
     tuplebook["balance_market_tuple"] = create_balance_market_tuple(input_data)
     tuplebook["state_reserves"] = state_reserves(input_data)
     tuplebook["reserve_limits"] = create_reserve_limits(input_data)
@@ -132,12 +131,10 @@ function process_topology_tuples(input_data::InputData) # original name: create_
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
     for p in values(processes)
-        if p.delay == 0
-            for s in scenarios
-                for topo in p.topos
-                    for t in temporals.t
-                        push!(process_topology_tuples, (p.name, topo.source, topo.sink, s, t))
-                    end
+        for s in scenarios
+            for topo in p.topos
+                for t in temporals.t
+                    push!(process_topology_tuples, (p.name, topo.source, topo.sink, s, t))
                 end
             end
         end
@@ -405,7 +402,7 @@ function balance_process_tuples(input_data::InputData) # orignal name: create_pr
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
     for p in values(processes)
-        if p.conversion == 1 && !p.is_cf && p.delay == 0
+        if p.conversion == 1 && !p.is_cf
             if isempty(p.eff_fun)
                 for s in scenarios, t in temporals.t
                     push!(balance_process_tuples, (p.name, s, t))
@@ -655,31 +652,6 @@ Return scenarios. Form: (s).
 function scenarios(input_data::InputData) # original name: create_risk_tuple()
     scenarios = collect(keys(input_data.scenarios))
     return scenarios
-end
-
-""" 
-    create_delay_process_tuple(input_data::OrderedDict)
-
-Returns array of tuples containing processes with delay functionality. Form: (p, so, si, s, t).
-"""
-function create_delay_process_tuple(input_data::Predicer.InputData)
-    if !input_data.contains_delay
-        return NTuple{5, String}[]
-    end
-    delay_tuple = NTuple{5, String}[]
-    processes = input_data.processes
-    scenarios = collect(keys(input_data.scenarios))
-    temporals = input_data.temporals
-    for p in keys(processes)
-        if processes[p].delay != 0
-            for topo in processes[p].topos
-                for t in temporals.t, s in scenarios
-                    push!(delay_tuple, (p, topo.source, topo.sink, s, t))
-                end
-            end
-        end
-    end
-    return delay_tuple
 end
 
 """ 
