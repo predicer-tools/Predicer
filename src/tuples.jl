@@ -205,8 +205,10 @@ function reserve_groups(input_data::InputData)
                     if d == "up/down" || d == "up/dw" || d == "up/dn" ||d == "up_down" || d == "up_dw" || d == "up_dn"
                         push!(reserve_groups, ("res_up", markets[m].reserve_type, m, n, p))
                         push!(reserve_groups, ("res_down", markets[m].reserve_type, m, n, p))
-                    else
-                        push!(reserve_groups, (d, markets[m].reserve_type, m, n, p))
+                    elseif d == "dw" || d == "res_dw" || d == "dn" || d == "res_dn" || d == "down" || d == "res_down"
+                        push!(reserve_groups, ("res_down", markets[m].reserve_type, m, n, p))
+                    elseif d == "up" || d == "res_up"
+                        push!(reserve_groups, ("res_up", markets[m].reserve_type, m, n, p))
                     end
                 end
             end
@@ -313,22 +315,6 @@ function reserve_process_tuples(input_data::InputData) # original name: create_r
         scenarios = collect(keys(input_data.scenarios))
         temporals = input_data.temporals
         res_groups = reserve_groups(input_data)
-        input_data_dirs = unique(map(m -> m.direction, collect(values(input_data.markets))))
-        res_dir = []
-        for d in input_data_dirs
-            if d == "up" || d == "res_up"
-                push!(res_dir, "res_up")
-            elseif d == "dw" || d == "res_dw" || d == "dn" || d == "res_dn" || d == "down" || d == "res_down"
-                push!(res_dir, "res_down")
-            elseif d == "up/down" || d == "up/dw" || d == "up/dn" ||d == "up_down" || d == "up_dw" || d == "up_dn"
-                push!(res_dir, "res_up")
-                push!(res_dir, "res_down")
-            elseif d != "none"
-                msg = "Invalid reserve direction given: " * d
-                throw(ErrorException(msg))
-            end
-        end
-        unique!(res_dir)
         for p in collect(keys(processes))
             if processes[p].is_res
                 res_cons = filter(x -> x[5] == p, res_groups)
@@ -389,6 +375,22 @@ function balance_node_tuples(input_data::InputData) # original name: create_node
         end
     end
     return balance_node_tuples
+end
+
+"""
+    previous_balance_node_tuples(input_data::InputData)
+
+Function to gather the node balance tuple for the previous timestep. Returns a Dict() with the node_bal_tup as key and the previous tup as value. 
+"""
+function previous_balance_node_tuples(input_data::InputData)
+    pbnt = OrderedDict()
+    node_bal_tups = balance_node_tuples(input_data)
+    for (i, n) in enumerate(node_bal_tups)
+        if n[3] != input_data.temporals.t[1]
+            pbnt[n] = node_bal_tups[i-1]
+        end
+    end
+    return pbnt
 end
 
 """
