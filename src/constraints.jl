@@ -45,6 +45,7 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
     
     node_state_tuple = state_node_tuples(input_data)
     node_balance_tuple = balance_node_tuples(input_data)
+    previous_node_balance_tuple = previous_balance_node_tuples(input_data)
     v_flow = model_contents["variable"]["v_flow"]
     v_block = model_contents["variable"]["v_block"]
     if input_data.contains_states
@@ -55,20 +56,19 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
         node_res = node_reserves(input_data)
     end
 
-
+    
 
     vq_state_up = model_contents["variable"]["vq_state_up"]
     vq_state_dw = model_contents["variable"]["vq_state_dw"]
     temporals = input_data.temporals  
     nodes = input_data.nodes
-    scenarios = collect(keys(input_data.scenarios))
 
 
     #######
     ## Setup inflow expression
     inflow_expr =  model_contents["expression"]["inflow_expr"] = OrderedDict()
     for n in collect(keys(nodes))
-        for s in scenarios, t in temporals.t
+        for s in scenarios(input_data), t in temporals.t
             inflow_expr[(n, s, t)] = AffExpr(0.0)
             if nodes[n].is_inflow
                 add_to_expression!(inflow_expr[(n, s, t)], nodes[n].inflow(s, t))
@@ -139,46 +139,53 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
     e_cons = model_contents["expression"]["e_cons"] = OrderedDict()
     e_state = model_contents["expression"]["e_state"] = OrderedDict()
     e_state_losses = model_contents["expression"]["e_state_losses"] = OrderedDict()
-    
-    for (i, tu) in enumerate(node_balance_tuple)
-        e_prod[tu] = AffExpr(0.0)
-        e_cons[tu] = AffExpr(0.0)
-        e_state[tu] = AffExpr(0.0)
-        e_state_losses[tu] = AffExpr(0.0)
 
-        # tu of form (node, scenario, t)
-        # process tuple of form (process_name, source, sink, scenario, t)
-        cons = filter(x -> (x[2] == tu[1] && x[4] == tu[2] && x[5] == tu[3]), process_tuple::Vector{NTuple{5, String}})
-        prod = filter(x -> (x[3] == tu[1] && x[4] == tu[2] && x[5] == tu[3]), process_tuple::Vector{NTuple{5, String}})
+    proc_tup_reduced = unique(map(x -> (x[1:3]), process_tuple))
+    for n in unique(map(x -> x[1], node_balance_tuple))
 
-        add_to_expression!(e_cons[tu], -vq_state_dw[tu])
-        add_to_expression!(e_cons[tu], inflow_expr[tu])
-        add_to_expression!(e_prod[tu], vq_state_up[tu])
-        add_to_expression!(e_prod[tu], e_node_diff[tu])
+        # n of form (node)
+        # process tuple of form (process_name, source, sink)
+        cons_procs = unique(filter(x -> x[2] == n, proc_tup_reduced))
+        prod_procs = unique(filter(x -> x[3] == n, proc_tup_reduced))
 
-        if input_data.contains_reserves && tu in node_res
-            add_to_expression!(e_cons[tu], -v_res_real[tu])
-        end
+        for s in scenarios(input_data), t in temporals.t
+            tu = (n, s, t)
+            cons_procs_with_s_and_t = map(x -> (x[1], x[2], x[3], s, t), cons_procs)
+            prod_procs_with_s_and_t = map(x -> (x[1], x[2], x[3], s, t), prod_procs)
 
-        if !isempty(cons)
-            add_to_expression!(e_cons[tu], -sum(v_flow[cons]))
-        end
-        if !isempty(prod)
-            add_to_expression!(e_prod[tu], sum(v_flow[prod]))
-        end
+            e_prod[tu] = AffExpr(0.0)
+            e_cons[tu] = AffExpr(0.0)
+            e_state[tu] = AffExpr(0.0)
+            e_state_losses[tu] = AffExpr(0.0)
 
-        if nodes[tu[1]].is_state
-            add_to_expression!(e_state[tu], v_state[tu])
-            if tu[3] == temporals.t[1]
-                add_to_expression!(e_state[tu], - nodes[tu[1]].state.initial_state)
-                add_to_expression!(e_state_losses[tu], nodes[tu[1]].state.state_loss_proportional*temporals(tu[3])*nodes[tu[1]].state.initial_state)
-            else
-                add_to_expression!(e_state[tu], - v_state[node_balance_tuple[i-1]])
-                add_to_expression!(e_state_losses[tu], nodes[tu[1]].state.state_loss_proportional*temporals(tu[3])*v_state[node_balance_tuple[i-1]])
+            add_to_expression!(e_cons[tu], -vq_state_dw[tu])
+            add_to_expression!(e_cons[tu], inflow_expr[tu])
+            add_to_expression!(e_prod[tu], vq_state_up[tu])
+            add_to_expression!(e_prod[tu], e_node_diff[tu])
+            if input_data.contains_reserves && tu in node_res
+                add_to_expression!(e_cons[tu], -v_res_real[tu])
             end
-            if nodes[tu[1]].state.is_temp
-                e_state[tu] = e_state[tu] * nodes[tu[1]].state.T_E_conversion
-                e_state_losses[tu] = e_state_losses[tu] * nodes[tu[1]].state.T_E_conversion
+    
+            if !isempty(cons_procs_with_s_and_t)
+                add_to_expression!(e_cons[tu], -sum(v_flow[cons_procs_with_s_and_t]))
+            end
+            if !isempty(prod_procs_with_s_and_t)
+                add_to_expression!(e_prod[tu], sum(v_flow[prod_procs_with_s_and_t]))
+            end
+    
+            if nodes[tu[1]].is_state
+                add_to_expression!(e_state[tu], v_state[tu])
+                if tu[3] == temporals.t[1]
+                    add_to_expression!(e_state[tu], - nodes[tu[1]].state.initial_state)
+                    add_to_expression!(e_state_losses[tu], nodes[tu[1]].state.state_loss_proportional*temporals(tu[3])*nodes[tu[1]].state.initial_state)
+                else
+                    add_to_expression!(e_state[tu], - v_state[previous_node_balance_tuple[tu]])
+                    add_to_expression!(e_state_losses[tu], nodes[tu[1]].state.state_loss_proportional*temporals(tu[3])*v_state[previous_node_balance_tuple[tu]])
+                end
+                if nodes[tu[1]].state.is_temp
+                    e_state[tu] = e_state[tu] * nodes[tu[1]].state.T_E_conversion
+                    e_state_losses[tu] = e_state_losses[tu] * nodes[tu[1]].state.T_E_conversion
+                end
             end
         end
     end
@@ -238,52 +245,58 @@ function setup_process_online_balance(model_contents::OrderedDict, input_data::P
             max_online_lhs = OrderedDict()
             max_offline_rhs = OrderedDict()
             max_offline_lhs = OrderedDict()
-            for p in keys(processes)
-                if processes[p].is_online
-                    for s in scenarios
-                        for t in temporals.t
-                            min_online = processes[p].min_online * Dates.Minute(60)
-                            min_offline = processes[p].min_offline * Dates.Minute(60)
 
-                            # get all timesteps that are within min_online/min_offline after t.
-                            min_on_hours = filter(x-> Dates.Minute(0) <= ZonedDateTime(x, temporals.ts_format) - ZonedDateTime(t, temporals.ts_format) <= min_online, temporals.t)
-                            min_off_hours = filter(x-> Dates.Minute(0) <= ZonedDateTime(x, temporals.ts_format) - ZonedDateTime(t, temporals.ts_format) <= min_offline, temporals.t)
 
-                            if processes[p].max_online == 0.0
-                                max_on_hours = []
-                            else
-                                max_online = processes[p].max_online * Dates.Minute(60)
-                                max_on_hours = filter(x-> Dates.Minute(0) <= ZonedDateTime(x, temporals.ts_format) - ZonedDateTime(t, temporals.ts_format) <= max_online, temporals.t)
-                            end
-                            if processes[p].max_offline == 0.0
-                                max_off_hours = []
-                            else
-                                max_offline = processes[p].max_offline * Dates.Minute(60)
-                                max_off_hours = filter(x-> Dates.Minute(0) <= ZonedDateTime(x, temporals.ts_format) - ZonedDateTime(t, temporals.ts_format) <= max_offline, temporals.t)
-                            end
+            ts_as_zdt = OrderedDict()
+            for x in temporals.t
+                ts_as_zdt[x] = ZonedDateTime(x, temporals.ts_format)
+            end
 
-                            for h in min_on_hours
-                                min_online_rhs[(p, s, t, h)] = v_start[(p,s,t)]
-                                min_online_lhs[(p, s, t, h)] = v_online[(p,s,h)]
-                            end
-                            for h in min_off_hours
-                                min_offline_rhs[(p, s, t, h)] = (1-v_stop[(p,s,t)])
-                                min_offline_lhs[(p, s, t, h)] = v_online[(p,s,h)]
-                            end
+            for p in unique(map(x -> x[1], proc_online_tuple))
+                min_online = processes[p].min_online * Dates.Minute(60)
+                min_offline = processes[p].min_offline * Dates.Minute(60)
 
-                            max_online_rhs[(p, s, t)] = processes[p].max_online
-                            max_offline_rhs[(p, s, t)] = 1
-                            if length(max_on_hours) > processes[p].max_online 
-                                max_online_lhs[(p, s, t)] = AffExpr(0.0)
-                                for h in max_on_hours
-                                    add_to_expression!(max_online_lhs[(p, s, t)], v_online[(p,s,h)])
-                                end
+
+                for s in scenarios
+                    for t in temporals.t
+                        # get all timesteps that are within min_online/min_offline after t.
+                        min_on_hours = filter(x-> Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= min_online, temporals.t)
+                        min_off_hours = filter(x-> Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= min_offline, temporals.t)
+
+                        if processes[p].max_online == 0.0
+                            max_on_hours = []
+                        else
+                            max_online = processes[p].max_online * Dates.Minute(60)
+                            max_on_hours = filter(x-> Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= max_online, temporals.t)
+                        end
+                        if processes[p].max_offline == 0.0
+                            max_off_hours = []
+                        else
+                            max_offline = processes[p].max_offline * Dates.Minute(60)
+                            max_off_hours = filter(x-> Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= max_offline, temporals.t)
+                        end
+
+                        for h in min_on_hours
+                            min_online_rhs[(p, s, t, h)] = v_start[(p,s,t)]
+                            min_online_lhs[(p, s, t, h)] = v_online[(p,s,h)]
+                        end
+                        for h in min_off_hours
+                            min_offline_rhs[(p, s, t, h)] = (1-v_stop[(p,s,t)])
+                            min_offline_lhs[(p, s, t, h)] = v_online[(p,s,h)]
+                        end
+
+                        max_online_rhs[(p, s, t)] = processes[p].max_online
+                        max_offline_rhs[(p, s, t)] = 1
+                        if length(max_on_hours) > processes[p].max_online 
+                            max_online_lhs[(p, s, t)] = AffExpr(0.0)
+                            for h in max_on_hours
+                                add_to_expression!(max_online_lhs[(p, s, t)], v_online[(p,s,h)])
                             end
-                            if length(max_off_hours) > processes[p].max_offline
-                                max_offline_lhs[(p, s, t)] = AffExpr(0.0)
-                                for h in max_off_hours
-                                    add_to_expression!(max_offline_lhs[(p, s, t)], v_online[(p,s,h)])
-                                end
+                        end
+                        if length(max_off_hours) > processes[p].max_offline
+                            max_offline_lhs[(p, s, t)] = AffExpr(0.0)
+                            for h in max_off_hours
+                                add_to_expression!(max_offline_lhs[(p, s, t)], v_online[(p,s,h)])
                             end
                         end
                     end
@@ -330,18 +343,25 @@ function setup_process_balance(model_contents::OrderedDict, input_data::Predicer
 
     # Fixed efficiency case:
     nod_eff = OrderedDict()
-    for tup in proc_balance_tuple
-        # fixed eff value
-        if isempty(processes[tup[1]].eff_ts)
-            eff = processes[tup[1]].eff
-        # timeseries based eff
-        else
-            eff = processes[tup[1]].eff_ts(tup[2], tup[3])
-        end
-        sources = filter(x -> (x[1] == tup[1] && x[3] == tup[1] && x[4] == tup[2] && x[5] == tup[3]), process_tuple)
-        sinks = filter(x -> (x[1] == tup[1] && x[2] == tup[1] && x[4] == tup[2] && x[5] == tup[3]), process_tuple)
+    proc_bal_tup_reduced = unique(map(x -> x[1], proc_balance_tuple))
+    proc_tuple_reduced = unique(map(x -> (x[1:3]), process_tuple))
+    for p in proc_bal_tup_reduced
+        sources = filter(x -> (x[1] == p && x[3] == p), proc_tuple_reduced)
+        sinks = filter(x -> (x[1] == p && x[2] == p), proc_tuple_reduced)
+        for s in scenarios(input_data), t in input_data.temporals.t
+            # fixed eff value
+            if isempty(processes[p].eff_ts)
+                eff = processes[p].eff
+            else
+                #ts-based eff value
+                eff = processes[p].eff_ts(s, t)
+            end
 
-        nod_eff[tup] = sum(v_flow[sinks]) - (length(sources) > 0 ? eff * sum(v_flow[sources]) : 0)
+            tup = (p, s, t)
+            sources_with_s_and_t = map(x -> (x[1], x[2], x[3], s, t), sources)
+            sinks_with_s_and_t = map(x -> (x[1], x[2], x[3], s, t), sinks)
+            nod_eff[tup] = sum(v_flow[sinks_with_s_and_t]) - (length(sources_with_s_and_t) > 0 ? eff * sum(v_flow[sources_with_s_and_t]) : 0)
+        end
     end
 
     process_bal_eq = @constraint(model, process_bal_eq[tup in proc_balance_tuple], nod_eff[tup] == 0)
@@ -477,27 +497,35 @@ function setup_processes_limits(model_contents::OrderedDict, input_data::Predice
     if input_data.contains_reserves
         v_load = model_contents["variable"]["v_load"]
         res_p_tuples = unique(map(x -> x[3:end], reserve_process_tuples(input_data)))
-        res_pot_cons_tuple = consumer_reserve_process_tuples(input_data)
-        res_pot_prod_tuple = producer_reserve_process_tuples(input_data)
+        res_pot_cons_tuple = unique(map(x -> (x[1:5]), consumer_reserve_process_tuples(input_data)))
+        res_pot_prod_tuple = unique(map(x -> (x[1:5]), producer_reserve_process_tuples(input_data)))
         v_reserve = model_contents["variable"]["v_reserve"]
+        res_lim_tuple = unique(map(y -> (y[1:3]), filter(x -> input_data.processes[x[1]].is_res, lim_tuple)))
 
-        for tup in lim_tuple
+        for tup in res_lim_tuple
             p_reserve_cons_up = filter(x ->x[1] == "res_up" && x[3:end] == tup, res_pot_cons_tuple)
             p_reserve_prod_up = filter(x ->x[1] == "res_up" && x[3:end] == tup, res_pot_prod_tuple)
             p_reserve_cons_down = filter(x ->x[1] == "res_down" && x[3:end] == tup, res_pot_cons_tuple)
             p_reserve_prod_down = filter(x ->x[1] == "res_down" && x[3:end] == tup, res_pot_prod_tuple)
 
-            if !isempty(p_reserve_cons_up)
-                add_to_expression!(e_lim_res_min[tup], -sum(v_reserve[p_reserve_cons_up]))
-            end
-            if !isempty(p_reserve_prod_up)
-                add_to_expression!(e_lim_res_max[tup], sum(v_reserve[p_reserve_prod_up]))
-            end
-            if !isempty(p_reserve_cons_down)
-                add_to_expression!(e_lim_res_max[tup], sum(v_reserve[p_reserve_cons_down]))
-            end
-            if !isempty(p_reserve_prod_down)
-                add_to_expression!(e_lim_res_min[tup], -sum(v_reserve[p_reserve_prod_down]))
+            for s in scenarios(input_data), t in input_data.temporals.t
+                index_tup = (tup[1], tup[2], tup[3], s, t)
+                p_r_c_up = map(x -> (x[1], x[2], x[3], x[4], x[5], s, t), p_reserve_cons_up)
+                p_r_p_up = map(x -> (x[1], x[2], x[3], x[4], x[5], s, t), p_reserve_prod_up)
+                p_r_c_down = map(x -> (x[1], x[2], x[3], x[4], x[5], s, t), p_reserve_cons_down)
+                p_r_p_down = map(x -> (x[1], x[2], x[3], x[4], x[5], s, t), p_reserve_prod_down)
+                if !isempty(p_reserve_cons_up)
+                    add_to_expression!(e_lim_res_min[index_tup], -sum(v_reserve[p_r_c_up]))
+                end
+                if !isempty(p_reserve_prod_up)
+                    add_to_expression!(e_lim_res_max[index_tup], sum(v_reserve[p_r_p_up]))
+                end
+                if !isempty(p_reserve_cons_down)
+                    add_to_expression!(e_lim_res_max[index_tup], sum(v_reserve[p_r_c_down]))
+                end
+                if !isempty(p_reserve_prod_down)
+                    add_to_expression!(e_lim_res_min[index_tup], -sum(v_reserve[p_r_p_down]))
+                end
             end
         end
 
@@ -565,13 +593,20 @@ function setup_reserve_realisation(model_contents::OrderedDict, input_data::Pred
             end
         end
 
-        # create process-wise reserve_realisation expression "v_res_real_flow"
+
         rpt = unique(map(x -> (x[3:end]), res_process_tuples))
-        for p_tup in process_tuples
-            v_res_real_flow[p_tup] = AffExpr(0.0)
-            res_p_tup = unique(filter(y -> y == p_tup, rpt))
-            if !isempty(res_p_tup)
-                add_to_expression!(v_res_real_flow[p_tup], v_flow[p_tup] - v_load[p_tup])
+        rpt_begin = unique(map(x -> (x[3:5]), res_process_tuples))
+        reduced_process_tuples = unique(map(x -> (x[1:3]), process_tuples))   
+
+        # create process-wise reserve_realisation expression "v_res_real_flow"
+        for p_tup in reduced_process_tuples
+            res_p_tup = unique(filter(x -> x == p_tup, rpt_begin))
+            for s in scenarios(input_data), t in input_data.temporals.t
+                p_tup_with_s_and_t = (p_tup[1], p_tup[2], p_tup[3], s, t)
+                v_res_real_flow[p_tup_with_s_and_t] = AffExpr(0.0)
+                if !isempty(res_p_tup)
+                    add_to_expression!(v_res_real_flow[p_tup_with_s_and_t], v_flow[p_tup_with_s_and_t] - v_load[p_tup_with_s_and_t])
+                end
             end
         end
 
@@ -608,19 +643,23 @@ function setup_reserve_realisation(model_contents::OrderedDict, input_data::Pred
         # ensure that the realisation of reserve rp is equal to the realisation of processes in the processgroup of the reserve
         # Ensures that the realisation is done by the "correct" processes. 
         # reserve-specific realisation = sumof process_realisation for p in reserve processgroup. 
+        
         for res in unique(map(x -> x[1], res_market_tuples))
             res_ng = input_data.markets[res].node
             res_ns = unique(map(x -> x[3], filter(y -> y[2] == res_ng, groups)))
             res_ps = unique(map(y -> y[5], filter(x -> x[3] == res, res_groups)))
-            for s in scenarios(input_data), t in input_data.temporals.t
-                v_res_real_flow_tot[(res_ng, s, t)] = AffExpr(0.0)
-                for res_p in res_ps
-                    prod_tups = unique(map(y -> (y[3:end]), filter(x -> x[3] == res_p && (x[5] in res_ns) && x[6] == s && x[7] == t, res_process_tuples)))
-                    for pt in prod_tups
+
+            for res_p in res_ps
+                prod_tups = filter(x -> x[1] == res_p && x[3] in res_ns, rpt_begin)
+                cons_tups = filter(x -> x[1] == res_p && x[2] in res_ns, rpt_begin)
+                for s in scenarios(input_data), t in input_data.temporals.t
+                    v_res_real_flow_tot[(res_ng, s, t)] = AffExpr(0.0)
+                    prod_tups_with_s_and_t = map(x -> (x[1], x[2], x[3], s, t), prod_tups)
+                    cons_tups_with_s_and_t = map(x -> (x[1], x[2], x[3], s, t), cons_tups)
+                    for pt in prod_tups_with_s_and_t
                         add_to_expression!(v_res_real_flow_tot[(res_ng, s, t)], v_res_real_flow[pt])
                     end
-                    cons_tups = unique(map(y -> (y[3:end]), filter(x -> x[3] == res_p && (x[4] in res_ns) && x[6] == s && x[7] == t, res_process_tuples)))
-                    for ct in cons_tups
+                    for ct in cons_tups_with_s_and_t
                         add_to_expression!(v_res_real_flow_tot[(res_ng, s, t)], -1.0 * v_res_real_flow[ct])
                     end
                 end
@@ -770,7 +809,6 @@ Setup process ramp constraints, based on ramp limits defined in input data and p
 function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
     ramp_tuple = process_topology_ramp_times_tuples(input_data)
-    process_tuple = process_topology_tuples(input_data)
     v_flow = model_contents["variable"]["v_flow"]
 
     processes = input_data.processes
@@ -795,51 +833,62 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
         v_stop = model_contents["variable"]["v_stop"]
     end
 
+    previous_ts = get_previous_t(input_data.temporals)
     previous_proc_tups = previous_process_topology_tuples(input_data)
+    reduced_ramp_tuple = unique(map(x -> (x[1:3]), ramp_tuple))
+    reduced_res_pot_tuple = unique(map(x -> (x[1:5]), res_potential_tuple))
+    reduced_res_proc_tuple = unique(map(x -> (x[1:3]), res_proc_tuples))
+    
 
-    for tup in ramp_tuple
-        if processes[tup[1]].conversion == 1 && !processes[tup[1]].is_cf
-            ramp_expr_up[tup] = AffExpr(0.0)
-            ramp_expr_down[tup] = AffExpr(0.0)
-
-            topo = filter(x -> x.source == tup[2] && x.sink == tup[3], processes[tup[1]].topos)[1]
-            ramp_up_cap = topo.ramp_up * topo.capacity * temporals(tup[5])
-            ramp_dw_cap = topo.ramp_down * topo.capacity * temporals(tup[5])
-            start_cap = max(0,processes[tup[1]].load_min-topo.ramp_up)*topo.capacity
-            stop_cap = max(0,processes[tup[1]].load_min-topo.ramp_down)*topo.capacity
-
-            # add ramp rate limit
-            add_to_expression!(ramp_expr_up[tup], ramp_up_cap) 
-            add_to_expression!(ramp_expr_down[tup], - ramp_dw_cap)
-
-            # if online process
-            if processes[tup[1]].is_online
-                add_to_expression!(ramp_expr_up[tup], start_cap * v_start[(tup[1], tup[4], tup[5])]) 
-                add_to_expression!(ramp_expr_down[tup], - stop_cap * v_stop[(tup[1], tup[4], tup[5])])
-            end
-
+    for red_tup in reduced_ramp_tuple
+        if processes[red_tup[1]].conversion == 1 && !processes[red_tup[1]].is_cf
+            topo = filter(x -> x.source == red_tup[2] && x.sink == red_tup[3], processes[red_tup[1]].topos)[1]
             # if reserve process
-            if processes[tup[1]].is_res && input_data.contains_reserves && tup in res_proc_tuples
-                ramp_expr_res_up[tup] = AffExpr(0.0)
-                ramp_expr_res_down[tup] = AffExpr(0.0)
+            if processes[red_tup[1]].is_res && input_data.contains_reserves && red_tup in reduced_res_proc_tuple
+                res_tup_up = filter(x->x[1]=="res_up" && x[3:end]==red_tup, reduced_res_pot_tuple)
+                res_tup_down = filter(x->x[1]=="res_down" && x[3:end]==red_tup, reduced_res_pot_tuple)
+            end
+            for s in scenarios(input_data), t in input_data.temporals.t
+                if !(t == input_data.temporals.t[1] )
+                    tup = (red_tup[1], red_tup[2], red_tup[3], s, t)
+                    ramp_expr_up[tup] = AffExpr(0.0)
+                    ramp_expr_down[tup] = AffExpr(0.0)
+                    ramp_up_cap = topo.ramp_up * topo.capacity * temporals(tup[5])
+                    ramp_dw_cap = topo.ramp_down * topo.capacity * temporals(tup[5])
 
-                # get reserve production for the previous timestep from tup
-                res_ramp_tup = previous_proc_tups[tup]
-                res_tup_up = filter(x->x[1]=="res_up" && x[3:end]==res_ramp_tup,res_potential_tuple)
-                res_tup_down = filter(x->x[1]=="res_down" && x[3:end]==res_ramp_tup,res_potential_tuple)
-                if tup[2] in res_nodes_tuple
-                    for rtd in res_tup_down
-                        add_to_expression!(ramp_expr_res_up[tup], -1 * sum(reserve_types[rtd[2]] .* v_reserve[rtd]))
+                    # add ramp rate limit
+                    add_to_expression!(ramp_expr_up[tup], ramp_up_cap) 
+                    add_to_expression!(ramp_expr_down[tup], - ramp_dw_cap)
+
+                    # if online process
+                    if processes[tup[1]].is_online
+                        start_cap = max(0,processes[tup[1]].load_min-topo.ramp_up)*topo.capacity
+                        stop_cap = max(0,processes[tup[1]].load_min-topo.ramp_down)*topo.capacity
+                        add_to_expression!(ramp_expr_up[tup], start_cap * v_start[(tup[1], tup[4], tup[5])]) 
+                        add_to_expression!(ramp_expr_down[tup], - stop_cap * v_stop[(tup[1], tup[4], tup[5])])
                     end
-                    for rtu in res_tup_up
-                        add_to_expression!(ramp_expr_res_down[tup], sum(reserve_types[rtu[2]] .* v_reserve[rtu]))
-                    end
-                elseif tup[3] in res_nodes_tuple
-                    for rtu in res_tup_up
-                        add_to_expression!(ramp_expr_res_up[tup], -1 * sum(reserve_types[rtu[2]] .* v_reserve[rtu])) 
-                    end
-                    for rtd in res_tup_down
-                        add_to_expression!(ramp_expr_res_down[tup], sum(reserve_types[rtd[2]] .* v_reserve[rtd])) 
+
+                    # if reserve process
+                    if processes[tup[1]].is_res && input_data.contains_reserves && tup in res_proc_tuples
+                        ramp_expr_res_up[tup] = AffExpr(0.0)
+                        ramp_expr_res_down[tup] = AffExpr(0.0)
+                        res_tup_up_with_s_and_t = map(x -> (x[1], x[2], x[3], x[4], x[5], s, previous_ts[t]), res_tup_up)
+                        res_tup_down_with_s_and_t = map(x -> (x[1], x[2], x[3], x[4], x[5], s, previous_ts[t]), res_tup_down)
+                        if tup[2] in res_nodes_tuple
+                            for rtd in res_tup_down_with_s_and_t
+                                add_to_expression!(ramp_expr_res_up[tup], -1 * sum(reserve_types[rtd[2]] .* v_reserve[rtd]))
+                            end
+                            for rtu in res_tup_up_with_s_and_t
+                                add_to_expression!(ramp_expr_res_down[tup], sum(reserve_types[rtu[2]] .* v_reserve[rtu]))
+                            end
+                        elseif tup[3] in res_nodes_tuple
+                            for rtu in res_tup_up_with_s_and_t
+                                add_to_expression!(ramp_expr_res_up[tup], -1 * sum(reserve_types[rtu[2]] .* v_reserve[rtu])) 
+                            end
+                            for rtd in res_tup_down_with_s_and_t
+                                add_to_expression!(ramp_expr_res_down[tup], sum(reserve_types[rtd[2]] .* v_reserve[rtd])) 
+                            end
+                        end
                     end
                 end
             end
@@ -1090,7 +1139,6 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
     v_set_up = model_contents["variable"]["v_set_up"]
     v_set_down = model_contents["variable"]["v_set_down"]
 
-    scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
     gen_constraints = input_data.gen_constraints
 
@@ -1099,61 +1147,74 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
     setpoint_expr_lhs = OrderedDict()
     setpoint_expr_rhs = OrderedDict()
 
+    reduced_process_tuple = unique(map(x -> (x[1:3]), process_tuple))
+    reduced_online_tuple = unique(map(x -> (x[1]), online_tuple))
+    reduced_state_tuple = unique(map(x -> (x[1]), state_tuple))
+
     for c in keys(gen_constraints)
         # Get timesteps for where there is data defined. (Assuming all scenarios are equal)
-        gen_const_ts = map(x -> x[1], gen_constraints[c].factors[1].data(scenarios[1]).series)
+        gen_const_ts = map(x -> x[1], gen_constraints[c].factors[1].data(scenarios(input_data)[1]).series)
         # Get timesteps which are found in both temporals and gen constraints 
         relevant_ts = filter(t -> t in gen_const_ts, temporals.t)
         # use these ts to create gen_consts..
-        const_expr[c] = OrderedDict((s,t) => AffExpr(0.0) for s in scenarios, t in relevant_ts)
+        const_expr[c] = OrderedDict((s,t) => AffExpr(0.0) for s in scenarios(input_data), t in relevant_ts)
         facs = gen_constraints[c].factors
         consta = gen_constraints[c].constant
         eq_dir = gen_constraints[c].type
         if !gen_constraints[c].is_setpoint
-            for s in scenarios, t in relevant_ts
+            for s in scenarios(input_data), t in relevant_ts
                 add_to_expression!(const_expr[c][(s,t)], consta(s, t))
-                for f in facs
-                    if f.var_type == "flow"
-                        p_flow = f.var_tuple
-                        if input_data.processes[p_flow[1]].conversion == 1
-                            tup = filter(x->x[1]==p_flow[1] && (x[2]==p_flow[2] || x[3]==p_flow[2]) && x[4]==s && x[5]==t,process_tuple)[1]
-                        else
-                            tup = filter(x->x[1]==p_flow[1] && (x[2]==p_flow[1] || x[3]==p_flow[2]) && x[4]==s && x[5]==t,process_tuple)[1]
-                        end
-                        fac_data = f.data(s, t)
-                        add_to_expression!(const_expr[c][(s,t)],fac_data,v_flow[tup])
-                    elseif f.var_type == "online"
-                        p = f.var_tuple[1]
-                        if input_data.processes[p].is_online
-                            tup = filter(x -> x[1] == p && x[2] == s && x[3] == t, online_tuple)[1]
-                        else
-                            msg = "Factor " * string((p, f.var_tuple)) * " of gen_constraint " * string(c) * " has no online functionality!" 
-                            throw(ErrorException(msg))
-                        end
-                        fac_data = f.data(s, t)
-                        add_to_expression!(const_expr[c][(s,t)],fac_data,v_online[tup])
-                    elseif f.var_type == "state"
-                        n = f.var_tuple[1]
-                        if input_data.nodes[n].is_state
-                            tup = filter(x -> x[1] == n && x[2] == s && x[3] == t, state_tuple)[1]
-                        else
-                            msg = "Factor " * string((n, f.var_tuple)) * " of gen_constraint " * string(c) * " has no state functionality!" 
-                            throw(ErrorException(msg))
-                        end
-                        fac_data = f.data(s, t)
-                        add_to_expression!(const_expr[c][(s,t)],fac_data,v_state[tup])
+            end
+            for f in facs
+                if f.var_type == "flow"
+                    p_flow = f.var_tuple
+                    if input_data.processes[p_flow[1]].conversion == 1
+                        tup = filter(x -> x[1] == p_flow[1] && (x[2] == p_flow[2] || x[3] == p_flow[2]), reduced_process_tuple)[1]
+                    else
+                        tup = filter(x -> x[1] == p_flow[1] && (x[2] == p_flow[1] || x[3] == p_flow[2]), reduced_process_tuple)[1]
                     end
+                    for s in scenarios(input_data), t in relevant_ts
+                        p_tup_with_s_and_t = (tup[1], tup[2], tup[3], s, t)
+                        fac_data = f.data(s, t)
+                        add_to_expression!(const_expr[c][(s,t)],fac_data,v_flow[p_tup_with_s_and_t])
+                    end
+                elseif f.var_type == "online"
+                    p = f.var_tuple[1]
+                    if input_data.processes[p].is_online
+                        tup = unique(filter(x -> x == p, reduced_online_tuple))[1]
+                    else
+                        msg = "Factor " * string((p, f.var_tuple)) * " of gen_constraint " * string(c) * " has no online functionality!" 
+                        throw(ErrorException(msg))
+                    end
+                    for s in scenarios(input_data), t in relevant_ts
+                        online_tup_with_s_and_t = (p, s, t)
+                        fac_data = f.data(s, t)
+                        add_to_expression!(const_expr[c][(s,t)],fac_data,v_online[online_tup_with_s_and_t])
+                    end
+                elseif f.var_type == "state"
+                    n = f.var_tuple[1]
+                    if input_data.nodes[n].is_state
+                        tup = filter(x -> x == n, reduced_state_tuple)[1]
+                    else
+                        msg = "Factor " * string((n, f.var_tuple)) * " of gen_constraint " * string(c) * " has no state functionality!" 
+                        throw(ErrorException(msg))
+                    end
+                    for s in scenarios(input_data), t in relevant_ts
+                        n_tup_with_s_and_t = (n, s, t)
+                        fac_data = f.data(s, t)
+                        add_to_expression!(const_expr[c][(s,t)],fac_data,v_state[n_tup_with_s_and_t])
+                    end       
                 end
-            end 
+            end
             if eq_dir == "eq"
-                const_dict[c] = @constraint(model,[s in scenarios,t in relevant_ts],const_expr[c][(s,t)]==0.0)
+                const_dict[c] = @constraint(model,[s in scenarios(input_data),t in relevant_ts],const_expr[c][(s,t)]==0.0)
             elseif eq_dir == "gt"
-                const_dict[c] = @constraint(model,[s in scenarios,t in relevant_ts],const_expr[c][(s,t)]>=0.0)
+                const_dict[c] = @constraint(model,[s in scenarios(input_data),t in relevant_ts],const_expr[c][(s,t)]>=0.0)
             else
-                const_dict[c] = @constraint(model,[s in scenarios,t in relevant_ts],const_expr[c][(s,t)]<=0.0)
+                const_dict[c] = @constraint(model,[s in scenarios(input_data),t in relevant_ts],const_expr[c][(s,t)]<=0.0)
             end
         else
-            for s in scenarios, t in relevant_ts
+            for s in scenarios(input_data), t in relevant_ts
                 if !((c, s, t) in collect(keys(setpoint_expr_lhs)))
                     setpoint_expr_lhs[(c, s, t)] = AffExpr(0.0)
                     setpoint_expr_rhs[(c, s, t)] = AffExpr(0.0)
