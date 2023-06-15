@@ -80,7 +80,9 @@ module Predicer
     block_tuples,
     create_group_tuples,
     node_diffusion_tuple,
-    diffusion_nodes
+    diffusion_nodes,
+    previous_balance_node_tuples,
+    previous_process_topology_tuples
 
 
     export create_variables,
