@@ -869,7 +869,7 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
                     end
 
                     # if reserve process
-                    if processes[tup[1]].is_res && input_data.contains_reserves && tup in res_proc_tuples
+                    if processes[tup[1]].is_res && input_data.contains_reserves && tup in reduced_res_proc_tuple
                         ramp_expr_res_up[tup] = AffExpr(0.0)
                         ramp_expr_res_down[tup] = AffExpr(0.0)
                         res_tup_up_with_s_and_t = map(x -> (x[1], x[2], x[3], x[4], x[5], s, previous_ts[t]), res_tup_up)
