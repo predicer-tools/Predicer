@@ -826,6 +826,8 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
         reserve_types = input_data.reserve_type
         ramp_expr_res_up = model_contents["expression"]["ramp_expr_res_up"] = OrderedDict()
         ramp_expr_res_down = model_contents["expression"]["ramp_expr_res_down"] = OrderedDict()
+        reduced_res_pot_tuple = unique(map(x -> (x[1:5]), res_potential_tuple))
+        reduced_res_proc_tuple = unique(map(x -> (x[1:3]), res_proc_tuples))
     end
 
     if input_data.contains_online
@@ -836,9 +838,6 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
     previous_ts = get_previous_t(input_data.temporals)
     previous_proc_tups = previous_process_topology_tuples(input_data)
     reduced_ramp_tuple = unique(map(x -> (x[1:3]), ramp_tuple))
-    reduced_res_pot_tuple = unique(map(x -> (x[1:5]), res_potential_tuple))
-    reduced_res_proc_tuple = unique(map(x -> (x[1:3]), res_proc_tuples))
-    
 
     for red_tup in reduced_ramp_tuple
         if processes[red_tup[1]].conversion == 1 && !processes[red_tup[1]].is_cf
@@ -1130,9 +1129,11 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
     v_flow = model_contents["variable"]["v_flow"]
     if input_data.contains_online
         v_online = model_contents["variable"]["v_online"]    
+        reduced_online_tuple = unique(map(x -> (x[1]), online_tuple))
     end    
     if input_data.contains_states
         v_state = model_contents["variable"]["v_state"]
+        reduced_state_tuple = unique(map(x -> (x[1]), state_tuple))
     end
     
     v_setpoint = model_contents["variable"]["v_setpoint"]
@@ -1148,8 +1149,6 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
     setpoint_expr_rhs = OrderedDict()
 
     reduced_process_tuple = unique(map(x -> (x[1:3]), process_tuple))
-    reduced_online_tuple = unique(map(x -> (x[1]), online_tuple))
-    reduced_state_tuple = unique(map(x -> (x[1]), state_tuple))
 
     for c in keys(gen_constraints)
         # Get timesteps for where there is data defined. (Assuming all scenarios are equal)
