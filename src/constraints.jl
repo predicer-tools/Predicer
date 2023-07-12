@@ -85,11 +85,15 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
     end
 
     e_node_diff = model_contents["expression"]["e_node_diff"] = OrderedDict()
+    e_node_delay = model_contents["expression"]["e_node_delay"] = OrderedDict()
+    e_node_history = model_contents["expression"]["e_node_history"] = OrderedDict()
     e_prod = model_contents["expression"]["e_prod"] = OrderedDict()
     e_cons = model_contents["expression"]["e_cons"] = OrderedDict()
     e_state = model_contents["expression"]["e_state"] = OrderedDict()
     for tup in node_balance_tuple
         e_node_diff[tup] = AffExpr(0.0)
+        e_node_delay[tup] = AffExpr(0.0)
+        e_node_history[tup] = AffExpr(0.0)
         e_prod[tup] = AffExpr(0.0)
         e_cons[tup] = AffExpr(0.0)
         e_state[tup] = AffExpr(0.0)
@@ -130,9 +134,28 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
         end
     end
 
+    # setup delay expression
+    if input_data.contains_delay
+        v_node_delay = model_contents["variable"]["v_node_delay"]
+        delay_tups = node_delay_tuple(input_data)
+        for tup in node_balance_tuple
+            cons_delays = filter(x -> x[1] == tup[1] && x[3] == tup[2] && x[4] == tup[3], delay_tups) # Get delay flows "out" of node
+            prod_delays = filter(x -> x[2] == tup[1] && x[3] == tup[2] && x[5] == tup[3], delay_tups) # Get delay flows "in" to node
+            add_to_expression!(e_node_delay[tup], -1.0 .* sum(v_node_delay[cons_delays])) # consuming flows as negative
+            add_to_expression!(e_node_delay[tup], sum(v_node_delay[prod_delays])) # producing flows as positive
+        end
+    end
+
+    # setup node history expression
+    for n in collect(keys(input_data.node_histories))
+        for ts_data in input_data.node_histories[n].steps.ts_data
+            for ts in ts_data.series
+                add_to_expression!(e_node_history[(n, ts_data.scenario, ts[1])], ts[2])
+            end
+        end
+    end
 
 
-   
     # Balance constraints
     # gather data in dicts, e_prod, etc, now point to a Dict()
     e_prod = model_contents["expression"]["e_prod"] = OrderedDict()
@@ -162,6 +185,8 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
             add_to_expression!(e_cons[tu], inflow_expr[tu])
             add_to_expression!(e_prod[tu], vq_state_up[tu])
             add_to_expression!(e_prod[tu], e_node_diff[tu])
+            add_to_expression!(e_prod[tu], e_node_delay[tu])
+            add_to_expression!(e_prod[tu], e_node_history[tu])
             if input_data.contains_reserves && tu in node_res
                 add_to_expression!(e_cons[tu], -v_res_real[tu])
             end
