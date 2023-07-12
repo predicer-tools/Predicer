@@ -6,7 +6,7 @@ using TimeZones
 import Predicer
 
 function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[])
-    sheetnames_system = ["nodes", "processes", "groups", "process_topology", "node_diffusion", "inflow_blocks", "markets", "reserve_realisation", "scenarios","efficiencies", "reserve_type","risk"]
+    sheetnames_system = ["nodes", "processes", "groups", "process_topology", "node_diffusion", "node_history", "node_delay", "inflow_blocks", "markets", "reserve_realisation", "scenarios","efficiencies", "reserve_type","risk"]
     sheetnames_timeseries = ["cf", "inflow", "market_prices", "price","eff_ts"]
 
     system_data = OrderedDict()
@@ -16,6 +16,8 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
     processes = OrderedDict{String, Predicer.Process}()
     nodes = OrderedDict{String, Predicer.Node}()
     node_diffusion_tuples = []
+    node_delay_tuples = []
+    node_history = OrderedDict{String, NodeHistory}()
     groups = OrderedDict{String, Predicer.Group}()
 
     markets = OrderedDict{String, Predicer.Market}()
@@ -77,6 +79,8 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
         end
     end
 
+
+
     for i in 1:nrow(system_data["nodes"])
         n = system_data["nodes"][i, :]
         nodes[n.node] = Predicer.Node(n.node)
@@ -117,6 +121,12 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
         row = system_data["node_diffusion"][i, :]
         tup = (row.node1, row.node2, row.diff_coeff)
         push!(node_diffusion_tuples, tup)
+    end
+
+    for i in 1:nrow(system_data["node_delay"])
+        row = system_data["node_delay"][i, :]
+        tup = (row.node1, row.node2, row.delay_t, row.min_flow, row.max_flow)
+        push!(node_delay_tuples, tup)
     end
 
     for i in 1:nrow(system_data["processes"])
@@ -243,6 +253,76 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
         end
         for j in 1:length(processes[p].eff_fun)
             push!(processes[p].eff_ops, "op"*string(j))
+        end
+    end
+
+    # node history
+    if length(names(system_data["node_history"])) > 1
+        ns = names(system_data["node_history"])[2:end]
+        ns_with_all = filter(x -> occursin("ALL", x) || !occursin("ALL", x) || !occursin("ALL", x), ns)
+        ns_without_all = filter(x -> !occursin("ALL", x) || !occursin("ALL", x) || !occursin("ALL", x), ns)
+        unique_nodenames_without_all = unique(map(x -> x[1], map(n -> map(x -> strip(x), split(n, ",")), ns_without_all)))
+        unique_nodenames_with_all = unique(map(x -> x[1], map(n -> map(x -> strip(x), split(n, ",")), ns_with_all)))
+        unique_scenarios_without_all = unique(map(x -> x[end], map(n -> map(x -> strip(x), split(n, ",")), ns_without_all)))
+
+        for n in unique_nodenames_with_all
+            node_history[n] = NodeHistory(n)
+            cols = filter(x -> n == strip(split(x, ",")[1]), ns)
+
+            if length(cols) != 2
+                return Error("Invalid amount of columns for node: ", n, " and scenario: ", s, "!")
+            else
+                ts = []
+                vals = []
+                for c in cols
+                    if length(split(c, ",")) == 3 # this column has the timesteps. 
+                        raw_ts = filter(x -> typeof(x) != Missing, system_data["node_history"][!, c])
+                        ts = map(t-> string(ZonedDateTime(t, tz"UTC")), raw_ts)
+                    elseif length(split(c, ",")) == 2 # this columnn has the values. 
+                        vals = filter(x -> typeof(x) != Missing, system_data["node_history"][!, c])
+                    end
+                end
+                if isempty(ts) || isempty(vals) || length(ts) != length(vals)
+                    return Error("Invalid node history column lengths for node: ", n, " and scenario: ", s, ".")
+                else
+                    for s in collect(keys(scenarios))
+                        t_series = TimeSeries(s)
+                        for i in 1:length(ts)
+                            push!(t_series.series, (ts[i], vals[i]))
+                        end
+                        push!(node_history[n].steps.ts_data, t_series)
+                    end
+                end
+            end
+        end
+        for n in unique_nodenames_without_all
+            node_history[n] = NodeHistory(n)
+            for s in unique_scenarios_without_all
+                cols = filter(x -> n == strip(split(x, ",")[1]) &&  s == strip(split(x, ",")[end]), ns)
+                if length(cols) != 2
+                    return Error("Invalid amount of columns for node: ", n, " and scenario: ", s, "!")
+                else
+                    ts = []
+                    vals = []
+                    for c in cols
+                        if length(split(c, ",")) == 3 # this column has the timesteps. 
+                            raw_ts = filter(x -> typeof(x) != Missing, system_data["node_history"][!, c])
+                            ts = map(t-> string(ZonedDateTime(t, tz"UTC")), raw_ts)
+                        elseif length(split(c, ",")) == 2 # this columnn has the values. 
+                            vals = filter(x -> typeof(x) != Missing, system_data["node_history"][!, c])
+                        end
+                    end
+                    if isempty(ts) || isempty(vals) || length(ts) != length(vals)
+                        return Error("Invalid node history column lengths for node: ", n, " and scenario: ", s, ".")
+                    else
+                        t_series = TimeSeries(s)
+                        for i in 1:length(ts)
+                            push!(t_series.series, (ts[i], vals[i]))
+                        end
+                        push!(node_history[n].steps.ts_data, t_series)
+                    end
+                end
+            end
         end
     end
 
@@ -426,6 +506,7 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
     contains_piecewise_eff = (false in map(p -> isempty(p.eff_ops), collect(values(processes))))
     contains_risk = (risk["beta"] > 0)
     contains_diffusion = !isempty(node_diffusion_tuples)
+    contains_delay = !isempty(node_delay_tuples)
 
-    return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion,  processes, nodes, node_diffusion_tuples, markets, groups, scenarios, reserve_type, risk, inflow_blocks, gen_constraints)
+    return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, processes, nodes, node_diffusion_tuples, node_delay_tuples, node_history, markets, groups, scenarios, reserve_type, risk, inflow_blocks, gen_constraints)
 end
