@@ -21,6 +21,7 @@ function create_variables(model_contents::OrderedDict, input_data::InputData)
     create_v_reserve_online(model_contents,input_data)
     create_v_setpoint(model_contents, input_data)
     create_v_block(model_contents, input_data)
+    create_v_node_delay(model_contents, input_data)
 end
 
 
@@ -242,4 +243,17 @@ function create_v_block(model_contents::OrderedDict, input_data::InputData)
     var_tups = unique(map(x -> (x[1], x[2], x[3]), block_tuples))
     v_block = @variable(model, v_block[tup in var_tups], Bin) 
     model_contents["variable"]["v_block"] = v_block
+end
+
+
+"""
+    create_v_node_delay(model_contents::OrderedDict, input_data::InputData)
+
+Function to create variables needed for delay flow between nodes. 
+"""
+function create_v_node_delay(model_contents::OrderedDict, input_data::InputData)
+    model = model_contents["model"]
+    delay_tups = node_delay_tuple(input_data)
+    v_node_delay = @variable(model, v_node_delay[tup in delay_tups] >= 0)
+    model_contents["variable"]["v_node_delay"] = v_node_delay
 end
