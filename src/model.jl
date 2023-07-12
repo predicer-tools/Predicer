@@ -220,6 +220,20 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 df[!, colname] = diffs
             end
         end
+    elseif type == "v_node_delay"
+        v_node_delays = model_contents["variable"]["v_node_delay"]
+        if isempty(name)
+            conn_names = unique(map(x -> (x[1], x[2]), node_delay_tuple(input_data)))
+        else
+            conn_names = unique(filter(y -> name in y, map(x -> (x[1], x[2]), node_delay_tuple(input_data))))
+        end
+        for c in conn_names, s in scenarios
+            d_conn = filter(x -> x[1] == c[1] && x[2] == c[2] && x[3] == s, node_delay_tuple(input_data))
+            colname = c[1] * "_" * c[2] * "_" * s
+            if !isempty(d_conn)
+                df[!, colname] = value.(v_node_delays[d_conn].data)
+            end
+        end
     else
         println("ERROR: incorrect type")
     end
