@@ -1,6 +1,7 @@
 using DataStructures
 using TimeZones
 
+
 """
     create_tuples(input_data::InputData)
 
@@ -43,6 +44,9 @@ function create_tuples(input_data::InputData) # unused, should be debricated
     tuplebook["group_tuples"] = create_group_tuples(input_data)
     tuplebook["node_diffusion_tuple"] = node_diffusion_tuple(input_data)
     tuplebook["diffusion_nodes"] = diffusion_nodes(input_data)
+    tuplebook["node_delay_tuple"] = node_delay_tuple(input_data)
+
+    
     return tuplebook
 end
 
@@ -820,6 +824,36 @@ function node_diffusion_tuple(input_data::InputData)
     end
     return node_diffusion_tup
 end
+
+
+"""
+    node_delay_tuple(input_data::InputData) 
+
+Function to create tuples for node delay functionality. Form (node1, node2, scenario, t_at_node1, t_at_node2)
+"""
+function node_delay_tuple(input_data::InputData)
+    node_delay_tup = NTuple{5, String}[]
+    if input_data.contains_delay && !input_data.temporals.is_variable_dt # ensure the dt length is constant. Need to change in the future if it isn't...
+        for tup in input_data.node_delay
+            n1 = tup[1]
+            n2 = tup[2]
+            delay = tup[3]
+            l_t = length(input_data.temporals.t)
+            for (i, t) in enumerate(input_data.temporals.t[begin:end])
+                if (l_t - i) <= delay
+                    t2 = ZonedDateTime(t, input_data.temporals.ts_format) +  TimeZones.Hour(delay) * input_data.temporals.dtf
+                else
+                    t2 = input_data.temporals.t[i+delay]
+                end
+                for s in scenarios(input_data)
+                    push!(node_delay_tup, (n1, n2, s, string(t), string(t2)))
+                end
+            end
+        end
+    end
+    return node_delay_tup
+end
+
 
 """
     diffusion_nodes(input_data::InputData)
