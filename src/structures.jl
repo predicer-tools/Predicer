@@ -1033,6 +1033,28 @@ struct InflowBlock
     end
 end
 
+"""
+    struct NodeHistory
+        node::AbstractString
+        steps::Vector{Tuple{String, Float32}}
+    end
+
+Struct for defining values for nodes for timesteps before the balance is calculated. For example if there is a delay of 2 between nodes n1 and n2, 
+the balance for n2 at the timesteps t1 and t2 (?) are defined using a NodeHistory struct.
+
+# Fields
+- `node::AbstractString`: Name of the node.
+- `steps::OrderedDict{String, Float32}`: An OrderedDict of timestep-value pairs. 
+"""
+struct NodeHistory
+    node::AbstractString
+    steps::TimeSeriesData
+    function NodeHistory(node::AbstractString)
+        return new(node, TimeSeriesData())
+    end
+end
+
+
 
 
 """
@@ -1044,9 +1066,12 @@ end
         contains_piecewise_eff::Bool
         contains_risk::Bool
         contains_diffusion::Bool
+        contains_delay::Bool
         processes::OrderedDict{String, Process}
         nodes::OrderedDict{String, Node}
         node_diffusion::Vector{Tuple{AbstractString, AbstractString, Number}}
+        node_delay::Vector{Tuple{AbstractString, AbstractString, Number, Number, Number}}
+        node_histories::OrderedDict{String, NodeHistory}
         markets::OrderedDict{String, Market}
         groups::OrderedDict{String, Group}
         scenarios::OrderedDict{String, Float64}
@@ -1065,9 +1090,12 @@ Struct containing the imported input data, based on which the Predicer is built.
 - `contains_piecewise_eff::Bool`: Boolean indicating whether the model (input_data) requires piecewise efficiency functionality structures. 
 - `contains_risk::Bool`: Boolean indicating whether the model (input_data) requires risk functionality structures. 
 - `contains_diffusion::Bool`: Boolean indicating whether the model (input_data) requires diffusion functionality structures. 
+- `contains_delay::Bool`: Boolean indicating whether the model (input_data) requires delay functionality structures. 
 - `processes::OrderedDict{String, Process}`: A dict containing the data relevant for processes.
 - `nodes::OrderedDict{String, Node}`: A dict containing the data relevant for nodes.
 - `node_diffusion::Vector{Tuple{AbstractString, AbstractString, Number}}`: Vector containing node diffusion connection details. 
+- `node_delay::Vector{Tuple{AbstractString, AbstractString, Number, Number, Number}}`: Vector containing connection details for node delay connections. 
+- `node_histories::OrderedDict{String, NodeHistory}`: OrderedDict containing node histories, used in delay functionalities. 
 - `markets::OrderedDict{String, Market}`: A dict containing the data relevant for markets.
 - `groups::OrderedDict{String, Group}`: A dict containing the data relevant for groups
 - `scenarios::OrderedDict{String, Float64}`:  A dict containing the data relevant for scenarios, with scenario name as key and probability as value.
@@ -1083,9 +1111,12 @@ mutable struct InputData
     contains_piecewise_eff::Bool
     contains_risk::Bool
     contains_diffusion::Bool
+    contains_delay::Bool
     processes::OrderedDict{String, Process}
     nodes::OrderedDict{String, Node}
     node_diffusion::Vector{Tuple{AbstractString, AbstractString, Number}}
+    node_delay::Vector{Tuple{AbstractString, AbstractString, Number, Number, Number}}
+    node_histories::OrderedDict{String, NodeHistory}
     markets::OrderedDict{String, Market}
     groups::OrderedDict{String, Group}
     scenarios::OrderedDict{String, Float64}
@@ -1093,8 +1124,8 @@ mutable struct InputData
     risk::OrderedDict{String, Float64}
     inflow_blocks::OrderedDict{String, InflowBlock}
     gen_constraints::OrderedDict{String, GenConstraint}
-    function InputData(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, processes, nodes, node_diffusion,  markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
-        return new(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, processes, nodes, node_diffusion, markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
+    function InputData(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, processes, nodes, node_diffusion, node_delay, node_histories,  markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
+        return new(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, processes, nodes, node_diffusion, node_delay, node_histories, markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
     end
 end
 
