@@ -28,7 +28,8 @@ module Predicer
     ConFactor,
     GenConstraint,
     InputData,
-    Temporals
+    Temporals,
+    NodeHistory
 
     export add_inflow,
     add_state, 
@@ -81,6 +82,7 @@ module Predicer
     create_group_tuples,
     node_diffusion_tuple,
     diffusion_nodes,
+    node_delay_tuple,
     previous_balance_node_tuples,
     previous_process_topology_tuples
 
@@ -91,7 +93,13 @@ module Predicer
     create_v_online,
     create_v_reserve,
     create_v_state,
-    create_v_flow_op
+    create_v_flow_op,
+    create_v_risk,
+    create_v_balance_market,
+    create_v_reserve_onlin,
+    create_v_setpoint,
+    create_v_block,
+    create_v_node_delay
 
     export create_constraints,
     setup_node_balance,
