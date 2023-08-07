@@ -15,6 +15,7 @@ function create_constraints(model_contents::OrderedDict, input_data::Predicer.In
     setup_node_balance(model_contents, input_data)
     setup_process_online_balance(model_contents, input_data)
     setup_process_balance(model_contents, input_data)
+    setup_node_delay_flow_limits(model_contents, input_data)
     setup_processes_limits(model_contents, input_data)
     setup_reserve_balances(model_contents, input_data)
     setup_ramp_constraints(model_contents, input_data)
@@ -428,6 +429,24 @@ function setup_process_balance(model_contents::OrderedDict, input_data::Predicer
     end
 end
 
+"""
+    setup_node_delay_flow_limits(model_contents::OrderedDict, input_data::Predicer.InputData)
+
+Setup upper and lower limits for a delay flow between two nodes. 
+"""
+function setup_node_delay_flow_limits(model_contents::OrderedDict, input_data::Predicer.InputData)
+    if input_data.contains_delay
+        v_node_delay = model_contents["variable"]["v_node_delay"]
+        node_delay_tups = node_delay_tuple(input_data)
+        for input in input_data.node_delay
+            tups = filter(x -> x[1] == input[1] && x[2] == input[2], node_delay_tups)
+            for tup in tups
+                JuMP.set_lower_bound(v_node_delay[tup], input[4])
+                JuMP.set_upper_bound(v_node_delay[tup], input[5])
+            end
+        end
+    end
+end
 
 """
     setup_processes_limits(model_contents::OrderedDict, input_data::Predicer.InputData)
