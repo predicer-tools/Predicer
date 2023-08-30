@@ -105,6 +105,7 @@ module Predicer
     setup_node_balance,
     setup_process_online_balance,
     setup_process_balance,
+    setup_node_delay_flow_limits,
     setup_processes_limits,
     setup_reserve_balances,
     setup_ramp_constraints,
