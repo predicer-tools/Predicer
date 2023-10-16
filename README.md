@@ -340,3 +340,15 @@ Krokhmal, P., Uryasev, S., and Palmquist, J., “Portfolio optimization with con
 
 <a id="2">[2]</a> 
 Fleten, S. E. and Kristoffersen, T. K., “Stochastic programming for optimizing bidding strategies of a Nordic hydropower producer,” Eur. J. Oper. Res., vol. 181, no. 2, pp. 916–928, 2007, doi: 10.1016/j.ejor.2006.08.023.
+
+
+&nbsp;
+<hr>
+<center>
+<table width=500px frame="none">
+<tr>
+<td valign="middle" width=100px>
+<img src=docs/images/eu-emblem-low-res.jpg alt="EU emblem" width=100%></td>
+<td valign="middle">This work has been partially supported by the EU project ELEXIA (2022-2026), which has received funding from the European Climate, Energy and Mobility programme under the European Union's HORIZON research and Innovation actions under grant N°101075656.</td> 
+</table>
+</center>
