@@ -1,3 +1,5 @@
+[![Documentation Status](https://vttresearch.github.io/Predicer/)](https://vttresearch.github.io/Predicer/)
+
 # Predicer
 ‘Predictive decider’ for actors making decisions over multiple stages
 
