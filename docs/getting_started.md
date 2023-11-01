@@ -1,3 +1,4 @@
+# Getting Started
 ## How to install
 
 - Clone the project to your computer using git.
