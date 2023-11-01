@@ -1,4 +1,5 @@
 Link to the documentation: [https://vttresearch.github.io/Predicer/](https://vttresearch.github.io/Predicer/)
+
 [![Documentation Status](https://vttresearch.github.io/Predicer/)](https://vttresearch.github.io/Predicer/)
 
 # Predicer
