@@ -1,0 +1,22 @@
+site_name: Predicer
+site_url: https://cris.vtt.fi/en/organisations/ba4206-design-and-operation-of-energy-systems
+logo: docs/images/predicer.png
+nav:
+  - About us: index.md
+  - Overview: intorduction.md
+theme: readthedocs
+
+plugins:
+  - mkdocs-video
+  - plotly
+markdown_extensions:
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+        - name: plotly
+          class: mkdocs-plotly
+          format: !!python/name:mkdocs_plotly_plugin.fences.fence_plotly
+extra:
+  homepage: https://cris.vtt.fi/en/organisations/ba4206-design-and-operation-of-energy-systems
