@@ -1,5 +1,12 @@
 documentation available
-<object data="https://img.shields.io/badge/docs-main-green?logo=github&link=https%3A%2F%2Fvttresearch.github.io%2FPredicer%2F" width="300" height="200"></object>
+<iframe 
+  width="660"
+  height="375"
+  src="https://img.shields.io/badge/docs-main-green?logo=github&link=https%3A%2F%2Fvttresearch.github.io%2FPredicer%2F"
+  frameborder="0"
+  allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+  allowfullscreen>
+</iframe>
 
 # Predicer
 ‘Predictive decider’ for actors making decisions over multiple stages
