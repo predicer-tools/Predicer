@@ -1,12 +1,5 @@
 documentation available
-<iframe 
-  width="660"
-  height="375"
-  src="https://img.shields.io/badge/docs-main-green?logo=github&link=https%3A%2F%2Fvttresearch.github.io%2FPredicer%2F"
-  frameborder="0"
-  allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
-  allowfullscreen>
-</iframe>
+[![Licence](https://img.shields.io/github/license/Ileriayo/markdown-badges?style=for-the-badge)](https://vttresearch.github.io/Predicer/)
 
 # Predicer
 ‘Predictive decider’ for actors making decisions over multiple stages
