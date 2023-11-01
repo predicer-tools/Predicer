@@ -5,6 +5,7 @@ nav:
   - About us: index.md
   - Overview: intorduction.md
   - Getting started: getting_started.md
+  - Building your model: input_data.md
 theme: readthedocs
 
 plugins:
