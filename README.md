@@ -1,6 +1,4 @@
-Link to the documentation: [https://vttresearch.github.io/Predicer/](https://vttresearch.github.io/Predicer/)
-
-<img alt="Static Badge" src="https://img.shields.io/badge/docs-main-green?logo=github&link=https%3A%2F%2Fvttresearch.github.io%2FPredicer%2F">
+<object alt="documentation" src="https://img.shields.io/badge/docs-main-green?logo=github&link=https%3A%2F%2Fvttresearch.github.io%2FPredicer%2F">
 
 
 # Predicer
