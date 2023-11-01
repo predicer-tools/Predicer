@@ -1,6 +1,7 @@
 Link to the documentation: [https://vttresearch.github.io/Predicer/](https://vttresearch.github.io/Predicer/)
 
-![documentations](https://img.shields.io/badge/docs-main-green?logo=github&link=https%3A%2F%2Fvttresearch.github.io%2FPredicer%2F)
+<img alt="Static Badge" src="https://img.shields.io/badge/docs-main-green?logo=github&link=https%3A%2F%2Fvttresearch.github.io%2FPredicer%2F">
+
 
 # Predicer
 ‘Predictive decider’ for actors making decisions over multiple stages
