@@ -6,6 +6,7 @@ nav:
   - Overview: intorduction.md
   - Getting started: getting_started.md
   - Building your model: input_data.md
+  - References: references.md
 theme: readthedocs
 
 plugins:
