@@ -74,7 +74,7 @@ The constraint to define the operation of the *ngchp* process is setup in the *c
 
 The reserve products ***res_up*** and ***res_down*** are sold in the *elc* node. The processes *ngchp* and *heatpump* are used to offer reserve capacity. 
 
-![example_model](docs/images/example_model.PNG)
+![example_model](images/example_model.PNG)
 Basic structure of the example model.
 
 | name     | operator | is_setpoint | penalty |
