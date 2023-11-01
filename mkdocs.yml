@@ -4,6 +4,7 @@ logo: docs/images/predicer.png
 nav:
   - About us: index.md
   - Overview: intorduction.md
+  - Getting started: getting_started.md
 theme: readthedocs
 
 plugins:
