@@ -1,4 +1,4 @@
-[![docmuentation](https://img.shields.io/badge/docs-main-green?logo=github&link=https%3A%2F%2Fpredicer-tools.github.io%2FPredicer%2F)]([https://predicer-tools.github.io/Predicer/])
+[![documentation](https://img.shields.io/badge/docs-main-green?logo=github&link=https%3A%2F%2Fpredicer-tools.github.io%2FPredicer%2F)]([https://predicer-tools.github.io/Predicer/])
 
 # Predicer
 ‘Predictive decider’ for actors making decisions over multiple stages
