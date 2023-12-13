@@ -232,12 +232,16 @@ function write_bid_matrix(model_contents::OrderedDict, input_data::Predicer.Inpu
 
     dfs = Dict()
 
-    if !isdir(pwd()*"\\results")
+    if !isdir(pwd() * "/results")
         mkdir("results")
     end
-    output_path = string(pwd()) * "\\results\\bid_matrix_"*Dates.format(Dates.now(), "yyyy-mm-dd-HH-MM-SS")*".xlsx"
+    output_path = string(pwd()) * "/results/bid_matrix_" * Dates.format(Dates.now(), "yyyy-mm-dd-HH-MM-SS") * ".xlsx"
+
+    println("output_path = " * output_path)
+
     XLSX.openxlsx(output_path, mode="w") do xf
         for (i,m) in enumerate(keys(markets))
+
             XLSX.addsheet!(xf, m)
             df = DataFrame(t = temporals)
             for s in scenarios
