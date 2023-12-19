@@ -56,6 +56,72 @@ using Predicer
     # actually connect to the nodes in the reserve nodegroup. Issue an warning if this isn't the case?
     # check that the processes in groups that are linked to reserves are all is_res?
 
+
+function validate_timeseries()
+
+end
+
+function validate_node_delay(error_log::OrderedDict, input_data::Predicer.InputData)
+    is_valid = error_log["is_valid"]
+    nds = input_data.node_delay
+    nodes = input_data.nodes
+
+    # check that the model has timesteps compatible with the delay
+    # The timesteps should be multipliers of each of the delays, 
+    # and the timestep length has to be constant
+    if input_data.temporals.is_variable_dt && input_data.contains_delay
+        push!(error_log["errors"], "The model currently doesn't support both variable timesteps and delays.\n")
+        is_valid = false 
+    else
+        
+        for delay in map(x -> x[t], input_data.node_delay)
+            if delay % input_data.temporals.dtf != 0
+                push!(error_log["errors"], "The delay length between two nodes must be a multiple of the timestep length.\n")
+                is_valid = false 
+            end
+        end
+    end
+
+    # check that there is only one delay per a pair of nodes
+    if length(nds) != length(unique(map(x -> (x[1], x[2]), nds)))
+        push!(error_log["errors"], "Each node-node pair can only have one defined delay.\n")
+        is_valid = false 
+    end
+
+    # Check that the delay is positive
+    if !isempty(filter(x -> x[3] <= 0, nds))
+        push!(error_log["errors"], "The defined delays must always be larger than 0. If not, just use a transfer process.\n")
+        is_valid = false 
+    end
+
+    # check that delay limits are reasonable
+    if !isempty(filter(x -> x[4] > x[5], nds))
+        push!(error_log["errors"], "The lower limit of the defined delays must be smaller than the defined upper limit.\n")
+        is_valid = false 
+    end
+    if !isempty(filter(x -> x[4] < 0, nds))
+        push!(error_log["errors"], "The lower limit of the defined delays must be larger than or equal to zero.\n")
+        is_valid = false 
+    end
+    if !isempty(filter(x -> x[5] <= 0, nds))
+        push!(error_log["errors"], "The upper limit of the defined delays must be larger than zero.\n")
+        is_valid = false 
+    end
+
+    # Check that the nodes with delay isn't an market node
+    if !isempty(filter(x -> nodes[x[1]].is_market || nodes[x[2]].is_market, nds))
+        push!(error_log["errors"], "Market nodes cannot be part of delay connections.\n")
+        is_valid = false 
+    end
+    # Check that the nodes with delay isn't an commodity node
+    if !isempty(filter(x -> nodes[x[1]].is_commodity || nodes[x[2]].is_commodity, nds))
+        push!(error_log["errors"], "Commodity nodes cannot be part of delay connections.\n")
+        is_valid = false 
+    end
+
+    error_log["is_valid"] = is_valid
+end
+
 function validate_node_diffusion(error_log::OrderedDict, input_data::Predicer.InputData)
     is_valid = error_log["is_valid"]
     nodes = input_data.nodes
@@ -287,7 +353,7 @@ function validate_gen_constraints(error_log::OrderedDict, input_data::Predicer.I
         # Check that setpoints have no constants, and non-setpoints have constants. 
         if gcs[gc].is_setpoint
             if !isempty(gcs[gc].constant)
-                push!(error_log["errors"], "The gen_constraint (" * gc * ") of the 'setpoint' can not have a series for a 'constant'.\n")
+                push!(error_log["errors"], "The gen_constraint (" * gc * ") of the 'setpoint' type can not have a series for a 'constant'.\n")
                 is_valid = false 
             end
         else
@@ -546,9 +612,13 @@ function validate_process_topologies(error_log::OrderedDict, input_data::Predice
     
     for p in keys(processes)
         topos = processes[p].topos
-        sources = filter(t -> t.sink == p, topos)
-        sinks = filter(t -> t.source == p, topos)
-        other = filter(t -> !(t in sources) && !(t in sinks), topos)
+        if processes[p].conversion == 2
+            sources = topos
+            sinks = topos
+        else
+            sources = filter(t -> t.sink == p, topos)
+            sinks = filter(t -> t.source == p, topos)
+        end
         for topo in sinks
             if topo.sink in keys(nodes)
                 if nodes[topo.sink].is_commodity
@@ -566,7 +636,7 @@ function validate_process_topologies(error_log::OrderedDict, input_data::Predice
         end
         for topo in sources
             if topo.source in keys(nodes)
-                if processes[topo.sink].is_cf
+                if processes[p].is_cf
                     push!(error_log["errors"], "Invalid topology: Process " * p * ". A CF process can not have a source.\n")
                     is_valid = false
                 end
@@ -584,7 +654,7 @@ function validate_process_topologies(error_log::OrderedDict, input_data::Predice
                 push!(error_log["errors"], "Invalid topology: Process " * p * ". A transport process cannot have several branches.\n")
                 is_valid = false
             end
-            if length(sources) > 0 || length(sinks) > 0
+            if p in map(t -> [t.source, t.sink], processes[p].topos)
                 push!(error_log["errors"], "Invalid topology: Process " * p * ". A transport process cannot have itself as a source or sink.\n")
                 is_valid = false
             end
@@ -613,6 +683,7 @@ function validate_data(input_data)
     validate_inflow_blocks(error_log, input_data)
     validate_groups(error_log, input_data)
     validate_node_diffusion(error_log, input_data)
+    validate_node_delay(error_log, input_data)
     # Return log. 
     return error_log
 end
