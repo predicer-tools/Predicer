@@ -37,6 +37,7 @@ function create_tuples(input_data::InputData) # unused, should be debricated
     tuplebook["ramp_tuple"] = process_topology_ramp_times_tuples(input_data)
     tuplebook["risk_tuple"] = scenarios(input_data)
     tuplebook["balance_market_tuple"] = create_balance_market_tuple(input_data)
+    tuplebook["market_tuple"] = create_market_tuple(input_data)
     tuplebook["state_reserves"] = state_reserves(input_data)
     tuplebook["reserve_limits"] = create_reserve_limits(input_data)
     tuplebook["setpoint_tuples"] = setpoint_tuples(input_data)
@@ -661,7 +662,7 @@ function scenarios(input_data::InputData) # original name: create_risk_tuple()
 end
 
 """ 
-    create_balance_market_tuple(input_data::OrderedDict)
+    create_balance_market_tuple((input_data::Predicer.InputData)
 
 Returns array of tuples containing balance market. Form: (m, dir, s, t).
 """
@@ -680,6 +681,22 @@ function create_balance_market_tuple(input_data::Predicer.InputData)
     end
     return bal_tuples
 end
+
+
+"""
+    create_market_tuple(input_data::Predicer.InputData)
+
+Returns array containing information on the defined markets. Form (market, type, node/nodegroup, processgroup)
+"""
+function create_market_tuple(input_data::Predicer.InputData)
+    mnt = []
+    for k in collect(keys(input_data.markets))
+        m = input_data.markets[k]
+        push!(mnt, (k, m.type, m.node, m.processgroup))
+    end
+    return mnt
+end
+
 
 """
     state_reserves(input_data::InputData)
