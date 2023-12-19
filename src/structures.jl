@@ -34,8 +34,12 @@ Constructor for the Temporals struct.
 function Temporals(ts::Vector{String}, ts_format="yyyy-mm-ddTHH:MM:SSzzzz")
     dts = []
     zdt_ts = map(x -> ZonedDateTime(x, ts_format), ts)
-    for i in 1:(length(zdt_ts)-1)
-        push!(dts, (ts[i], Dates.Minute(zdt_ts[i+1] - zdt_ts[i])/Dates.Minute(60)))
+    for i in 1:(length(zdt_ts))
+        if i < length(zdt_ts)
+            push!(dts, (ts[i], Dates.Minute(zdt_ts[i+1] - zdt_ts[i])/Dates.Minute(60)))
+        else
+            push!(push!(dts, (ts[i], dts[end][2])))
+        end
     end
     if length(unique(map(t -> t[2], dts))) == 1
         return Temporals(ts, dts[1][2], false, [], ts_format)
@@ -47,7 +51,7 @@ end
 """
     function (t::Temporals)(ts::ZonedDateTime)
 
-Returns the length of the timesteps between t and t+1 as a measure how many can fit into 60 minutes.
+Returns the length of the timesteps between t and t+1 compared to one hour.
 """
 function (t::Temporals)(ts::ZonedDateTime)
     if t.is_variable_dt
@@ -61,7 +65,7 @@ end
 """
     function (t::Temporals)(ts::String).
 
-Returns the length of the timesteps between t and t+1 as a measure how many can fit into 60 minutes.
+Returns the length of the timesteps between t and t+1 compared to one hour.
 """
 function (t::Temporals)(ts::String)
     if t.is_variable_dt
@@ -1067,6 +1071,7 @@ end
         contains_risk::Bool
         contains_diffusion::Bool
         contains_delay::Bool
+        contains_markets::Bool
         processes::OrderedDict{String, Process}
         nodes::OrderedDict{String, Node}
         node_diffusion::Vector{Tuple{AbstractString, AbstractString, Number}}
@@ -1091,6 +1096,7 @@ Struct containing the imported input data, based on which the Predicer is built.
 - `contains_risk::Bool`: Boolean indicating whether the model (input_data) requires risk functionality structures. 
 - `contains_diffusion::Bool`: Boolean indicating whether the model (input_data) requires diffusion functionality structures. 
 - `contains_delay::Bool`: Boolean indicating whether the model (input_data) requires delay functionality structures. 
+- `contains_markets::Bool`: Boolean indicating whether the model (input_data) needs market structures. 
 - `processes::OrderedDict{String, Process}`: A dict containing the data relevant for processes.
 - `nodes::OrderedDict{String, Node}`: A dict containing the data relevant for nodes.
 - `node_diffusion::Vector{Tuple{AbstractString, AbstractString, Number}}`: Vector containing node diffusion connection details. 
@@ -1112,6 +1118,7 @@ mutable struct InputData
     contains_risk::Bool
     contains_diffusion::Bool
     contains_delay::Bool
+    contains_markets::Bool
     processes::OrderedDict{String, Process}
     nodes::OrderedDict{String, Node}
     node_diffusion::Vector{Tuple{AbstractString, AbstractString, Number}}
@@ -1124,8 +1131,8 @@ mutable struct InputData
     risk::OrderedDict{String, Float64}
     inflow_blocks::OrderedDict{String, InflowBlock}
     gen_constraints::OrderedDict{String, GenConstraint}
-    function InputData(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, processes, nodes, node_diffusion, node_delay, node_histories,  markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
-        return new(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, processes, nodes, node_diffusion, node_delay, node_histories, markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
+    function InputData(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, contains_markets, processes, nodes, node_diffusion, node_delay, node_histories,  markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
+        return new(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, contains_markets, processes, nodes, node_diffusion, node_delay, node_histories, markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
     end
 end
 
