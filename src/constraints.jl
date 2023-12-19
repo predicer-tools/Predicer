@@ -16,7 +16,7 @@ function create_constraints(model_contents::OrderedDict, input_data::Predicer.In
     setup_process_online_balance(model_contents, input_data)
     setup_process_balance(model_contents, input_data)
     setup_node_delay_flow_limits(model_contents, input_data)
-    setup_processes_limits(model_contents, input_data)
+    setup_process_limits(model_contents, input_data)
     setup_reserve_balances(model_contents, input_data)
     setup_ramp_constraints(model_contents, input_data)
     setup_bidding_constraints(model_contents, input_data)
@@ -253,7 +253,6 @@ function setup_process_online_balance(model_contents::OrderedDict, input_data::P
             online_expr = model_contents["expression"]["online_expr"] = OrderedDict()
             for (i,tup) in enumerate(proc_online_tuple)
                 if tup[3] == temporals.t[1]
-                    # Note - initial online state is assumed 1!
                     online_expr[tup] = @expression(model,v_start[tup]-v_stop[tup]-v_online[tup] + Int(processes[tup[1]].initial_state))
                 else
                     online_expr[tup] = @expression(model,v_start[tup]-v_stop[tup]-v_online[tup]+v_online[proc_online_tuple[i-1]])
@@ -449,7 +448,7 @@ function setup_node_delay_flow_limits(model_contents::OrderedDict, input_data::P
 end
 
 """
-    setup_processes_limits(model_contents::OrderedDict, input_data::Predicer.InputData)
+    setup_process_limits(model_contents::OrderedDict, input_data::Predicer.InputData)
 
 Setup constraints used for process limitations, such as min/max loads, unit starts and participation in reserves.
 
@@ -457,7 +456,7 @@ Setup constraints used for process limitations, such as min/max loads, unit star
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
 """
-function setup_processes_limits(model_contents::OrderedDict, input_data::Predicer.InputData)
+function setup_process_limits(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
     trans_tuple = transport_process_topology_tuples(input_data)
     lim_tuple = fixed_limit_process_topology_tuples(input_data)
@@ -503,8 +502,6 @@ function setup_processes_limits(model_contents::OrderedDict, input_data::Predice
         e_lim_res_min[tup] = AffExpr(0.0)
     end
 
-
-
     # online processes
     if input_data.contains_online
         proc_online_tuple = online_process_tuples(input_data)
@@ -523,7 +520,7 @@ function setup_processes_limits(model_contents::OrderedDict, input_data::Predice
                 add_to_expression!(e_lim_min[tup], -processes[tup[1]].load_min * cap * v_online[(tup[1], tup[4], tup[5])])
             end
         end
-    end 
+    end
 
     # non-online, non-cf processes
     p_offline = filter(x -> !(processes[x[1]].is_online), lim_tuple)
@@ -952,6 +949,7 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
     model_contents["constraint"]["ramp_up_eq_v_flow"] = ramp_up_eq_v_flow
     model_contents["constraint"]["ramp_down_eq_v_flow"] = ramp_down_eq_v_flow
 end
+
 
 """
     setup_fixed_values(model_contents::OrderedDict, input_data::Predicer.InputData)
@@ -1454,7 +1452,9 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
             penalty = input_data.gen_constraints[c].penalty
             for s in scenarios
                 c_tups = filter(tup -> tup[1] == c && tup[2] == s, setpoint_tuples(input_data))
-                add_to_expression!(setpoint_deviation_costs[s], penalty * (sum(v_set_up[c_tups]) + sum(v_set_down[c_tups])))
+                for c_tup in c_tups
+                    add_to_expression!(setpoint_deviation_costs[s], penalty * input_data.temporals(c_tup[3]) * (sum(v_set_up[c_tup]) + sum(v_set_down[c_tup])))
+                end
             end
         end
     end
