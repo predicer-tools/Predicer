@@ -44,69 +44,79 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             end
         end
     elseif type == "v_load"
-        v_load = vars[type]
-        if !isempty(name)
-            tups = unique(map(x->(x[1],x[2],x[3]),filter(x->x[1]==name, unique(map(x -> (x[3:end]), tuples["res_potential_tuple"])))))
-        else
-            tups = unique(map(x->(x[1],x[2],x[3]), unique(map(x -> (x[3:end]), tuples["res_potential_tuple"]))))
-        end
-        for tup in tups, s in scenarios
-            colname = join(tup,"_") * "_" *s
-            col_tup = filter(x->x[1:3]==tup && x[4]==s, unique(map(x -> (x[3:end]), tuples["res_potential_tuple"])))
-            if !isempty(col_tup)
-                df[!, colname] = value.(v_load[col_tup].data)
+        if input_data.contains_reserves
+            v_load = vars[type]
+            if !isempty(name)
+                tups = unique(map(x->(x[1],x[2],x[3]),filter(x->x[1]==name, unique(map(x -> (x[3:end]), tuples["res_potential_tuple"])))))
+            else
+                tups = unique(map(x->(x[1],x[2],x[3]), unique(map(x -> (x[3:end]), tuples["res_potential_tuple"]))))
+            end
+            for tup in tups, s in scenarios
+                colname = join(tup,"_") * "_" *s
+                col_tup = filter(x->x[1:3]==tup && x[4]==s, unique(map(x -> (x[3:end]), tuples["res_potential_tuple"])))
+                if !isempty(col_tup)
+                    df[!, colname] = value.(v_load[col_tup].data)
+                end
             end
         end
     elseif type == "v_reserve"
-        v_res = vars[type]
-        if !isempty(name)
-            tups = unique(map(x->(x[1],x[2],x[3],x[5]),filter(x->x[3]==name, tuples["res_potential_tuple"])))
-        else
-            tups = unique(map(x->(x[1],x[2],x[3],x[5]),tuples["res_potential_tuple"]))
-        end
-        for tup in tups, s in scenarios
-            col_name = join(tup,"_")  * "_" *s
-            col_tup = filter(x->(x[1],x[2],x[3],x[5])==tup && x[6]==s, tuples["res_potential_tuple"])
-            if !isempty(col_tup)
-                df[!, col_name] = value.(v_res[col_tup].data)
+        if input_data.contains_reserves
+            v_res = vars[type]
+            if !isempty(name)
+                tups = unique(map(x->(x[1],x[2],x[3],x[5]),filter(x->x[3]==name, tuples["res_potential_tuple"])))
+            else
+                tups = unique(map(x->(x[1],x[2],x[3],x[5]),tuples["res_potential_tuple"]))
+            end
+            for tup in tups, s in scenarios
+                col_name = join(tup,"_")  * "_" *s
+                col_tup = filter(x->(x[1],x[2],x[3],x[5])==tup && x[6]==s, tuples["res_potential_tuple"])
+                if !isempty(col_tup)
+                    df[!, col_name] = value.(v_res[col_tup].data)
+                end
             end
         end
     elseif type == "v_res_final"
-        v_res = vars[type]
-        ress = unique(map(x->x[1],tuples["res_final_tuple"]))
-        for r in ress, s in scenarios
-            colname = r * "_" * s
-            col_tup = filter(x->x[1]==r && x[2]==s, tuples["res_final_tuple"])
-            if !isempty(col_tup)
-                df[!, colname] = value.(v_res[col_tup].data)
+        if input_data.contains_reserves
+            v_res = vars[type]
+            ress = unique(map(x->x[1],tuples["res_final_tuple"]))
+            for r in ress, s in scenarios
+                colname = r * "_" * s
+                col_tup = filter(x->x[1]==r && x[2]==s, tuples["res_final_tuple"])
+                if !isempty(col_tup)
+                    df[!, colname] = value.(v_res[col_tup].data)
+                end
             end
         end
     elseif type == "v_online" || type == "v_start" || type == "v_stop"
-        v_bin = vars[type]
-        if !isempty(name)
-            procs = unique(map(x->x[1],filter(y ->y[1] == name, tuples["process_tuple"])))
-        else
-            procs = unique(map(x->x[1],tuples["process_tuple"]))
-        end
-        for p in procs, s in scenarios
-            col_tup = filter(x->x[1]==p && x[2]==s, tuples["proc_online_tuple"])
-            colname = p * "_" * s
-            if !isempty(col_tup)
-                df[!, colname] = value.(v_bin[col_tup].data)
+        if input_data.contains_online
+            v_bin = vars[type]
+            if !isempty(name)
+                procs = unique(map(x->x[1],filter(y ->y[1] == name, tuples["process_tuple"])))
+            else
+                procs = unique(map(x->x[1],tuples["process_tuple"]))
+            end
+            for p in procs, s in scenarios
+                col_tup = filter(x->x[1]==p && x[2]==s, tuples["proc_online_tuple"])
+                colname = p * "_" * s
+                if !isempty(col_tup)
+                    df[!, colname] = value.(v_bin[col_tup].data)
+                end
             end
         end
     elseif type == "v_state"
-        v_state = vars[type]
-        if !isempty(name)
-            nods = map(y -> y[1], filter(x->x[1]==name, tuples["node_state_tuple"]))
-        else
-            nods = map(y -> y[1] , tuples["node_state_tuple"])
-        end
-        for n in nods, s in scenarios
-            col_tup = filter(x -> x[1] == n && x[2] == s, tuples["node_state_tuple"])
-            colname = n * "_" * s
-            if !isempty(col_tup)
-                df[!, colname] = value.(v_state[col_tup].data)
+        if input_data.contains_states
+            v_state = vars[type]
+            if !isempty(name)
+                nods = map(y -> y[1], filter(x->x[1]==name, tuples["node_state_tuple"]))
+            else
+                nods = map(y -> y[1] , tuples["node_state_tuple"])
+            end
+            for n in nods, s in scenarios
+                col_tup = filter(x -> x[1] == n && x[2] == s, tuples["node_state_tuple"])
+                colname = n * "_" * s
+                if !isempty(col_tup)
+                    df[!, colname] = value.(v_state[col_tup].data)
+                end
             end
         end
     elseif type == "vq_state_up" || type == "vq_state_dw"
@@ -134,7 +144,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             col_tup = unique(map(x->(x[1],x[3],x[4]),filter(x->x[1]==bt && x[3]==s,tuples["balance_market_tuple"])))
             if !isempty(col_tup)
                 dat_vec = []
-                colname = name * "_" * s
+                colname = col_tup[1][1] * "_" * s
                 for tup in col_tup
                     push!(dat_vec,value(v_bid[tup]))
                 end
@@ -189,49 +199,55 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             end
         end
     elseif type == "v_reserve_online"
-        v_reserve_online = vars[type]
-        if !isempty(name)
-            ress = unique(map(y -> y[1], filter(x -> x[1] == name, tuples["reserve_limits"])))
-        else
-            ress = unique(map(y -> y[1], tuples["reserve_limits"]))
-        end
-        for r in ress, s in scenarios
-            col_tup = filter(x -> x[1] == r && x[2] == s, tuples["reserve_limits"])
-            colname = r * "_" * s
-            if !isempty(col_tup)
-                df[!,colname] = value.(v_reserve_online[col_tup].data)
+        if input_data.contains_reserves
+            v_reserve_online = vars[type]
+            if !isempty(name)
+                ress = unique(map(y -> y[1], filter(x -> x[1] == name, tuples["reserve_limits"])))
+            else
+                ress = unique(map(y -> y[1], tuples["reserve_limits"]))
+            end
+            for r in ress, s in scenarios
+                col_tup = filter(x -> x[1] == r && x[2] == s, tuples["reserve_limits"])
+                colname = r * "_" * s
+                if !isempty(col_tup)
+                    df[!,colname] = value.(v_reserve_online[col_tup].data)
+                end
             end
         end
     elseif type == "v_node_diffusion" # only returns an expression with node diff info, no variable. 
-        node_diffs = model_contents["expression"]["e_node_diff"]
-        if isempty(name)
-            nodenames = unique(map(y -> y[1], collect(keys(node_diffs))))
-        else
-            nodenames = unique(map(y -> y[1], filter(x -> x[1] == name, collect(keys(node_diffs)))))
-        end
-        for n in nodenames, s in scenarios
-            diffs = []
-            colname = n * "_" * s
-            for t in input_data.temporals.t
-                diff_k = filter(x -> x == (n, s, t),  collect(keys(node_diffs)))[1]
-                push!(diffs, value.(node_diffs[diff_k]))
+        if input_data.contains_diffusion
+            node_diffs = model_contents["expression"]["e_node_diff"]
+            if isempty(name)
+                nodenames = unique(map(y -> y[1], collect(keys(node_diffs))))
+            else
+                nodenames = unique(map(y -> y[1], filter(x -> x[1] == name, collect(keys(node_diffs)))))
             end
-            if !isempty(diffs)
-                df[!, colname] = diffs
+            for n in nodenames, s in scenarios
+                diffs = []
+                colname = n * "_" * s
+                for t in input_data.temporals.t
+                    diff_k = filter(x -> x == (n, s, t),  collect(keys(node_diffs)))[1]
+                    push!(diffs, value.(node_diffs[diff_k]))
+                end
+                if !isempty(diffs)
+                    df[!, colname] = diffs
+                end
             end
         end
     elseif type == "v_node_delay"
-        v_node_delays = model_contents["variable"]["v_node_delay"]
-        if isempty(name)
-            conn_names = unique(map(x -> (x[1], x[2]), node_delay_tuple(input_data)))
-        else
-            conn_names = unique(filter(y -> name in y, map(x -> (x[1], x[2]), node_delay_tuple(input_data))))
-        end
-        for c in conn_names, s in scenarios
-            d_conn = filter(x -> x[1] == c[1] && x[2] == c[2] && x[3] == s, node_delay_tuple(input_data))
-            colname = c[1] * "_" * c[2] * "_" * s
-            if !isempty(d_conn)
-                df[!, colname] = value.(v_node_delays[d_conn].data)
+        if input_data.contains_delay
+            v_node_delays = model_contents["variable"]["v_node_delay"]
+            if isempty(name)
+                conn_names = unique(map(x -> (x[1], x[2]), node_delay_tuple(input_data)))
+            else
+                conn_names = unique(filter(y -> name in y, map(x -> (x[1], x[2]), node_delay_tuple(input_data))))
+            end
+            for c in conn_names, s in scenarios
+                d_conn = filter(x -> x[1] == c[1] && x[2] == c[2] && x[3] == s, node_delay_tuple(input_data))
+                colname = c[1] * "_" * c[2] * "_" * s
+                if !isempty(d_conn)
+                    df[!, colname] = value.(v_node_delays[d_conn].data)
+                end
             end
         end
     else
@@ -240,6 +256,22 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
     return df
 end
  
+"""
+    get_all_result_dataframes(model_contents::OrderedDict, input_data::InputData, scenario="", name="")
+
+Collect all of the available variable results into DataFrames collected in a dictionary. 
+"""
+function get_all_result_dataframes(model_contents::OrderedDict, input_data::InputData, scenario="", name="")
+    dfs = Dict()
+    types = ["v_flow", "v_load", "v_reserve", "v_res_final", "v_online", "v_start", "v_stop", "v_state", "vq_state_up", "vq_state_dw", 
+        "v_bid", "v_flow_bal", "v_block", "v_setpoint", "v_set_up", "v_set_down", "v_reserve_online", "v_node_diffusion", "v_node_delay"]
+    for type in types
+        dfs[type] = Predicer.get_result_dataframe(model_contents, input_data, type, name, scenario)
+    end
+    return dfs
+end
+
+
 """
     write_bid_matrix(model_contents::OrderedDict, input_data::OrderedDict)
 
