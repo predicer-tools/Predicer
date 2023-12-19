@@ -65,7 +65,8 @@ end
 Set up binary online, start and stop variables for modeling online functionality for processes.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
+- `input_data::InputData`: Struct containing the input data defined by the user, based on which the model is built. 
 """
 function create_v_online(model_contents::OrderedDict, input_data::InputData)
     if input_data.contains_online
