@@ -9,6 +9,7 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
     sheetnames_system = ["nodes", "processes", "groups", "process_topology", "node_diffusion", "node_history", "node_delay", "inflow_blocks", "markets", "reserve_realisation", "scenarios","efficiencies", "reserve_type","risk"]
     sheetnames_timeseries = ["cf", "inflow", "market_prices", "price","eff_ts"]
 
+
     system_data = OrderedDict()
     timeseries_data = OrderedDict()
     timeseries_data["scenarios"] = OrderedDict()
@@ -35,12 +36,15 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
         timeseries_data[sn] = DataFrame(XLSX.readtable(input_data_path, sn))
     end
 
+
+
+
     if !isempty(t_horizon)
         temps = map(ts -> string(ts), t_horizon)
     else
         temps = map(t-> string(ZonedDateTime(t, tz"UTC")), DataFrame(XLSX.readtable(input_data_path, "timeseries")).t)
     end
-
+    
     fixed_data = DataFrame(XLSX.readtable(input_data_path, "fixed_ts"))
     cap_ts = DataFrame(XLSX.readtable(input_data_path, "cap_ts"))    
     constraint_data = DataFrame(XLSX.readtable(input_data_path, "gen_constraint")) 
@@ -507,6 +511,7 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
     contains_risk = (risk["beta"] > 0)
     contains_diffusion = !isempty(node_diffusion_tuples)
     contains_delay = !isempty(node_delay_tuples)
+    contains_markets = !isempty(markets)
 
-    return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, processes, nodes, node_diffusion_tuples, node_delay_tuples, node_history, markets, groups, scenarios, reserve_type, risk, inflow_blocks, gen_constraints)
+    return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, contains_markets, processes, nodes, node_diffusion_tuples, node_delay_tuples, node_history, markets, groups, scenarios, reserve_type, risk, inflow_blocks, gen_constraints)
 end
