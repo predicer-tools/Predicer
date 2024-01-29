@@ -38,14 +38,14 @@
 
       julia> using Predicer
 
-- To generate a model based on a input data file (in the example an Excel file located under `Predicer\\input_data\\`) use the `Predicer.generate_model(fpath)` function, where the parameter 'fpath' is the path to the input data file. The 'generate_model()' function imports the input data from the defined location, and build a model around it. The function returns two values, a "model contents" (mc) dictionary containing the built optimization model, as well as used expressions, indices and constraints for debugging. The other return value is the input data on which the optimization model is built on. 
+- To generate a model based on a input data file (in the example an Excel file located under `Predicer/input_data/`) use the `Predicer.generate_model(fpath)` function, where the parameter 'fpath' is the path to the input data file. The 'generate_model()' function imports the input data from the defined location, and build a model around it. The function returns two values, a "model contents" (mc) dictionary containing the built optimization model, as well as used expressions, indices and constraints for debugging. The other return value is the input data on which the optimization model is built on. 
         
 
       julia> mc, input_data = Predicer.generate_model(fpath)
 
-- Or if using the example input data file `Predicer\\input_data\\input_data.xlsx`
+- Or if using the example input data file `Predicer/input_data/input_data.xlsx`
 
-      julia> mc, input_data = Predicer.generate_model(joinpath(pwd(), "input_data\\input_data.xlsx"))
+      julia> mc, input_data = Predicer.generate_model("input_data/input_data.xlsx")
 
 
 - `Predicer.solve_model(mc)` solves the model `mc`, and shows the solver output.
@@ -53,7 +53,7 @@
       julia> Predicer.solve_model(mc)
 
 
-- The resulting bid matrix can be exported to a .xlsx file under `Predicer\\results` by using the `Predicer.write_bid_matrix()` function
+- The resulting bid matrix can be exported to a .xlsx file under `Predicer/results` by using the `Predicer.write_bid_matrix()` function
 
       julia> Predicer.write_bid_matrix(mc, input_data)
 
