@@ -753,7 +753,7 @@ form: (market, s, t)
 """
 function create_reserve_limits(input_data::InputData)
     reserve_limits = NTuple{3, String}[]
-        if input_data.contains_reserves
+    if input_data.contains_reserves
         markets = input_data.markets
         scenarios = collect(keys(input_data.scenarios))
         temporals = input_data.temporals
