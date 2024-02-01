@@ -876,12 +876,16 @@ end
         realisation::Dict{String, Float64}
         reserve_type::String
         is_bid::Bool
+        is_limited::Bool
+        min_bid::Float64
+        max_bid::Float64
+        fee::Float64
         price::TimeSeriesData
         up_price::TimeSeriesData
         down_price::TimeSeriesData
         fixed::Vector{Tuple{AbstractString, Number}}
-        function Market(name, type, node, pgroup, direction, realisation, reserve_type, is_bid)
-            return new(name, type, node, pgroup, direction, realisation, reserve_type, is_bid, [], [])
+        function Market(name, type, node, pgroup, direction, reserve_type, is_bid, is_limited, min_bid, max_bid, fee)
+            return new(name, type, node, pgroup, direction, Dict(), reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
         end
     end
 
