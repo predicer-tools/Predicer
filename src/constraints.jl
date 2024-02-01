@@ -1106,8 +1106,16 @@ function setup_reserve_participation(model_contents::OrderedDict, input_data::Pr
         for tup in res_lim_tuple
             max_bid = markets[tup[1]].max_bid
             min_bid = markets[tup[1]].min_bid
-            res_online_up_expr[tup] = @expression(model,v_res_final[tup]-max_bid*v_res_online[tup])
-            res_online_lo_expr[tup] = @expression(model,v_res_final[tup]-min_bid*v_res_online[tup]) 
+            if max_bid > 0
+                res_online_up_expr[tup] = @expression(model,v_res_final[tup]-max_bid*v_res_online[tup])
+            else
+                res_online_up_expr[tup] = AffExpr(0.0)
+            end
+            if min_bid > 0
+                res_online_lo_expr[tup] = @expression(model,v_res_final[tup]-min_bid*v_res_online[tup])
+            else
+                res_online_lo_expr[tup] = AffExpr(0.0)
+            end
         end
         res_online_up = @constraint(model, res_online_up[tup in res_lim_tuple], res_online_up_expr[tup] <= 0)
         res_online_lo = @constraint(model, res_online_lo[tup in res_lim_tuple], res_online_lo_expr[tup] >= 0)
