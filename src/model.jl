@@ -331,6 +331,28 @@ function write_bid_matrix(model_contents::OrderedDict, input_data::Predicer.Inpu
 end
 
 
+"""
+    dfs_to_xlsx(dfs::Dict{String, DataFrame}, fpath::String, fname::String="")
+
+Function to export a dictionary containing DataFrames to an xlsx file. 
+
+# Arguments
+- `dfs::Dict{String, DataFrame}`: Dictionary containing dataframes. The key should be a string. 
+- `fpath::String`: Path to the folder where the xlsx file is to be stored. 
+- `fname::String`: Name of the xlsx file. (a suffix of date, time, and ".xlsx" are added automatically)
+"""
+function dfs_to_xlsx(dfs::Dict{Any, Any}, fpath::String, fname::String="")
+    output_path = joinpath(fpath, fname * "_" * Dates.format(Dates.now(), "yyyy-mm-dd-HH-MM-SS")*".xlsx")
+    XLSX.openxlsx(output_path, mode="w") do xf
+        for (i, sn) in enumerate(collect(keys(dfs)))
+            XLSX.addsheet!(xf, sn)
+            if !isempty(dfs[sn])
+                XLSX.writetable!(xf[i+1], collect(eachcol(dfs[sn])), names(dfs[sn]))
+            end
+        end
+    end
+end
+
 
 """
     resolve_market_nodes(input_data::InputData) 
