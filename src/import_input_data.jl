@@ -24,25 +24,27 @@ function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateT
     inflow_blocks = OrderedDict{String, Predicer.InflowBlock}()
     gen_constraints = OrderedDict{String, Predicer.GenConstraint}()
 
+    xl = XLSX.readxlsx(input_data_path)
+
     for sn in sheetnames_system
-        system_data[sn] = DataFrame(XLSX.readtable(input_data_path, sn))
+        system_data[sn] = DataFrame(XLSX.gettable(xl[sn]))
     end
 
     for sn in sheetnames_timeseries
-        timeseries_data[sn] = DataFrame(XLSX.readtable(input_data_path, sn))
+        timeseries_data[sn] = DataFrame(XLSX.gettable(xl[sn]))
     end
 
     if !isempty(t_horizon)
         temps = map(ts -> string(ts), t_horizon)
     else
-        temps = map(t-> string(ZonedDateTime(t, tz"UTC")), DataFrame(XLSX.readtable(input_data_path, "timeseries")).t)
+        temps = map(t-> string(ZonedDateTime(t, tz"UTC")), DataFrame(XLSX.gettable(xl["timeseries"])).t)
     end
 
-    fixed_data = DataFrame(XLSX.readtable(input_data_path, "fixed_ts"))
-    cap_ts = DataFrame(XLSX.readtable(input_data_path, "cap_ts"))    
-    constraint_data = DataFrame(XLSX.readtable(input_data_path, "gen_constraint")) 
-    constraint_type = DataFrame(XLSX.readtable(input_data_path, "constraints"))
-    balance_prices = DataFrame(XLSX.readtable(input_data_path, "balance_prices"))
+    fixed_data = DataFrame(XLSX.gettable(xl["fixed_ts"]))
+    cap_ts = DataFrame(XLSX.gettable(xl["cap_ts"]))
+    constraint_data = DataFrame(XLSX.gettable(xl["gen_constraint"]))
+    constraint_type = DataFrame(XLSX.gettable(xl["constraints"]))
+    balance_prices = DataFrame(XLSX.gettable(xl["balance_prices"]))
 
     for i in 1:nrow(system_data["scenarios"])
         scenarios[system_data["scenarios"][i,1]] = system_data["scenarios"][i,2]
