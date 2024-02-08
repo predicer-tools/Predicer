@@ -311,6 +311,7 @@ function setup_process_balance(model_contents::OrderedDict, input_data::Predicer
                     for (i, t) in enumerate(temporals.t[begin+n_delay_ts:end])
                         so = filter(tup -> tup[1] == dp && tup[3] == dp && tup[4] == s && tup[5] == temporals.t[i-n_delay_ts], delay_p_tups)
                         si = filter(tup -> tup[1] == dp && tup[2] == dp && tup[4] == s && tup[5] == temporals.t[i], delay_p_tups)
+                        #TODO Name.
                         @constraint(model, sum(v_flow[si]) - sum(v_flow[so]) == 0)
                         delay_e[(dp, s, t)] = @expression(model, sum(v_flow[so]) - sum(v_flow[si]))
                     end
@@ -657,6 +658,7 @@ function setup_reserve_balances(model_contents::OrderedDict, input_data::Predice
                     dtf = temporals(t)
                     p_out_tup = filter(x -> x[1] == s_node && x[2] == "res_up" && x[4] == x[5] && x[7] == s && x[8] == t, state_reserve_tuple)
                     p_in_tup = filter(x -> x[1] == s_node && x[2] == "res_down" && x[4] == x[6] && x[7] == s && x[8] == t, state_reserve_tuple)
+                    #TODO Name the constraints.
                     if !isempty(p_out_tup)
                         p_out_eff = processes[p_out_tup[1][4]].eff
                         # State in/out limit
@@ -977,6 +979,7 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
         if markets[m].is_bid
             for (i,t) in enumerate(temporals.t)
                 s_indx = sortperm((price_matr[m][i,:]))
+                #TODO Name the constraints.
                 if markets[m].type == "energy"
                     for k in 2:length(s_indx)
                         if price_matr[m][i, s_indx[k]] == price_matr[m][i, s_indx[k-1]]
@@ -1152,7 +1155,8 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
                         add_to_expression!(const_expr[c][(s,t)],fac_data,v_state[tup])
                     end
                 end
-            end 
+            end
+            #TODO Name.
             if eq_dir == "eq"
                 const_dict[c] = @constraint(model,[s in scenarios,t in relevant_ts],const_expr[c][(s,t)]==0.0)
             elseif eq_dir == "gt"
