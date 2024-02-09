@@ -975,35 +975,33 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
             end
         end
     end
+    function scen_pairs(ps)
+        s_indx = sortperm(ps)
+        ((scenarios[s_indx[k - 1 : k]], ps[s_indx[k - 1]] == ps[s_indx[k]])
+         for k in 2 : length(s_indx))
+    end
+    cons = Dict()
     for m in keys(markets)
-        if markets[m].is_bid
-            for (i,t) in enumerate(temporals.t)
-                s_indx = sortperm((price_matr[m][i,:]))
-                #TODO Name the constraints.
-                if markets[m].type == "energy"
-                    for k in 2:length(s_indx)
-                        if price_matr[m][i, s_indx[k]] == price_matr[m][i, s_indx[k-1]]
-                            @constraint(model,
-                                        v_bid[(markets[m].name,scenarios[s_indx[k]],t)] ==
-                                        v_bid[(markets[m].name,scenarios[s_indx[k-1]],t)])
-                        else
-                            @constraint(model, 
-                                        v_bid[(markets[m].name,scenarios[s_indx[k]],t)] >=
-                                        v_bid[(markets[m].name,scenarios[s_indx[k-1]],t)])
-                        end
-                    end
-                elseif markets[m].type == "reserve" && input_data.contains_reserves
-                    for k in 2:length(s_indx)
-                        if price_matr[m][i, s_indx[k]] == price_matr[m][i, s_indx[k-1]]
-                            @constraint(model, v_res_final[(m,scenarios[s_indx[k]],t)] == v_res_final[(m,scenarios[s_indx[k-1]],t)])
-                        else
-                            @constraint(model, v_res_final[(m,scenarios[s_indx[k]],t)] >= v_res_final[(m,scenarios[s_indx[k-1]],t)])
-                        end
-                    end
+        markets[m].is_bid || continue
+        for (i,t) in enumerate(temporals.t)
+            if markets[m].type == "energy"
+                #XXX Is this ever different from m?
+                mn = markets[m].name
+                for (sns, eq) in scen_pairs(price_matr[m][i,:])
+                    vars = [v_bid[(mn, s, t)] for s in sns]
+                    cons[m, t, sns...] = (vars[2] - vars[1], eq)
+                end
+            elseif markets[m].type == "reserve" && input_data.contains_reserves
+                for (sns, eq) in scen_pairs(price_matr[m][i,:])
+                    vars = [v_res_final[(m, s, t)] for s in sns]
+                    cons[m, t, sns...] = (vars[2] - vars[1], eq)
                 end
             end
         end
     end
+    @constraint(model, bidding[k = keys(cons)],
+                cons[k][1] in (cons[k][2] ? MOI.EqualTo(0)
+                                          : MOI.GreaterThan(0)))
 end
 
 """
