@@ -311,7 +311,7 @@ function setup_process_balance(model_contents::OrderedDict, input_data::Predicer
                     for (i, t) in enumerate(temporals.t[begin+n_delay_ts:end])
                         so = filter(tup -> tup[1] == dp && tup[3] == dp && tup[4] == s && tup[5] == temporals.t[i-n_delay_ts], delay_p_tups)
                         si = filter(tup -> tup[1] == dp && tup[2] == dp && tup[4] == s && tup[5] == temporals.t[i], delay_p_tups)
-                        #TODO Name.
+                        #XXX Doesn't this get done below as part of dpbe?
                         @constraint(model, sum(v_flow[si]) - sum(v_flow[so]) == 0)
                         delay_e[(dp, s, t)] = @expression(model, sum(v_flow[so]) - sum(v_flow[si]))
                     end
