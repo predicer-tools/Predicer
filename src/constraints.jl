@@ -224,6 +224,7 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
     model_contents["constraint"]["node_state_max_dw"] = node_state_max_dw
     for tu in node_state_tuple
         set_upper_bound(v_state[tu], nodes[tu[1]].state.state_max)
+        set_lower_bound(v_state[tu], nodes[tu[1]].state.state_min)
     end
 end
 
@@ -599,6 +600,7 @@ function setup_reserve_realisation(model_contents::OrderedDict, input_data::Pred
         model = model_contents["model"]
 
         markets = input_data.markets
+
         v_res_final = model_contents["variable"]["v_res_final"]
         v_flow = model_contents["variable"]["v_flow"]
         v_load = model_contents["variable"]["v_load"]
@@ -618,6 +620,11 @@ function setup_reserve_realisation(model_contents::OrderedDict, input_data::Pred
         res_groups = reserve_groups(input_data)
         groups = create_group_tuples(input_data)
 
+        rpt = unique(map(x -> (x[3:end]), res_process_tuples))
+        rpt_begin = unique(map(x -> (x[3:5]), res_process_tuples))
+        reduced_process_tuples = unique(map(x -> (x[1:3]), process_tuples))   
+
+
 
         # Set realisation within nodegroup to be equal to total reserve * realisation
         for tup in nodegroup_res
@@ -633,11 +640,6 @@ function setup_reserve_realisation(model_contents::OrderedDict, input_data::Pred
                 end
             end
         end
-
-
-        rpt = unique(map(x -> (x[3:end]), res_process_tuples))
-        rpt_begin = unique(map(x -> (x[3:5]), res_process_tuples))
-        reduced_process_tuples = unique(map(x -> (x[1:3]), process_tuples))   
 
         # create process-wise reserve_realisation expression "v_res_real_flow"
         for p_tup in reduced_process_tuples
@@ -876,8 +878,8 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
         v_stop = model_contents["variable"]["v_stop"]
     end
 
-    previous_ts = get_previous_t(input_data.temporals)
-    previous_proc_tups = previous_process_topology_tuples(input_data)
+    previous_ts = Predicer.get_previous_t(input_data.temporals)
+    previous_proc_tups = Predicer.previous_process_topology_tuples(input_data)
     reduced_ramp_tuple = unique(map(x -> (x[1:3]), ramp_tuple))
 
     for red_tup in reduced_ramp_tuple
@@ -909,19 +911,19 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
                     end
 
                     # if reserve process
-                    if processes[tup[1]].is_res && input_data.contains_reserves && tup in reduced_res_proc_tuple
+                    if processes[tup[1]].is_res && input_data.contains_reserves && red_tup in reduced_res_proc_tuple
                         ramp_expr_res_up[tup] = AffExpr(0.0)
                         ramp_expr_res_down[tup] = AffExpr(0.0)
-                        res_tup_up_with_s_and_t = map(x -> (x[1], x[2], x[3], x[4], x[5], s, previous_ts[t]), res_tup_up)
-                        res_tup_down_with_s_and_t = map(x -> (x[1], x[2], x[3], x[4], x[5], s, previous_ts[t]), res_tup_down)
-                        if tup[2] in res_nodes_tuple
+                        res_tup_up_with_s_and_t = map(x -> (x[1], x[2], x[3], x[4], x[5], s, t), res_tup_up)
+                        res_tup_down_with_s_and_t = map(x -> (x[1], x[2], x[3], x[4], x[5], s, t), res_tup_down)
+                        if red_tup[2] in res_nodes_tuple #consumer from node
                             for rtd in res_tup_down_with_s_and_t
                                 add_to_expression!(ramp_expr_res_up[tup], -1 * sum(reserve_types[rtd[2]] .* v_reserve[rtd]))
                             end
                             for rtu in res_tup_up_with_s_and_t
                                 add_to_expression!(ramp_expr_res_down[tup], sum(reserve_types[rtu[2]] .* v_reserve[rtu]))
                             end
-                        elseif tup[3] in res_nodes_tuple
+                        elseif red_tup[3] in res_nodes_tuple #producer to node
                             for rtu in res_tup_up_with_s_and_t
                                 add_to_expression!(ramp_expr_res_up[tup], -1 * sum(reserve_types[rtu[2]] .* v_reserve[rtu])) 
                             end
