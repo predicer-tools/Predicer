@@ -8,6 +8,7 @@ Create the variables used in the model, and save them in the model_contents dict
 
 # Arguments
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::InputData`: struct containing user input.
 """
 function create_variables(model_contents::OrderedDict, input_data::InputData)
     create_v_flow(model_contents, input_data)
@@ -15,6 +16,7 @@ function create_variables(model_contents::OrderedDict, input_data::InputData)
     create_v_online(model_contents, input_data)
     create_v_reserve(model_contents, input_data)
     create_v_state(model_contents, input_data)
+    create_vq_ramp(model_contents, input_data)
     create_v_flow_op(model_contents, input_data)
     create_v_risk(model_contents, input_data)
     create_v_balance_market(model_contents, input_data)
@@ -32,6 +34,7 @@ Set up v_flow variables, which symbolise flows between nodes and processes, acco
 
 # Arguments
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::InputData`: struct containing user input.
 """
 function create_v_flow(model_contents::OrderedDict, input_data::InputData)
     process_tuples = process_topology_tuples(input_data)
@@ -48,6 +51,7 @@ Set up v_load variables, which symbolise the flows of the processes between node
 
 # Arguments
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::InputData`: struct containing user input.
 """
 function create_v_load(model_contents::OrderedDict, input_data::InputData)
     if input_data.contains_reserves
@@ -91,6 +95,7 @@ Set up process, node and bid reserve variables used for modelling reserves.
 
 # Arguments
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::InputData`: struct containing user input.
 """
 function create_v_reserve(model_contents::OrderedDict, input_data::InputData)
     if input_data.contains_reserves
@@ -123,6 +128,7 @@ Set up state variables and surplus and shortage slack variables used for modelin
 
 # Arguments
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::InputData`: struct containing user input.
 """
 function create_v_state(model_contents::OrderedDict, input_data::InputData)
     model = model_contents["model"]
@@ -135,11 +141,35 @@ function create_v_state(model_contents::OrderedDict, input_data::InputData)
         model_contents["variable"]["v_state"] = v_state
     end
     
-    # Slack variables for node_states
-    vq_state_up = @variable(model, vq_state_up[tup in node_balance_tuple] >= 0)
-    vq_state_dw = @variable(model, vq_state_dw[tup in node_balance_tuple] >= 0)
-    model_contents["variable"]["vq_state_up"] = vq_state_up
-    model_contents["variable"]["vq_state_dw"] = vq_state_dw
+    if input_data.setup.use_node_dummy_variables
+        # Slack variables for node_states
+        vq_state_up = @variable(model, vq_state_up[tup in node_balance_tuple] >= 0)
+        vq_state_dw = @variable(model, vq_state_dw[tup in node_balance_tuple] >= 0)
+        model_contents["variable"]["vq_state_up"] = vq_state_up
+        model_contents["variable"]["vq_state_dw"] = vq_state_dw
+    end
+end
+
+
+"""
+    create_vq_ramp(model_contents::OrderedDict, input_data::InputData)
+
+Set up ramp variables and surplus and shortage slack variables.
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
+- `input_data::InputData`: struct containing user input.
+"""
+function create_vq_ramp(model_contents::OrderedDict, input_data::InputData)
+    model = model_contents["model"]
+    if input_data.setup.use_ramp_dummy_variables
+        ramp_tups = process_topology_ramp_times_tuples(input_data)
+        # Slack variables for node_states
+        vq_ramp_up = @variable(model, vq_ramp_up[tup in ramp_tups] >= 0)
+        vq_ramp_dw = @variable(model, vq_ramp_dw[tup in ramp_tups] >= 0)
+        model_contents["variable"]["vq_ramp_up"] = vq_ramp_up
+        model_contents["variable"]["vq_ramp_dw"] = vq_ramp_dw
+    end
 end
 
 
@@ -149,7 +179,8 @@ end
 Set up operational slot flow variables and binary slot indicator variable for processes with piecewise efficiency functionality.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
+- `input_data::InputData`: struct containing user input.
 """
 function create_v_flow_op(model_contents::OrderedDict, input_data::InputData)
     if input_data.contains_piecewise_eff
@@ -171,7 +202,8 @@ end
 Set up variables for CVaR risk measure.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
+- `input_data::InputData`: struct containing user input.
 """
 function create_v_risk(model_contents::OrderedDict, input_data::InputData)
     if input_data.contains_risk
@@ -190,7 +222,8 @@ end
 Set up variables for balance market volumes.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
+- `input_data::InputData`: struct containing user input.
 """
 function create_v_balance_market(model_contents::OrderedDict, input_data::InputData)
     model = model_contents["model"]
@@ -205,7 +238,8 @@ end
 Set up online variables for reserve market participation.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
+- `input_data::InputData`: struct containing user input.
 """
 function create_v_reserve_online(model_contents::OrderedDict, input_data::InputData)
     model = model_contents["model"]
@@ -220,6 +254,10 @@ end
     create_v_setpoint(model_contents::OrderedDict, input_data::InputData)
 
 Set up variables for general constraints with a setpoint functionality. 
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::InputData`: struct containing user input.
 """
 function create_v_setpoint(model_contents::OrderedDict, input_data::InputData)
     model = model_contents["model"]
@@ -237,6 +275,10 @@ end
     create_v_block(model_contents::OrderedDict, input_data::InputData)
 
 Function to setup variables needed for inflow blocks.
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::InputData`: struct containing user input.
 """
 function create_v_block(model_contents::OrderedDict, input_data::InputData)
     model = model_contents["model"]
@@ -251,6 +293,10 @@ end
     create_v_node_delay(model_contents::OrderedDict, input_data::InputData)
 
 Function to create variables needed for delay flow between nodes. 
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::InputData`: struct containing user input.
 """
 function create_v_node_delay(model_contents::OrderedDict, input_data::InputData)
     model = model_contents["model"]
