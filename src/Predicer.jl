@@ -8,6 +8,7 @@ module Predicer
     include("init.jl")
 
     include("import_input_data.jl")
+    include("roll_predicer.jl")
 
     
     
@@ -46,7 +47,9 @@ module Predicer
     add_cf,
     add_process_to_reserve,
     add_topology,
-    add_load_limits
+    add_load_limits,
+    add_group_members,
+    add_group
 
     export create_tuples,
     reserve_nodes,
@@ -94,6 +97,7 @@ module Predicer
     create_v_online,
     create_v_reserve,
     create_v_state,
+    create_vq_ramp,
     create_v_flow_op,
     create_v_risk,
     create_v_balance_market,
