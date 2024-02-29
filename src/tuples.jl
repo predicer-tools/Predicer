@@ -504,7 +504,7 @@ function fixed_limit_process_topology_tuples( input_data::InputData) # original 
     res_nodes = reserve_nodes(input_data)
     for p in values(processes)
         if !p.is_cf && (p.conversion == 1)
-            push!(fixed_limit_process_topology_tuples, filter(x -> x[1] == p.name && (x[2] == p.name || x[2] in res_nodes), process_tuples)...)
+            push!(fixed_limit_process_topology_tuples, filter(x -> x[1] == p.name, process_tuples)...)
         end
     end
     return fixed_limit_process_topology_tuples
@@ -639,13 +639,10 @@ Return tuples containing time steps with ramp possibility for each process topol
 function process_topology_ramp_times_tuples(input_data::InputData) # orignal name: create_ramp_tuple()
     ramp_times_process_topology_tuple = NTuple{5, String}[]
     processes = input_data.processes
-    temporals = input_data.temporals
     process_tuples = process_topology_tuples(input_data)
     for (name, source, sink, s, t) in process_tuples
         if processes[name].conversion == 1 && !processes[name].is_cf
-            if t != temporals.t[1]
-                push!(ramp_times_process_topology_tuple, (name, source, sink, s, t))
-            end
+            push!(ramp_times_process_topology_tuple, (name, source, sink, s, t))
         end
     end
     return ramp_times_process_topology_tuple
