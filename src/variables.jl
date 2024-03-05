@@ -54,7 +54,7 @@ Set up v_load variables, which symbolise the flows of the processes between node
 - `input_data::InputData`: struct containing user input.
 """
 function create_v_load(model_contents::OrderedDict, input_data::InputData)
-    if input_data.contains_reserves
+    if input_data.setup.contains_reserves
         reserve_processes = unique(map(x -> (x[3:end]), reserve_process_tuples(input_data)))
         model = model_contents["model"]
         v_load = @variable(model, v_load[tup in reserve_processes] >= 0)
@@ -73,7 +73,7 @@ Set up binary online, start and stop variables for modeling online functionality
 - `input_data::InputData`: Struct containing the input data defined by the user, based on which the model is built. 
 """
 function create_v_online(model_contents::OrderedDict, input_data::InputData)
-    if input_data.contains_online
+    if input_data.setup.contains_online
         proc_online_tuple = online_process_tuples(input_data)
         if !isempty(proc_online_tuple)
             model = model_contents["model"]
@@ -98,7 +98,7 @@ Set up process, node and bid reserve variables used for modelling reserves.
 - `input_data::InputData`: struct containing user input.
 """
 function create_v_reserve(model_contents::OrderedDict, input_data::InputData)
-    if input_data.contains_reserves
+    if input_data.setup.contains_reserves
         model = model_contents["model"]
 
         res_potential_tuple = reserve_process_tuples(input_data)
@@ -135,7 +135,7 @@ function create_v_state(model_contents::OrderedDict, input_data::InputData)
     node_state_tuple = state_node_tuples(input_data)
     node_balance_tuple = balance_node_tuples(input_data)
 
-    if input_data.contains_states
+    if input_data.setup.contains_states
         # Node state variable
         v_state = @variable(model, v_state[tup in node_state_tuple] >= 0)
         model_contents["variable"]["v_state"] = v_state
@@ -183,7 +183,7 @@ Set up operational slot flow variables and binary slot indicator variable for pr
 - `input_data::InputData`: struct containing user input.
 """
 function create_v_flow_op(model_contents::OrderedDict, input_data::InputData)
-    if input_data.contains_piecewise_eff
+    if input_data.setup.contains_piecewise_eff
         model = model_contents["model"]
         proc_op_balance_tuple = operative_slot_process_tuples(input_data)
         v_flow_op_in = @variable(model,v_flow_op_in[tup in proc_op_balance_tuple] >= 0)
@@ -206,7 +206,7 @@ Set up variables for CVaR risk measure.
 - `input_data::InputData`: struct containing user input.
 """
 function create_v_risk(model_contents::OrderedDict, input_data::InputData)
-    if input_data.contains_risk
+    if input_data.setup.contains_risk
         model = model_contents["model"]
         risk_tuple = scenarios(input_data)
         v_var = @variable(model,v_var)

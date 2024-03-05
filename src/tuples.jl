@@ -59,7 +59,7 @@ Return nodes which have a reserve. Form: (n).
 """
 function reserve_nodes(input_data::InputData) # original name: create_res_nodes_tuple()
     reserve_nodes = String[]
-    if input_data.contains_reserves
+    if input_data.setup.contains_reserves
         markets = input_data.markets
         for m in collect(keys(markets))
             if markets[m].type == "reserve"
@@ -84,7 +84,7 @@ Return tuples identifying each reserve market with its node and directions in ea
     This function assumes that reserve markets' market type is formatted "reserve" and that the up and down reserve market directions are "res_up" and "res_down".
 """
 function reserve_market_directional_tuples(input_data::InputData) # original name: create_res_tuple()
-    if !input_data.contains_reserves
+    if !input_data.setup.contains_reserves
         return NTuple{5, String}[]
     else
         reserve_market_directional_tuples = NTuple{5, String}[]
@@ -173,7 +173,7 @@ end
 Return tuples for each process with online variables for every time step and scenario. Form: (p, s, t).
 """
 function online_process_tuples(input_data::InputData) # original name: create_proc_online_tuple()
-    if !input_data.contains_online
+    if !input_data.setup.contains_online
         return NTuple{3, String}[]
     else
         online_process_tuples = NTuple{3, String}[]
@@ -197,7 +197,7 @@ end
 Build tuples containing the mapping of processes - nodes over each reserve. Form: (dir, res_type, reserve, node, process)
 """
 function reserve_groups(input_data::InputData)
-    if !input_data.contains_reserves
+    if !input_data.setup.contains_reserves
         return NTuple{5, String}[]
     else
         markets = input_data.markets
@@ -231,7 +231,7 @@ end
 Return tuples for each nodegroup, scenario and timestep'. Form: (ng, s, t).
 """
 function nodegroup_reserves(input_data::InputData)
-    if !input_data.contains_reserves
+    if !input_data.setup.contains_reserves
         return NTuple{3, String}[]
     else
         res_nodegroups = NTuple{3, String}[]
@@ -253,7 +253,7 @@ end
 Return tuples for each node, scenario and timestep'. Form: (n, s, t).
 """
 function node_reserves(input_data::InputData)
-    if !input_data.contains_reserves
+    if !input_data.setup.contains_reserves
         return NTuple{3, String}[]
     else
         res_nodes = NTuple{3, String}[]
@@ -275,7 +275,7 @@ end
 Return tuples containing information on 'producer' process topologies with reserve potential for every time step and scenario. Form: (d, rt, p, so, si, s, t).
 """
 function producer_reserve_process_tuples(input_data::InputData) # original name: create_res_pot_prod_tuple()
-    if !input_data.contains_reserves
+    if !input_data.setup.contains_reserves
         return NTuple{7, String}[]
     else
         res_nodes = reserve_nodes(input_data)
@@ -292,7 +292,7 @@ end
 Return tuples containing information on 'consumer' process topologies with reserve potential for every time step and scenario. Form: (d, rt, p, so, si, s, t).
 """
 function consumer_reserve_process_tuples(input_data::InputData) # original name: create_res_pot_cons_tuple()
-    if !input_data.contains_reserves
+    if !input_data.setup.contains_reserves
         return NTuple{7, String}[]
     else
         res_nodes = reserve_nodes(input_data)
@@ -312,7 +312,7 @@ Return tuples containing information on process topologies with reserve potentia
     This function assumes that the up and down reserve market directions are "res_up" and "res_down".
 """
 function reserve_process_tuples(input_data::InputData) # original name: create_res_potential_tuple(), duplicate existed: create_proc_potential_tuple()
-    if !input_data.contains_reserves
+    if !input_data.setup.contains_reserves
         return NTuple{7, String}[]
     else
         reserve_process_tuples = NTuple{7, String}[]
@@ -346,7 +346,7 @@ Return tuples for each node with a state (storage) for every time step and scena
 """
 function state_node_tuples(input_data::InputData) # original name: create_node_state_tuple()
     state_node_tuples = NTuple{3, String}[]
-    if input_data.contains_states
+    if input_data.setup.contains_states
         nodes = input_data.nodes
         scenarios = collect(keys(input_data.scenarios))
         temporals = input_data.temporals
@@ -427,7 +427,7 @@ end
 Return tuples identifying processes with piecewise efficiency for each of their operative slots (o), and every time step and scenario. Form: (p, s, t, o).
 """
 function operative_slot_process_tuples(input_data::InputData) # original name: create_proc_op_balance_tuple()
-    if !input_data.contains_piecewise_eff
+    if !input_data.setup.contains_piecewise_eff
         return NTuple{4, String}[]
     else
         operative_slot_process_tuples = NTuple{4, String}[]
@@ -454,7 +454,7 @@ end
 Return tuples identifying processes with piecewise efficiency for each time step and scenario. Form: (p, s, t).
 """
 function piecewise_efficiency_process_tuples(input_data::InputData) # original name: create_proc_op_tuple()
-    if !input_data.contains_piecewise_eff
+    if !input_data.setup.contains_piecewise_eff
         return NTuple{3, String}[]
     else
         piecewise_efficiency_process_tuples = NTuple{3, String}[]
@@ -535,7 +535,7 @@ end
 Return tuples for each nodegroup with reserves for each relevant reserve type, all time steps and scenarios. Form: (ng, rt, s, t).
 """
 function reserve_nodegroup_tuples(input_data::InputData) # original name: create_res_eq_tuple()
-    if !input_data.contains_reserves
+    if !input_data.setup.contains_reserves
         return NTuple{4, String}[]
     else
         reserve_node_tuples = NTuple{4, String}[]
@@ -558,7 +558,7 @@ Return tuples for each reserve market with an 'up_down' direction for all time s
     This function assumes that reserve markets with up and down reserve have market direction "up_down".
 """
 function up_down_reserve_market_tuples(input_data::InputData) # original name: create_res_eq_updn_tuple()
-    if !input_data.contains_reserves
+    if !input_data.setup.contains_reserves
         return NTuple{3, String}[]
     else
         up_down_reserve_market_tuples = NTuple{3, String}[]
@@ -588,7 +588,7 @@ Return tuples for each reserve market for every time step and scenario. Form: (r
     This function assumes that reserve markets' market type is formatted "reserve".
 """
 function reserve_market_tuples(input_data::InputData) # orignal name: create_res_final_tuple()
-    if !input_data.contains_reserves
+    if !input_data.setup.contains_reserves
         return NTuple{3, String}[]
     else
         reserve_market_tuples = NTuple{3, String}[]
@@ -703,7 +703,7 @@ form: (sto_node, res_dir, res_type, p, so, si, s, t)
 """
 function state_reserves(input_data::InputData)
     state_reserves = NTuple{8, String}[]
-    if input_data.contains_reserves && input_data.contains_states
+    if input_data.setup.contains_reserves && input_data.setup.contains_states
         processes = input_data.processes
         nodes = input_data.nodes
         res_nodes_tuple = reserve_nodes(input_data)
@@ -750,7 +750,7 @@ form: (market, s, t)
 """
 function create_reserve_limits(input_data::InputData)
     reserve_limits = NTuple{3, String}[]
-    if input_data.contains_reserves
+    if input_data.setup.contains_reserves
         markets = input_data.markets
         scenarios = collect(keys(input_data.scenarios))
         temporals = input_data.temporals
@@ -828,7 +828,7 @@ Function to create tuples for "source" nodes with a diffusion functionality. For
 
 function node_diffusion_tuple(input_data::InputData)
     node_diffusion_tup = NTuple{3, String}[]
-    if input_data.contains_diffusion
+    if input_data.setup.contains_diffusion
         scenarios = collect(keys(input_data.scenarios))
         temporals = input_data.temporals.t
         nodes = diffusion_nodes(input_data)
@@ -847,7 +847,7 @@ Function to create tuples for node delay functionality. Form (node1, node2, scen
 """
 function node_delay_tuple(input_data::InputData)
     node_delay_tup = NTuple{5, String}[]
-    if input_data.contains_delay && !input_data.temporals.is_variable_dt # ensure the dt length is constant. Need to change in the future if it isn't...
+    if input_data.setup.contains_delay && !input_data.temporals.is_variable_dt # ensure the dt length is constant. Need to change in the future if it isn't...
         for tup in input_data.node_delay
             n1 = tup[1]
             n2 = tup[2]
@@ -875,7 +875,7 @@ end
 Function to obtain the nodes that are part of a diffusion relation. form (n)
 """
 function diffusion_nodes(input_data::InputData)
-    if input_data.contains_diffusion
+    if input_data.setup.contains_diffusion
         return unique(vcat(map(x -> x[1], input_data.node_diffusion), map(x -> x[2], input_data.node_diffusion)))
     else
         return String[]
