@@ -12,7 +12,7 @@ end
 
 function read_xlsx(input_data_path::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[])
 
-    sheetnames_system = ["nodes", "processes", "groups", "process_topology", "node_diffusion", "node_history", "node_delay", "inflow_blocks", "markets", "reserve_realisation", "scenarios","efficiencies", "reserve_type","risk", "cap_ts", "gen_constraint", "constraints"]
+    sheetnames_system = ["setup", "nodes", "processes", "groups", "process_topology", "node_diffusion", "node_history", "node_delay", "inflow_blocks", "markets", "reserve_realisation", "scenarios","efficiencies", "reserve_type","risk", "cap_ts", "gen_constraint", "constraints"]
     sheetnames_timeseries = ["cf", "inflow", "market_prices", "price","eff_ts", "fixed_ts", "balance_prices"]
 
     system_data = OrderedDict()
@@ -152,7 +152,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
             end
         end
         if Bool(n.is_state)
-            Predicer.add_state(nodes[n.node], Predicer.State(n.in_max, n.out_max, n.state_loss_proportional, n.state_max, n.state_min, n.initial_state, n.is_temp, n.T_E_conversion, n.residual_value))
+            Predicer.add_state(nodes[n.node], Predicer.State(n.in_max, n.out_max, n.state_loss_proportional, n.state_max, n.state_min, n.initial_state, n.scenario_independent_state, n.is_temp, n.T_E_conversion, n.residual_value))
         end
         if Bool(n.is_res)
             Predicer.add_node_to_reserve(nodes[n.node])
@@ -200,34 +200,34 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
             pt = system_data["process_topology"][j, :]
             if pt.process == p.process
                 if pt.source_sink == "source"
-                    push!(sources, (pt.node, pt.capacity, pt.VOM_cost, pt.ramp_up, pt.ramp_down))
+                    push!(sources, (pt.node, pt.capacity, pt.VOM_cost, pt.ramp_up, pt.ramp_down, pt.initial_load, pt.initial_flow))
                 elseif pt.source_sink == "sink"
-                    push!(sinks, (pt.node, pt.capacity, pt.VOM_cost, pt.ramp_up, pt.ramp_down))
+                    push!(sinks, (pt.node, pt.capacity, pt.VOM_cost, pt.ramp_up, pt.ramp_down, pt.initial_load, pt.initial_flow))
                 end
             end
         end
         if p.conversion == 1
             for so in sources
-                Predicer.add_topology(processes[p.process], Predicer.Topology(so[1], p.process, Float64(so[2]), Float64(so[3]), Float64(so[4]), Float64(so[5])))
+                Predicer.add_topology(processes[p.process], Predicer.Topology(so[1], p.process, Float64(so[2]), Float64(so[3]), Float64(so[4]), Float64(so[5]), Float64(so[6]), Float64(so[7])))
             end
             for si in sinks
-                Predicer.add_topology(processes[p.process], Predicer.Topology(p.process, si[1], Float64(si[2]), Float64(si[3]), Float64(si[4]), Float64(si[5])))
+                Predicer.add_topology(processes[p.process], Predicer.Topology(p.process, si[1], Float64(si[2]), Float64(si[3]), Float64(si[4]), Float64(si[5]), Float64(si[6]), Float64(si[7])))
             end
         elseif p.conversion == 2
             for so in sources, si in sinks
-                Predicer.add_topology(processes[p.process], Predicer.Topology(so[1], si[1], Float64(min(so[2], si[2])), Float64(si[3]), Float64(si[4]), Float64(si[5])))
+                Predicer.add_topology(processes[p.process], Predicer.Topology(so[1], si[1], Float64(min(so[2], si[2])), Float64(si[3]), Float64(si[4]), Float64(si[5]), Float64(si[6]), Float64(si[7])))
             end
         elseif p.conversion == 3
             for so in sources, si in sinks
-                Predicer.add_topology(processes[p.process], Predicer.Topology(so[1], si[1], Float64(min(so[2], si[2])), Float64(so[3]), Float64(si[4]), Float64(si[5])))
-                Predicer.add_topology(processes[p.process], Predicer.Topology(si[1], so[1], Float64(min(so[2], si[2])), Float64(si[3]), Float64(si[4]), Float64(si[5])))
+                Predicer.add_topology(processes[p.process], Predicer.Topology(so[1], si[1], Float64(min(so[2], si[2])), Float64(so[3]), Float64(si[4]), Float64(si[5]), Float64(si[6]), Float64(so[7])))
+                Predicer.add_topology(processes[p.process], Predicer.Topology(si[1], so[1], Float64(min(so[2], si[2])), Float64(si[3]), Float64(si[4]), Float64(si[5]), Float64(si[6]), Float64(so[7])))
             end
         end
         if Bool(p.is_res)
             Predicer.add_process_to_reserve(processes[p.process]) 
         end
         if Bool(p.is_online)
-            Predicer.add_online(processes[p.process], Float64(p.start_cost), Float64(p.min_online), Float64(p.min_offline), Float64(p.max_online), Float64(p.max_offline), Bool(p.initial_state))
+            Predicer.add_online(processes[p.process], Float64(p.start_cost), Float64(p.min_online), Float64(p.min_offline), Float64(p.max_online), Float64(p.max_offline), Bool(p.initial_state), Bool(p.scenario_independent_online))
         end
     end
     
@@ -535,7 +535,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
         push!(gen_constraints[k[2]].factors,con_fac)
     end
     
-    contains_reserves = (true in map(n -> n.is_res, collect(values(nodes))))
+    
     contains_online = (true in map(p -> p.is_online, collect(values(processes))))
     contains_states = (true in map(n -> n.is_state, collect(values(nodes))))
     contains_piecewise_eff = (false in map(p -> isempty(p.eff_ops), collect(values(processes))))
@@ -544,6 +544,23 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
     contains_delay = !isempty(node_delay_tuples)
     contains_markets = !isempty(markets)
 
-    return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, contains_markets, processes, nodes, node_diffusion_tuples, node_delay_tuples, node_history, markets, groups, scens, reserve_type, risk, inflow_blocks, gen_constraints)
-    #return  (Predicer.Temporals(unique(sort(temps))), contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, contains_markets, processes, nodes, node_diffusion_tuples, node_delay_tuples, node_history, markets, groups, scens, reserve_type, risk, inflow_blocks, gen_constraints)
+
+    use_market_bids = Bool(filter(x -> x.parameter == "use_market_bids", eachrow(system_data["setup"]))[1].value)
+    contains_reserves = Bool(filter(x -> x.parameter == "use_reserves", eachrow(system_data["setup"]))[1].value)
+    if contains_reserves
+        contains_reserves = (true in map(n -> n.is_res, collect(values(nodes))))
+    end
+    reserve_realisation = Bool(filter(x -> x.parameter == "use_reserve_realisation", eachrow(system_data["setup"]))[1].value)
+    use_node_dummy_variables = Bool(filter(x -> x.parameter == "use_node_dummy_variables", eachrow(system_data["setup"]))[1].value)
+    use_ramp_dummy_variables = Bool(filter(x -> x.parameter == "use_ramp_dummy_variables", eachrow(system_data["setup"]))[1].value)
+    common_timesteps = Int(filter(x -> x.parameter == "common_timesteps", eachrow(system_data["setup"]))[1].value)
+    common_scenario_name_p = filter(x -> x.parameter == "common_scenario_name", eachrow(system_data["setup"]))[1]
+    if ismissing(common_scenario_name_p.value)
+        common_scenario_name = ""
+    end
+
+    setup = InputDataSetup(contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, contains_markets, 
+        reserve_realisation, use_market_bids, common_timesteps, common_scenario_name, use_node_dummy_variables, use_ramp_dummy_variables)
+
+    return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), setup, processes, nodes, node_diffusion_tuples, node_delay_tuples, node_history, markets, groups, scens, reserve_type, risk, inflow_blocks, gen_constraints)
 end
