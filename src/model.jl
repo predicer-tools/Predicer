@@ -7,6 +7,57 @@ using DataStructures
 using XLSX
 
 """
+    get_costs_dataframe(model_contents::OrderedDict, input_data::InputData, costs::Vector{String}, scenario::Vector{String})
+
+Returns a dataframe containing all the costs related to the model. 
+
+# Arguments
+- `model_contents::OrderedDict`: Model contents dict.
+- `input_data::Predicer.InputData`: Input data used in model.
+- `costs::Vector{String}`: Type of cost(s) to show, such as 'commodity_costs' or 'total_costs'. If empty, return all relevant costs. 
+- `scenario::Vector{String}`: The name of the scenario for which the value is to be shown. If left empty, return all relevant values. 
+"""
+function get_costs_dataframe(model_contents::OrderedDict, input_data::InputData, costs::Vector{String}=[], scenario::Vector{String}=[])
+    if isempty(costs)
+        costs = ["commodity_costs", "dummy_costs", "market_costs", "reserve_costs", "total_costs", "setpoint_deviation_costs", "start_costs", "state_residue_costs", "vom_costs"]
+    end
+    t_start = input_data.temporals.t[begin]
+    t_end = input_data.temporals.t[end]
+    df = DataFrame([[t_start], [t_end]], ["t_start", "t_end"])
+    es = model_contents["expression"]
+    if isempty(scenario)
+        scens = Predicer.scenarios(input_data)
+    else
+        scens = scenario
+    end
+    for cost in costs
+        for s in scens
+            
+            colname = cost * "_" * s
+            df[!, colname] = [JuMP.value(es[cost][s])]
+        end
+    end
+    return df
+end
+
+function get_costs_dataframe(model_contents::OrderedDict, input_data::InputData, costs::String, scenario::String)
+    if isempty(costs)
+        cs = String[]
+    else
+        cs = String[costs]
+    end
+    if isempty(scenario)
+        ss = String[]
+    else
+        ss = String[scenario]
+    end
+    return get_costs_dataframe(model_contents, input_data, cs, ss)
+end
+
+
+
+
+"""
     get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.InputData, type::String="", name::String="",scenario::String="")
 
 Returns a dataframe containing specific information for a variable in the model.
@@ -44,7 +95,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             end
         end
     elseif type == "v_load"
-        if input_data.contains_reserves
+        if input_data.setup.contains_reserves
             v_load = vars[type]
             if !isempty(name)
                 tups = unique(map(x->(x[1],x[2],x[3]),filter(x->x[1]==name, unique(map(x -> (x[3:end]), tuples["res_potential_tuple"])))))
@@ -60,7 +111,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             end
         end
     elseif type == "v_reserve"
-        if input_data.contains_reserves
+        if input_data.setup.contains_reserves
             v_res = vars[type]
             if !isempty(name)
                 tups = unique(map(x->(x[1],x[2],x[3],x[5]),filter(x->x[3]==name, tuples["res_potential_tuple"])))
@@ -76,7 +127,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             end
         end
     elseif type == "v_res_final"
-        if input_data.contains_reserves
+        if input_data.setup.contains_reserves
             v_res = vars[type]
             ress = unique(map(x->x[1],tuples["res_final_tuple"]))
             for r in ress, s in scenarios
@@ -88,7 +139,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             end
         end
     elseif type == "v_online" || type == "v_start" || type == "v_stop"
-        if input_data.contains_online
+        if input_data.setup.contains_online
             v_bin = vars[type]
             if !isempty(name)
                 procs = unique(map(x->x[1],filter(y ->y[1] == name, tuples["process_tuple"])))
@@ -104,7 +155,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             end
         end
     elseif type == "v_state"
-        if input_data.contains_states
+        if input_data.setup.contains_states
             v_state = vars[type]
             if !isempty(name)
                 nods = map(y -> y[1], filter(x->x[1]==name, tuples["node_state_tuple"]))
@@ -199,7 +250,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             end
         end
     elseif type == "v_reserve_online"
-        if input_data.contains_reserves
+        if input_data.setup.contains_reserves
             v_reserve_online = vars[type]
             if !isempty(name)
                 ress = unique(map(y -> y[1], filter(x -> x[1] == name, tuples["reserve_limits"])))
@@ -215,7 +266,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             end
         end
     elseif type == "v_node_diffusion" # only returns an expression with node diff info, no variable. 
-        if input_data.contains_diffusion
+        if input_data.setup.contains_diffusion
             node_diffs = model_contents["expression"]["e_node_diff"]
             if isempty(name)
                 nodenames = unique(map(y -> y[1], collect(keys(node_diffs))))
@@ -235,7 +286,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             end
         end
     elseif type == "v_node_delay"
-        if input_data.contains_delay
+        if input_data.setup.contains_delay
             v_node_delays = model_contents["variable"]["v_node_delay"]
             if isempty(name)
                 conn_names = unique(map(x -> (x[1], x[2]), node_delay_tuple(input_data)))
@@ -285,7 +336,7 @@ function write_bid_matrix(model_contents::OrderedDict, input_data::Predicer.Inpu
     println("Writing bid matrix...")
     vars = model_contents["variable"]
     v_bid = model_contents["expression"]["v_bid"]
-    if input_data.contains_reserves
+    if input_data.setup.contains_reserves
         v_res_final = vars["v_res_final"]
     end
 
@@ -315,7 +366,7 @@ function write_bid_matrix(model_contents::OrderedDict, input_data::Predicer.Inpu
                         push!(volume,value(v_bid[tup]))
                     end
                 else
-                    if input_data.contains_reserves
+                    if input_data.setup.contains_reserves
                         tup = filter(x->x[1]==m && x[2]==s,tuples["res_final_tuple"])
                         volume = value.(v_res_final[tup].data)
                     end
@@ -342,7 +393,7 @@ Function to export a dictionary containing DataFrames to an xlsx file.
 - `fname::String`: Name of the xlsx file. (a suffix of date, time, and ".xlsx" are added automatically)
 """
 function dfs_to_xlsx(dfs::Dict{Any, Any}, fpath::String, fname::String="")
-    output_path = joinpath(fpath, fname * "_" * Dates.format(Dates.now(), "yyyy-mm-dd-HH-MM-SS")*".xlsx")
+    output_path = joinpath(pwd(), fpath, fname * "_" * Dates.format(Dates.now(), "yyyy-mm-dd-HH-MM-SS")*".xlsx")
     XLSX.openxlsx(output_path, mode="w") do xf
         for (i, sn) in enumerate(collect(keys(dfs)))
             XLSX.addsheet!(xf, sn)
@@ -351,6 +402,7 @@ function dfs_to_xlsx(dfs::Dict{Any, Any}, fpath::String, fname::String="")
             end
         end
     end
+    return output_path
 end
 
 
@@ -367,8 +419,8 @@ function resolve_market_nodes(input_data::InputData)
             input_data.nodes[node_name] = Predicer.Node(node_name, false, true)
             pname = markets[m].node * "_" * m * "_trade_process"
             market_p = Predicer.MarketProcess(pname)
-            Predicer.add_topology(market_p, Predicer.Topology(markets[m].node, node_name, 0.0, 0.00001, 1.0, 1.0))
-            Predicer.add_topology(market_p, Predicer.Topology(node_name, markets[m].node, 0.0, 0.0, 1.0, 1.0))
+            Predicer.add_topology(market_p, Predicer.Topology(markets[m].node, node_name, 0.0, 0.00001, 1.0, 1.0, 1.0, 1.0))
+            Predicer.add_topology(market_p, Predicer.Topology(node_name, markets[m].node, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0))
             input_data.processes[pname] = market_p
         end
     end
