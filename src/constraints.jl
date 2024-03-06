@@ -59,8 +59,10 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
 
     
 
-    vq_state_up = model_contents["variable"]["vq_state_up"]
-    vq_state_dw = model_contents["variable"]["vq_state_dw"]
+    if input_data.setup.use_node_dummy_variables
+        vq_state_up = model_contents["variable"]["vq_state_up"]
+        vq_state_dw = model_contents["variable"]["vq_state_dw"]
+    end
     temporals = input_data.temporals  
     nodes = input_data.nodes
 
@@ -182,9 +184,11 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
             e_state[tu] = AffExpr(0.0)
             e_state_losses[tu] = AffExpr(0.0)
 
-            add_to_expression!(e_cons[tu], -vq_state_dw[tu])
+            if input_data.setup.use_node_dummy_variables
+                add_to_expression!(e_cons[tu], -vq_state_dw[tu])
+                add_to_expression!(e_prod[tu], vq_state_up[tu])
+            end
             add_to_expression!(e_cons[tu], inflow_expr[tu])
-            add_to_expression!(e_prod[tu], vq_state_up[tu])
             add_to_expression!(e_prod[tu], e_node_diff[tu])
             add_to_expression!(e_prod[tu], e_node_delay[tu])
             add_to_expression!(e_prod[tu], e_node_history[tu])
@@ -883,6 +887,11 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
         v_stop = model_contents["variable"]["v_stop"]
     end
 
+    if input_data.setup.use_ramp_dummy_variables
+        vq_ramp_up = model_contents["variable"]["vq_ramp_up"]
+        vq_ramp_dw = model_contents["variable"]["vq_ramp_dw"]
+    end
+
     previous_ts = Predicer.get_previous_t(input_data.temporals)
     previous_proc_tups = Predicer.previous_process_topology_tuples(input_data)
     reduced_ramp_tuple = unique(map(x -> (x[1:3]), ramp_tuple))
@@ -905,6 +914,12 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
                 # add ramp rate limit
                 add_to_expression!(ramp_expr_up[tup], ramp_up_cap) 
                 add_to_expression!(ramp_expr_down[tup], - ramp_dw_cap)
+
+                # add ramp dummys if they are used
+                if input_data.setup.use_ramp_dummy_variables
+                    add_to_expression!(ramp_expr_up[tup], vq_ramp_up[tup])
+                    add_to_expression!(ramp_expr_down[tup], -vq_ramp_dw[tup])
+                end
 
                 # if online process
                 if processes[tup[1]].is_online
@@ -1512,14 +1527,29 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     end
 
     # Dummy variable costs
-    vq_state_up = model_contents["variable"]["vq_state_up"]
-    vq_state_dw = model_contents["variable"]["vq_state_dw"]
     dummy_costs = model_contents["expression"]["dummy_costs"] = OrderedDict()
     p = 1000000
+
+    if input_data.setup.use_node_dummy_variables
+        vq_state_up = model_contents["variable"]["vq_state_up"]
+        vq_state_dw = model_contents["variable"]["vq_state_dw"]
+    end
+
+    if input_data.setup.use_ramp_dummy_variables
+        vq_ramp_up = model_contents["variable"]["vq_ramp_up"]
+        vq_ramp_dw = model_contents["variable"]["vq_ramp_dw"]
+    end
     for s in scenarios
         dummy_costs[s] = AffExpr(0.0) 
-        for tup in filter(x->x[2]==s,node_balance_tuple)
-            add_to_expression!(dummy_costs[s], sum(vq_state_up[tup])*p + sum(vq_state_dw[tup])*p)
+        if input_data.setup.use_node_dummy_variables
+            for tup in filter(x->x[2]==s,node_balance_tuple)
+                add_to_expression!(dummy_costs[s], sum(vq_state_up[tup])*p + sum(vq_state_dw[tup])*p)
+            end
+        end
+        if input_data.setup.use_ramp_dummy_variables
+            for tup in filter(x -> x[4] == s, process_topology_ramp_times_tuples(input_data))
+                add_to_expression!(dummy_costs[s], sum(vq_ramp_up[tup])*p + sum(vq_ramp_dw[tup])*p)
+            end
         end
     end
     
