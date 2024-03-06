@@ -11,6 +11,19 @@ function get_data(fpath::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[
     return import_input_data(fpath, t_horizon)
 end
 
+
+function create_validation_dict(input_data::InputData)
+    val_dict = OrderedDict()
+    temps = input_data.temporals.t
+    for s in Predicer.scenarios(input_data), i in 1:1:input_data.setup.common_timesteps
+        val_dict[(s, temps[i])] = (input_data.setup.common_scenario_name, temps[i])
+    end
+    for s in Predicer.scenarios(input_data), i in input_data.setup.common_timesteps+1:1:length(input_data.temporals.t)
+        val_dict[(s, temps[i])] = (s, temps[i])
+    end
+    return val_dict
+end
+
 function build_model_contents_dict(input_data::Predicer.InputData)
     model_contents = OrderedDict()
     model_contents["constraint"] = OrderedDict() #constraints
@@ -18,6 +31,7 @@ function build_model_contents_dict(input_data::Predicer.InputData)
     model_contents["variable"] = OrderedDict() #variables?
     model_contents["gen_constraint"] = OrderedDict() #GenericConstraints
     model_contents["gen_expression"] = OrderedDict() #GenericConstraints
+    model_contents["validation_dict"] = create_validation_dict(input_data)
     input_data_dirs = unique(map(m -> m.direction, collect(values(input_data.markets))))
     res_dir = []
     for d in input_data_dirs
