@@ -1098,7 +1098,7 @@ Struct containing the imported input data, based on which the Predicer is built.
 - `contains_delay::Bool`: Boolean indicating whether the model (input_data) requires delay functionality structures. 
 - `contains_markets::Bool`: Boolean indicating whether the model (input_data) needs market structures. 
 """
-struct InputDataSetup
+mutable struct InputDataSetup
     contains_reserves::Bool
     contains_online::Bool
     contains_states::Bool
