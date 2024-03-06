@@ -45,10 +45,31 @@ function create_tuples(input_data::InputData) # unused, should be debricated
     tuplebook["group_tuples"] = create_group_tuples(input_data)
     tuplebook["node_diffusion_tuple"] = node_diffusion_tuple(input_data)
     tuplebook["diffusion_nodes"] = diffusion_nodes(input_data)
-    tuplebook["node_delay_tuple"] = node_delay_tuple(input_data)
-
-    
+    tuplebook["node_delay_tuple"] = node_delay_tuple(input_data)    
     return tuplebook
+end
+
+"""
+    validate_tuple(mc::OrderedDict, tuple::NTuple{N, String} where N, s_index::Int)
+
+Helper function used to correct generated index tuples in cases when the start of the optimization horizon is the same for all scenarios.
+"""
+function validate_tuple(mc::OrderedDict, tuple::NTuple{N, String} where N, s_index::Int)
+    if s_index + 1 < length(tuple)
+        return (tuple[1:s_index-1]..., mc["validation_dict"][tuple[s_index:s_index+1]]..., tuple[s_index+2:end]...)
+    else
+        return (tuple[1:s_index-1]..., mc["validation_dict"][tuple[s_index:s_index+1]]...)
+    end
+end
+
+
+"""
+    validate_tuple(mc::OrderedDict, tuple::Vector{T} where T, s_index::Int)
+
+Helper function used to correct generated index tuples in cases when the start of the optimization horizon is the same for all scenarios.
+"""
+function validate_tuple(mc::OrderedDict, tuple::Vector{T} where T, s_index::Int)
+    return map(x -> Predicer.validate_tuple(mc, x, s_index), tuple)
 end
 
 
