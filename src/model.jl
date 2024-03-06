@@ -171,17 +171,35 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             end
         end
     elseif type == "vq_state_up" || type == "vq_state_dw"
-        v_state = vars[type]
-        if !isempty(name)
-            nods = unique(map(x->x[1],filter(y -> y[1] == name, tuples["node_balance_tuple"])))
-        else
-            nods = unique(map(x->x[1],tuples["node_balance_tuple"]))
+        if input_data.setup.use_node_dummy_variables
+            v_state = vars[type]
+            if !isempty(name)
+                nods = unique(map(x->x[1],filter(y -> y[1] == name, tuples["node_balance_tuple"])))
+            else
+                nods = unique(map(x->x[1],tuples["node_balance_tuple"]))
+            end
+            for n in nods, s in scenarios
+                col_tup = filter(x->x[1]==n && x[2]==s, tuples["node_balance_tuple"])
+                colname = n * "_" * s
+                if !isempty(col_tup)
+                    df[!, colname] = value.(v_state[col_tup].data)
+                end
+            end
         end
-        for n in nods, s in scenarios
-            col_tup = filter(x->x[1]==n && x[2]==s, tuples["node_balance_tuple"])
-            colname = n * "_" * s
-            if !isempty(col_tup)
-                df[!, colname] = value.(v_state[col_tup].data)
+    elseif type == "vq_ramp_up" || type == "vq_ramp_dw"
+        if input_data.setup.use_ramp_dummy_variables
+            v_ramp = vars[type]
+            if !isempty(name)
+                procs = unique(map(x->(x[1:3]),filter(y -> y[1] == name, tuples["ramp_tuple"])))
+            else
+                procs = unique(map(x->(x[1:3]),tuples["ramp_tuple"]))
+            end
+            for p in procs, s in scenarios
+                col_tup = filter(x->x[1:3] == p && x[4]==s, tuples["ramp_tuple"])
+                colname = p[1] * "_" * p[2] * "_" * p[3] * "_" * s
+                if !isempty(col_tup)
+                    df[!, colname] = value.(v_ramp[col_tup].data)
+                end
             end
         end
     elseif type == "v_bid"
@@ -314,8 +332,8 @@ Collect all of the available variable results into DataFrames collected in a dic
 """
 function get_all_result_dataframes(model_contents::OrderedDict, input_data::InputData, scenario="", name="")
     dfs = Dict()
-    types = ["v_flow", "v_load", "v_reserve", "v_res_final", "v_online", "v_start", "v_stop", "v_state", "vq_state_up", "vq_state_dw", 
-        "v_bid", "v_flow_bal", "v_block", "v_setpoint", "v_set_up", "v_set_down", "v_reserve_online", "v_node_diffusion", "v_node_delay"]
+    types = ["v_flow", "v_load", "v_reserve", "v_res_final", "v_online", "v_start", "v_stop", "v_state", "vq_state_up", "vq_state_dw", "v_bid",
+        "vq_ramp_up", "vq_ramp_dw", "v_flow_bal", "v_block", "v_setpoint", "v_set_up", "v_set_down", "v_reserve_online", "v_node_diffusion", "v_node_delay"]
     for type in types
         dfs[type] = Predicer.get_result_dataframe(model_contents, input_data, type, name, scenario)
     end
