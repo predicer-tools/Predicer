@@ -1,5 +1,11 @@
+[![documentation](https://img.shields.io/badge/docs-main-green?logo=github&link=https%3A%2F%2Fpredicer-tools.github.io%2FPredicer%2F)](https://predicer-tools.github.io/Predicer/)
+
 # Predicer
 ‘Predictive decider’ for actors making decisions over multiple stages
+
+If you use Predicer in a public work, please cite [the following document](https://doi.org/10.1007/s11081-023-09824-w)
+
+Pursiheimo, E., Sundell, D., Kiviluoma, J., & Hankimaa, H. (2023). Predicer: abstract stochastic optimisation model framework for multi-market operation. Optimization and Engineering, 1-30.
 
 ## How to install
 
@@ -34,13 +40,13 @@
 
         julia> using Predicer
 
-- To generate a model based on a input data file (in the example an Excel file located under `Predicer\\input_data\\`) use the `Predicer.generate_model(fpath)` function, where the parameter 'fpath' is the path to the input data file. The 'generate_model()' function imports the input data from the defined location, and build a model around it. The function returns two values, a "model contents" (mc) dictionary containing the built optimization model, as well as used expressions, indices and constraints for debugging. The other return value is the input data on which the optimization model is built on. 
+- To generate a model based on a input data file (in the example an Excel file located under `Predicer/input_data/`) use the `Predicer.generate_model(fpath)` function, where the parameter 'fpath' is the path to the input data file. The 'generate_model()' function imports the input data from the defined location, and build a model around it. The function returns two values, a "model contents" (mc) dictionary containing the built optimization model, as well as used expressions, indices and constraints for debugging. The other return value is the input data on which the optimization model is built on. 
         
         julia> mc, input_data = Predicer.generate_model(fpath)
 
-- Or if using the example input data file `Predicer\\input_data\\input_data.xlsx`
+- Or if using the example input data file `Predicer/input_data/input_data.xlsx`
 
-        julia> mc, input_data = Predicer.generate_model(joinpath(pwd(), "input_data\\input_data.xlsx"))
+        julia> mc, input_data = Predicer.generate_model("input_data/input_data.xlsx")
 
 
 - `Predicer.solve_model(mc)` solves the model `mc`, and shows the solver output.
@@ -48,7 +54,7 @@
         julia> Predicer.solve_model(mc)
 
 
-- The resulting bid matrix can be exported to a .xlsx file under `Predicer\\results` by using the `Predicer.write_bid_matrix()` function
+- The resulting bid matrix can be exported to a .xlsx file under `Predicer/results` by using the `Predicer.write_bid_matrix()` function
 
         julia> Predicer.write_bid_matrix(mc, input_data)
 
@@ -375,3 +381,22 @@ Krokhmal, P., Uryasev, S., and Palmquist, J., “Portfolio optimization with con
 
 <a id="2">[2]</a> 
 Fleten, S. E. and Kristoffersen, T. K., “Stochastic programming for optimizing bidding strategies of a Nordic hydropower producer,” Eur. J. Oper. Res., vol. 181, no. 2, pp. 916–928, 2007, doi: 10.1016/j.ejor.2006.08.023.
+
+## Funding
+
+The development of Predicer has been partially funded in the EU Horizon [ELEXIA](https://www.elexia-project.eu/), Business Finland [HOPE](https://hopeproject.fi/) and Academy of Finland [EasyDR](https://cris.vtt.fi/en/projects/enabling-demand-response-through-easy-to-use-open-source-approach) projects.
+- European Union [ELEXIA](https://www.elexia-project.eu/): Demonstration of a digitized energy system integration across sectors enhancing flexibility and resilience towards efficient, sustainable, cost-optimised, affordable, secure and stable energy supply
+- Business Finland [HOPE](https://hopeproject.fi/): Highly Optimized Energy systems
+- Academy of Finland [EasyDR](https://cris.vtt.fi/en/projects/enabling-demand-response-through-easy-to-use-open-source-approach): Enabling demand response through easy to use open source approach
+
+&nbsp;
+<hr>
+<center>
+<table width=500px frame="none">
+<tr>
+<td valign="middle" width=100px>
+<img src=docs/images/eu-emblem-low-res.jpg alt="EU emblem" width=100%></td>
+<td valign="middle">This work has been partially supported by the EU project ELEXIA (2022-2026), which has received funding from the European Climate, Energy and Mobility programme under the European Union's HORIZON research and Innovation actions under grant N°101075656.</td> 
+</table>
+</table>
+</center>

@@ -19,18 +19,20 @@ function read_xlsx(input_data_path::String, t_horizon::Vector{ZonedDateTime}=Zon
     timeseries_data = OrderedDict()
     timeseries_data["scenarios"] = OrderedDict()
 
+    xl = XLSX.readxlsx(input_data_path)
+
     for sn in sheetnames_system
-        system_data[sn] = DataFrame(XLSX.readtable(input_data_path, sn))
+        system_data[sn] = DataFrame(XLSX.gettable(xl[sn]))
     end
 
     for sn in sheetnames_timeseries
-        timeseries_data[sn] = DataFrame(XLSX.readtable(input_data_path, sn))
+        timeseries_data[sn] = DataFrame(XLSX.gettable(xl[sn]))
     end
 
     if !isempty(t_horizon)
         temps = map(ts -> string(ts), t_horizon)
     else
-        temps = map(t-> string(ZonedDateTime(t, tz"UTC")), DataFrame(XLSX.readtable(input_data_path, "timeseries")).t)
+        temps = map(t-> string(ZonedDateTime(t, tz"UTC")), DataFrame(XLSX.gettable(xl["timeseries"])).t)
     end
 
     return system_data, timeseries_data, temps
