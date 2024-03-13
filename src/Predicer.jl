@@ -49,6 +49,7 @@ module Predicer
     add_group
 
     export create_tuples,
+    validate_tuple,
     reserve_nodes,
     reserve_market_directional_tuples,
     process_topology_tuples,
