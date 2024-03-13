@@ -368,36 +368,27 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
         end
     end
 
-    # inflow blocks
-    if length(names(system_data["inflow_blocks"])) > 1
-        ns = names(system_data["inflow_blocks"])[2:end]
+    # inflow blocks NEW
+    if length(names(system_data["inflow_blocks"])) > 0
+        ns = names(system_data["inflow_blocks"])
         colnames = map(n -> map(x -> strip(x), split(n, ",")), ns)
-        blocknames = unique(map(x -> (String(x[1]), String(x[2])), filter(cn -> length(cn) == 3, colnames)))
+        blocknames = filter(x->!(x[2] in collect(keys(scens))),colnames)
         for bn in blocknames
-            inflow_blocks[bn[2]] = InflowBlock(bn[2], bn[1])
+            inflow_blocks[String(bn[1])] = InflowBlock(String(bn[1]), String(bn[2]))
         end
         for b in collect(keys(inflow_blocks))
-            cols = filter(cns -> b in cns, colnames)
-            t_cols = filter(c -> length(c) == 3, cols)
-            c_cols = filter(c -> length(c) == 2, cols)
-            sscens = map(c -> c[3], t_cols)
-            for s in sscens
-                t_col = filter(x -> x[3] == s, t_cols)[1]
-                c_col = filter(x -> x[2] == s, c_cols)[1]
-                t_col_index = filter(x -> t_col == map(y -> strip(y), split(x, ",")), ns)[1]
-                c_col_index = filter(x -> c_col == map(y -> strip(y), split(x, ",")), ns)[1]
-                ts = filter(x -> typeof(x) != Missing, system_data["inflow_blocks"][!, t_col_index])
-                cs = filter(x -> typeof(x) != Missing, system_data["inflow_blocks"][!, c_col_index])
-
-                if length(ts) != length(cs)
-                    msg = "The data columns of the inflow block " * String(b) * " are not the same length!" 
+            t_col = collect(skipmissing(system_data["inflow_blocks"][!,inflow_blocks[b].name*","*inflow_blocks[b].node]))
+            for s in collect(keys(scens))
+                s_col = collect(skipmissing(system_data["inflow_blocks"][!,inflow_blocks[b].name*","*s]))
+                if length(t_col) != length(s_col)
+                    msg = "The data columns of the inflow block " * String(b) * " are not the same length!"
                     throw(ErrorException(msg))
                 end
                 series = TimeSeries(s)
-                for i = 1:length(ts)
-                    push!(series.series, (string(ZonedDateTime(ts[i], tz"UTC")), cs[i]))
+                for i = 1:length(t_col)
+                    push!(series.series, (string(ZonedDateTime(t_col[i], tz"UTC")), s_col[i]))
                 end
-                push!(inflow_blocks[b].data.ts_data, series)
+                push!(inflow_blocks[b].data.ts_data,series)
             end
         end
     end
@@ -557,6 +548,8 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
     common_scenario_name_p = filter(x -> x.parameter == "common_scenario_name", eachrow(system_data["setup"]))[1]
     if ismissing(common_scenario_name_p.value)
         common_scenario_name = ""
+    else
+        common_scenario_name = common_scenario_name_p.value
     end
 
     setup = InputDataSetup(contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, contains_markets, 
