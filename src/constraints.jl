@@ -77,7 +77,9 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
                 add_to_expression!(inflow_expr[(n, s, t)], nodes[n].inflow(s, t))
             end
             for b_tup in filter(x -> x[2] == n && x[3] == s && x[4] == t, block_tuples) # get tuples with blocks
-                add_to_expression!(inflow_expr[(n, s, t)], input_data.inflow_blocks[b_tup[1]].data(s,t) * v_block[(b_tup[1], b_tup[2], b_tup[3])])
+                v_tup = (b_tup[1], b_tup[2], Predicer.validate_tuple(model_contents,(b_tup[3],input_data.inflow_blocks[b_tup[1]].start_time),1)[1])
+                println(v_tup)
+                add_to_expression!(inflow_expr[(n, s, t)], input_data.inflow_blocks[b_tup[1]].data(s,t) * v_block[v_tup])
             end
             if nodes[n].is_state
                 if nodes[n].state.is_temp
@@ -1195,7 +1197,7 @@ function setup_inflow_blocks(model_contents::OrderedDict, input_data::Predicer.I
             if !isempty(b_tups)
                 node_block_expr[(n, s, t)] = AffExpr(0.0)
                 for b_tup in b_tups
-                    add_to_expression!(node_block_expr[(n, s, t)], v_block[(b_tup[1], n, s)])
+                    add_to_expression!(node_block_expr[(n, s, t)], v_block[(b_tup[1], n, Predicer.validate_tuple(model_contents,(s,input_data.inflow_blocks[b_tup[1]].start_time),1)[1])])
                 end
             end
         end

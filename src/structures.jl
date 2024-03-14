@@ -1045,12 +1045,13 @@ end
         end
     end
 """
-struct InflowBlock
+mutable struct InflowBlock
     name::String
     node::String
+    start_time::AbstractString
     data::TimeSeriesData
     function InflowBlock(name::String, node::String)
-        return new(name, node, TimeSeriesData())
+        return new(name, node, "", TimeSeriesData())
     end
 end
 

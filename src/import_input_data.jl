@@ -369,8 +369,8 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
     end
 
     # inflow blocks NEW
-    if length(names(system_data["inflow_blocks"])) > 0
-        ns = names(system_data["inflow_blocks"])
+    if length(names(system_data["inflow_blocks"])) > 1
+        ns = names(system_data["inflow_blocks"])[2:end]
         colnames = map(n -> map(x -> strip(x), split(n, ",")), ns)
         blocknames = filter(x->!(x[2] in collect(keys(scens))),colnames)
         for bn in blocknames
@@ -378,6 +378,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
         end
         for b in collect(keys(inflow_blocks))
             t_col = collect(skipmissing(system_data["inflow_blocks"][!,inflow_blocks[b].name*","*inflow_blocks[b].node]))
+            inflow_blocks[b].start_time = string(ZonedDateTime(t_col[1], tz"UTC"))
             for s in collect(keys(scens))
                 s_col = collect(skipmissing(system_data["inflow_blocks"][!,inflow_blocks[b].name*","*s]))
                 if length(t_col) != length(s_col)
