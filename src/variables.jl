@@ -284,8 +284,6 @@ function create_v_block(model_contents::OrderedDict, input_data::InputData)
     model = model_contents["model"]
     block_tuples = Predicer.block_tuples(input_data)
     var_tups = unique(map(x-> (x[1],x[2],Predicer.validate_tuple(model_contents,(x[3],input_data.inflow_blocks[x[1]].start_time),1)[1]),block_tuples))
-    println(var_tups)
-    #var_tups = unique(map(x -> (x[1], x[2], x[3]), block_tuples))
     v_block = @variable(model, v_block[tup in var_tups], Bin) 
     model_contents["variable"]["v_block"] = v_block
 end

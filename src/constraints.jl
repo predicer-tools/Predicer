@@ -78,7 +78,6 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
             end
             for b_tup in filter(x -> x[2] == n && x[3] == s && x[4] == t, block_tuples) # get tuples with blocks
                 v_tup = (b_tup[1], b_tup[2], Predicer.validate_tuple(model_contents,(b_tup[3],input_data.inflow_blocks[b_tup[1]].start_time),1)[1])
-                println(v_tup)
                 add_to_expression!(inflow_expr[(n, s, t)], input_data.inflow_blocks[b_tup[1]].data(s,t) * v_block[v_tup])
             end
             if nodes[n].is_state
