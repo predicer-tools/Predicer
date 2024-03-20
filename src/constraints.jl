@@ -267,6 +267,20 @@ function setup_process_online_balance(model_contents::OrderedDict, input_data::P
             online_dyn_eq =  @constraint(model,online_dyn_eq[tup in proc_online_tuple], online_expr[tup] == 0)
             model_contents["constraint"]["online_dyn_eq"] = online_dyn_eq
 
+            # setup constraints for scenario independent online processes
+            #e_scenario_independence = OrderedDict()
+            #for sip in filter(p -> processes[p].is_scenario_independent, collect(keys(processes)))
+            #    p_tups = unique(filter(x -> x[1] == sip, proc_online_tuple))
+            #    for s in scenarios(input_data)
+            #        e_scenario_independence[(sip, s)] = Dict()
+            #        tups = filter(x -> x[2] == s, p_tups)
+            #        for tup in tups
+            #            e_scenario_independence[(sip, s)][]
+            #        end
+            #        # set all online variables in tups equal
+            #    end
+            #end
+
             # Minimum and maximum online and offline periods
             min_online_rhs = OrderedDict()
             min_online_lhs = OrderedDict()
@@ -425,7 +439,7 @@ function setup_process_balance(model_contents::OrderedDict, input_data::Predicer
 
         flow_op_lo = @constraint(model,flow_op_lo[tup in proc_op_balance_tuple], v_flow_op_out[validate_tuple(model_contents, tup, 2)] >= v_flow_op_bin[validate_tuple(model_contents, tup, 2)] .* op_min[tup])
         flow_op_up = @constraint(model,flow_op_up[tup in proc_op_balance_tuple], v_flow_op_out[validate_tuple(model_contents, tup, 2)] <= v_flow_op_bin[validate_tuple(model_contents, tup, 2)] .* op_max[tup])
-        flow_op_ef = @constraint(model,flow_op_ef[tup in proc_op_balance_tuple], v_flow_op_out[validate_tuple(model_contents, tup, 2)] == op_eff[tup] .* v_flow_op_in[tup])
+        flow_op_ef = @constraint(model,flow_op_ef[tup in proc_op_balance_tuple], v_flow_op_out[validate_tuple(model_contents, tup, 2)] == op_eff[tup] .* v_flow_op_in[validate_tuple(model_contents, tup, 2)])
         flow_bin = @constraint(model,flow_bin[tup in proc_op_tuple], sum(v_flow_op_bin[validate_tuple(model_contents, filter(x->x[1:3] == tup, proc_op_balance_tuple), 2)]) == 1)
         model_contents["constraint"]["flow_op_lo"] = flow_op_lo
         model_contents["constraint"]["flow_op_up"] = flow_op_up
@@ -1318,7 +1332,7 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
                 end
                 for f in facs
                     if f.var_type == "state"
-                        n = f.var_tuple[1]
+                        n = string(f.var_tuple[1])
                         d_max = input_data.nodes[n].state.state_max
                         add_to_expression!(setpoint_expr_lhs[(c, s, t)], v_state[validate_tuple(model_contents, (n, s, t), 2)])
                     elseif f.var_type == "flow"
