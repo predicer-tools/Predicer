@@ -78,8 +78,8 @@ function generate_model(fpath::String, t_horizon::Vector{ZonedDateTime}=ZonedDat
     model_contents = Predicer.build_model_contents_dict(input_data)
     model_contents["model"] = Predicer.setup_optimizer(HiGHS.Optimizer)
     # build model
-    Predicer.build_model(model_contents, input_data)
-    return model_contents, input_data
+    """Predicer.build_model(model_contents, input_data)
+    return model_contents, input_data"""
 end
 
 function solve_model(model_contents::OrderedDict)

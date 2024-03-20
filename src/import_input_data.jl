@@ -2,13 +2,15 @@ using DataFrames
 using XLSX
 using DataStructures
 using TimeZones
+using OrderedCollections
 
 import Predicer
 
 function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[])
     system_data, timeseries_data, temps = Predicer.read_xlsx(input_data_path, t_horizon)
-    return Predicer.compile_input_data(system_data, timeseries_data, temps)
+    """return Predicer.compile_input_data(system_data, timeseries_data, temps)"""
 end
+
 
 function read_xlsx(input_data_path::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[])
 
@@ -21,15 +23,21 @@ function read_xlsx(input_data_path::String, t_horizon::Vector{ZonedDateTime}=Zon
 
     for sn in sheetnames_system
         system_data[sn] = DataFrame(XLSX.readtable(input_data_path, sn))
+        df = system_data[sn]
+        println(df)
     end
 
     for sn in sheetnames_timeseries
         timeseries_data[sn] = DataFrame(XLSX.readtable(input_data_path, sn))
+        df = timeseries_data[sn]
+        println(df)
     end
 
     if !isempty(t_horizon)
         temps = map(ts -> string(ts), t_horizon)
     else
+        timeseries_df = DataFrame(XLSX.readtable(input_data_path, "timeseries")).t
+        println(timeseries_df)
         temps = map(t-> string(ZonedDateTime(t, tz"UTC")), DataFrame(XLSX.readtable(input_data_path, "timeseries")).t)
     end
 
