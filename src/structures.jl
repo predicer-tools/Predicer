@@ -188,6 +188,15 @@ function Base.:getindex(ts::TimeSeries, i::Int64)
     return getindex(ts.series, i)
 end
 
+"""
+    function Base.:getindex(ts::TimeSeries, i::UnitRange{Int64}
+
+Extends the Base.getindex() function for the TimeSeries struct. Returns the value of the TimeSeries.series at the range index. 
+"""
+function Base.:getindex(ts::TimeSeries, i::UnitRange{Int64})
+    return getindex(ts.series, i)
+end
+
 
 """
     function (ts::TimeSeries)(t::ZonedDateTime)
@@ -220,7 +229,7 @@ end
 
 Returns the value of the TimeSeries at the given timestep. If the exact timestep is not defined, retrieve the value corresponding to the closest previous timestep, or alternatively the first timestep. 
 """
-function (ts::TimeSeries)(t::String)
+function (ts::TimeSeries)(t::AbstractString)
     if t in map(x -> x[1], ts.series)
         return filter(x -> x[1] == t, ts.series)[1][2]
     else
@@ -263,7 +272,7 @@ end
 
 Returns the value of the TimeSeries for scenario s and timestep t.
 """
-function (tsd::TimeSeriesData)(s::String, t::String)
+function (tsd::TimeSeriesData)(s::AbstractString, t::AbstractString)
     return tsd(s)(t)
 end
 
@@ -273,7 +282,7 @@ end
 
 Returns the value of the TimeSeries for scenario s and timestep t.
 """
-function (tsd::TimeSeriesData)(s::String, t::TimeZones.ZonedDateTime)
+function (tsd::TimeSeriesData)(s::AbstractString, t::TimeZones.ZonedDateTime)
     return tsd(s)(t)
 end
 
@@ -1036,21 +1045,23 @@ end
 
 
 """
-    struct InflowBlock
+    mutable struct InflowBlock
         name::String
         node::String
+        start_time::AbstractString
         data::TimeSeriesData
         function InflowBlock(name::String, node::String)
-            return new(name, node, TimeSeriesData())
+            return new(name, node, "", TimeSeriesData())
         end
     end
 """
-struct InflowBlock
+mutable struct InflowBlock
     name::String
     node::String
+    start_time::AbstractString
     data::TimeSeriesData
     function InflowBlock(name::String, node::String)
-        return new(name, node, TimeSeriesData())
+        return new(name, node, "", TimeSeriesData())
     end
 end
 

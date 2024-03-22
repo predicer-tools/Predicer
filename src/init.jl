@@ -14,12 +14,14 @@ end
 
 function create_validation_dict(input_data::InputData)
     val_dict = OrderedDict()
-    temps = input_data.temporals.t
-    for s in Predicer.scenarios(input_data), i in 1:1:input_data.setup.common_timesteps
-        val_dict[(s, temps[i])] = (input_data.setup.common_scenario_name, temps[i])
-    end
-    for s in Predicer.scenarios(input_data), i in input_data.setup.common_timesteps+1:1:length(input_data.temporals.t)
-        val_dict[(s, temps[i])] = (s, temps[i])
+    if input_data.setup.common_timesteps > 0
+        temps = input_data.temporals.t
+        for s in Predicer.scenarios(input_data), i in 1:1:input_data.setup.common_timesteps
+            val_dict[(s, temps[i])] = (input_data.setup.common_scenario_name, temps[i])
+        end
+        for s in Predicer.scenarios(input_data), i in input_data.setup.common_timesteps+1:1:length(input_data.temporals.t)
+            val_dict[(s, temps[i])] = (s, temps[i])
+        end
     end
     return val_dict
 end
