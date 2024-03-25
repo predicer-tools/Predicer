@@ -40,6 +40,18 @@ function get_costs_dataframe(model_contents::OrderedDict, input_data::InputData,
     return df
 end
 
+
+"""
+    get_costs_dataframe(model_contents::OrderedDict, input_data::InputData, costs::String, scenario::String)
+
+Returns a dataframe containing all the costs related to the model. 
+
+# Arguments
+- `model_contents::OrderedDict`: Model contents dict.
+- `input_data::Predicer.InputData`: Input data used in model.
+- `costs::String`: Type of cost(s) to show, such as 'commodity_costs' or 'total_costs'. If empty, return all relevant costs. 
+- `scenario::String`: The name of the scenario for which the value is to be shown. If left empty, return all relevant values. 
+"""
 function get_costs_dataframe(model_contents::OrderedDict, input_data::InputData, costs::String, scenario::String)
     if isempty(costs)
         cs = String[]
@@ -55,6 +67,112 @@ function get_costs_dataframe(model_contents::OrderedDict, input_data::InputData,
 end
 
 
+"""
+    get_node_balance(model_contents::OrderedDict, input_data::InputData, nodename::String, scenario::String)
+
+Function to retrieve a DataFrame containing the balance of a specific node; i.e. all flows in and out of the node.
+
+# Arguments
+- `model_contents::OrderedDict`: Model contents dict.
+- `input_data::Predicer.InputData`: Input data used in model.
+- `nodename::String`: Name of the node to be studied. 
+- `scenario::String`: Name of the scenario to be studied. 
+"""
+function get_node_balance(model_contents::OrderedDict, input_data::InputData, nodename::String, scenario::String)
+    df = DataFrame(t=input_data.temporals.t)
+    # inflow
+    if input_data.nodes[nodename].is_inflow
+        inflow_vals = map(x -> x[2], input_data.nodes[nodename].inflow(scenario).series)
+    else
+        inflow_vals = zeros(length(input_data.temporals.t))
+    end
+    df[!, "inflow"] = inflow_vals
+    # state
+    if input_data.nodes[nodename].is_state
+        node_tups = filter(x -> x[1] == nodename && x[2] == scenario, state_node_tuples(input_data))
+        state_vals = JuMP.value.(model_contents["variable"]["v_state"][node_tups]).data
+        state_diff_vals = []
+        for (i, sv) in enumerate(state_vals)
+            if i == 1
+                push!(state_diff_vals, state_vals[i] - input_data.nodes[nodename].state.initial_state)
+            else
+                push!(state_diff_vals, state_vals[i] - state_vals[i-1])
+            end
+        end
+    else
+        state_diff_vals = zeros(length(input_data.temporals.t))
+    end
+    df[!, "state_diff"] = state_diff_vals
+    # diffusion
+    if nodename in diffusion_nodes(input_data)
+        node_diff_tups = filter(x -> x[1] == nodename && x[2] == scenario, node_diffusion_tuple(input_data))
+        node_diff_e = model_contents["expression"]["e_node_diff"]
+        node_diff_vals = map(x -> JuMP.value.(node_diff_e[x]), node_diff_tups)
+    else
+        node_diff_vals = zeros(length(input_data.temporals.t))
+    end
+    df[!, "node_diff"] = node_diff_vals
+    # delay
+    if nodename in Predicer.delay_nodes(input_data)
+        delay_tups = filter(x -> x[1] == nodename && x[2] == scenario, balance_node_tuples(input_data))
+        node_delay_e = model_contents["expression"]["e_node_delay"]
+        node_delay_vals = map(x -> JuMP.value.(node_delay_e[x]), delay_tups)
+    else
+        node_delay_vals = zeros(length(input_data.temporals.t))
+    end
+    df[!, "node_delay"] = node_delay_vals
+    # producer processes
+    prod_tups = unique(map(y -> y[1:4], filter(x -> x[3] == nodename && x[4] == scenario, process_topology_tuples(input_data))))
+    for pt in prod_tups
+        colname = pt[1] * "_" * pt[2] * "_" * pt[3]
+        tups = filter(x -> x[1:4] == pt, process_topology_tuples(input_data))
+        df[!, colname] = JuMP.value.(model_contents["variable"]["v_flow"][tups]).data
+    end
+    # consumer processes
+    cons_tups = unique(map(y -> y[1:4], filter(x -> x[2] == nodename && x[4] == scenario, process_topology_tuples(input_data))))
+    for ct in cons_tups
+        colname = ct[1] * "_" * ct[2] * "_" * ct[3]
+        tups = filter(x -> x[1:4] == ct, process_topology_tuples(input_data))
+        df[!, colname] = -1 .* JuMP.value.(model_contents["variable"]["v_flow"][tups]).data
+    end
+    return df
+end
+
+
+"""
+    get_process_balance(model_contents::OrderedDict, input_data::InputData, procname::String, scenario::String)
+
+Function to retrieve a DataFrame containing the balance of a specific process; i.e. all flows in and out of the node, as well as the efficiency losses.
+
+# Arguments
+- `model_contents::OrderedDict`: Model contents dict.
+- `input_data::Predicer.InputData`: Input data used in model.
+- `procname::String`: Name of the process to be studied. 
+- `scenario::String`: Name of the scenario to be studied. 
+"""
+function get_process_balance(model_contents::OrderedDict, input_data::InputData, procname::String, scenario::String="")
+    df = DataFrame(t=input_data.temporals.t)
+
+    # producing flows
+    prod_flows = unique(map(y -> y[1:4], filter(x -> x[1] == procname && x[3] == procname && x[4] == scenario, process_topology_tuples(input_data))))
+    for pf in prod_flows
+        colname = pf[1] * "_" * pf[2] * "_" * pf[3]
+        tups = filter(x -> x[1:4] == pf, process_topology_tuples(input_data))
+        df[!, colname] = JuMP.value.(model_contents["variable"]["v_flow"][tups]).data
+    end
+
+    # consuming flows
+    cons_flows = unique(map(y -> y[1:4], filter(x -> x[1] == procname && x[2] == procname && x[4] == scenario, process_topology_tuples(input_data))))
+    for cf in cons_flows
+        colname = cf[1] * "_" * cf[2] * "_" * cf[3]
+        tups = filter(x -> x[1:4] == cf, process_topology_tuples(input_data))
+        df[!, colname] = -1.0 .*JuMP.value.(model_contents["variable"]["v_flow"][tups]).data
+    end
+
+    # efficiency losses are incoming - outcoming
+    df[!, "eff_losses"] = map(x -> -sum(x[2:end]), eachrow(df))
+    return df
+end
 
 
 """
@@ -398,6 +516,25 @@ function write_bid_matrix(model_contents::OrderedDict, input_data::Predicer.Inpu
         end
     end
     return dfs
+end
+
+"""
+    dfs_to_xlsx(df::DataFrame, fpath::String, fname::String="")
+
+Function to export a DataFrame to an xlsx file. 
+
+# Arguments
+- `dfs::DataFrame`: Dataframes 
+- `fpath::String`: Path to the folder where the xlsx file is to be stored. 
+- `fname::String`: Name of the xlsx file. (a suffix of date, time, and ".xlsx" are added automatically)
+"""
+function dfs_to_xlsx(df::DataFrame, fpath::String, fname::String="")
+    output_path = joinpath(pwd(), fpath, fname * "_" * Dates.format(Dates.now(), "yyyy-mm-dd-HH-MM-SS")*".xlsx")
+    XLSX.openxlsx(output_path, mode="w") do xf
+        XLSX.addsheet!(xf, "df")
+        XLSX.writetable!(xf[2], collect(eachcol(df)), names(df))
+    end
+    return output_path
 end
 
 
