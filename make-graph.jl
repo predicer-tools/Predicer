@@ -24,12 +24,13 @@ function write_graph(fname :: String,
             # For pr.conversion == 1, pr.topos go between nodes and
             # the process.  For pr.conversion == 2, 3, they go between
             # nodes, bypassing the process.
-            ns = ["box", "note", "tab"][pr.conversion]
+            shape = ["box", "note", "tab"][pr.conversion]
             head = ["normal", "vee", "onormal"][pr.conversion]
-            println(f, "\n  $p [shape = $ns]")
+            println(f, "\n  $p [shape = $shape]")
             for e in pr.topos
                 (s, t) = (e.source, e.sink)
-                println(f, "  $s -> $t [arrowhead = $head]")
+                edges = pr.conversion == 1 ? "$s -> $t" : "$s -> $p -> $t"
+                println(f, "  $edges [arrowhead = $head]")
             end
         end
         println(f, "}")
