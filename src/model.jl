@@ -17,7 +17,7 @@ Returns a dataframe containing all the costs related to the model.
 - `costs::Vector{String}`: Type of cost(s) to show, such as 'commodity_costs' or 'total_costs'. If empty, return all relevant costs. 
 - `scenario::Vector{String}`: The name of the scenario for which the value is to be shown. If left empty, return all relevant values. 
 """
-function get_costs_dataframe(model_contents::OrderedDict, input_data::InputData, costs::Vector{String}=[], scenario::Vector{String}=[])
+function get_costs_dataframe(model_contents::OrderedDict, input_data::InputData, costs::Vector{String}=String[], scenario::Vector{String}=String[])
     if isempty(costs)
         costs = ["commodity_costs", "dummy_costs", "market_costs", "reserve_costs", "total_costs", "setpoint_deviation_costs", "start_costs", "state_residue_costs", "vom_costs"]
     end
