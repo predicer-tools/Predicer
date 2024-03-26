@@ -49,9 +49,59 @@ Pursiheimo, E., Sundell, D., Kiviluoma, J., & Hankimaa, H. (2023). Predicer: abs
         julia> mc, input_data = Predicer.generate_model("input_data/input_data.xlsx")
 
 
-- `Predicer.solve_model(mc)` solves the model `mc`, and shows the solver output.
+- `Predicer.solve_model(mc)` optimizes the model, and shows the solver output.
 
         julia> Predicer.solve_model(mc)
+
+- After the model has been successfully optimized, the results of the variables in the model can be obtained using the `Predicer.get_result_dataframe()` or `Predicer.get_all_result_dataframes()` functions. Predicer.get_all_result_dataframes returns a dictionary with the variable names as keys, and Dataframes containing the results for those keys as values. 
+
+        julia> result_dataframes = Predicer.get_all_result_dataframes(mc, input_data)
+        julia> Predicer.get_all_result_dataframes(mc, input_data)
+                Dict{Any, Any} with 21 entries:
+                "vq_state_dw"      => 24×13 DataFrame…
+                "v_set_up"         => 24×1 DataFrame… 
+                "v_flow_bal"       => 24×7 DataFrame… 
+                "v_bid"            => 24×4 DataFrame… 
+                "v_node_delay"     => 24×1 DataFrame… 
+                "v_block"          => 0×0 DataFrame   
+                "v_res_final"      => 24×10 DataFrame…
+                "v_set_down"       => 24×1 DataFrame… 
+                "vq_ramp_dw"       => 24×22 DataFrame…
+                "v_start"          => 24×4 DataFrame… 
+                "vq_state_up"      => 24×13 DataFrame…
+                "vq_ramp_up"       => 24×22 DataFrame…
+                "v_setpoint"       => 24×1 DataFrame… 
+                "v_node_diffusion" => 24×1 DataFrame… 
+                "v_online"         => 24×4 DataFrame… 
+                "v_stop"           => 24×4 DataFrame… 
+                "v_reserve"        => 24×37 DataFrame…
+                "v_flow"           => 24×37 DataFrame…
+                "v_load"           => 24×10 DataFrame…
+                "v_reserve_online" => 24×7 DataFrame… 
+                "v_state"          => 24×7 DataFrame… 
+
+- For more specific analysis, `Predicer.get_result_dataframe()` returns a DataFrame for a specific variable type, with the option to specify the node or process as well as the scenario. Below an example where the values for the `v_flow` variable for the `hp1` process is obtained. The column names show which flow the value is for, with the notation being `processname _ from node _ to node _ scenario`; `hp1_elc_hp1_s1` is for the electricity consumption of the heat pump process, and `hp1_hp1_dh_s1` is for the heat production to the district heating node (dh). The types of the available variables can be found in the function documentation or in the example above. 
+
+        julia> Predicer.get_result_dataframe(mc, input_data, "v_flow", "hp1",  "s1")
+                24×3 DataFrame
+                Row │ t                          hp1_elc_hp1_s1  hp1_hp1_dh_s1 
+                │ String                     Float64         Float64       
+                ─────┼──────────────────────────────────────────────────────────
+                1 │ 2022-04-20T00:00:00+00:00       0.5              1.5
+                2 │ 2022-04-20T01:00:00+00:00       0.0              0.0
+                3 │ 2022-04-20T02:00:00+00:00       0.0              0.0
+                ⋮  │             ⋮                    ⋮               ⋮
+                22 │ 2022-04-20T21:00:00+00:00       0.970055         3.39519
+                23 │ 2022-04-20T22:00:00+00:00       1.42857          5.0
+                24 │ 2022-04-20T23:00:00+00:00       1.71429          6.0
+
+- The modelled costs can be retrieved using the `get_costs_dataframe()` function. This includes realised costs, controlling costs and dummy costs. The realised costs include costs of used fuels and commodities, operational costs, market costs/profits, etc. The controlling costs include the value of the storage at the end of the optimization horizon, deviation from setpoints, etc. Dummy costs include costs for dummy or slack variables, which are used to ensure feasibility during optimization. 
+
+        julia> costs_df = Predicer.get_costs_dataframe(mc, input_data)
+
+- The DataFrames obtained from the results can be exported to an xlsx-file using the `dfs_to_xlsx()` function. The Dataframes can be passed to the function either in a dictionary with the name of the dataframe as the keys, or as a single DataFrame. The other parameters passed to the function are `output_path`, which is the path to where the file is to be saved, and `fname` is the name of the exported file. An suffix with the date is automatically added to the end of the filename. 
+
+        julia> Predicer.dfs_to_xlsx(df, output_path, fname)
 
 
 - The resulting bid matrix can be exported to a .xlsx file under `Predicer/results` by using the `Predicer.write_bid_matrix()` function
@@ -95,6 +145,23 @@ Further, the factors for the constraint are defined in the *gen_constraint* shee
 ## Input data description
 
 The basic parameters and usage of the excel-format input data are described here. The input data has to be given to Predicer in a specific form, and the excel-format input data files are not a requirement. Excel has been used during development, since they were considered more convenient than databases or other forms of data structures.
+
+
+### timeseries
+
+The timesteps used in the model should be listed here. Below an example of the timesteps used in the example model. The length of the timesteps can vary if needed, but this may cause problems with delay, etc. 
+
+| t              |
+| 20.4.2022 1:00 |
+| 20.4.2022 2:00 |
+| 20.4.2022 3:00 |
+| 20.4.2022 4:00 |
+| 20.4.2022 0:00 |
+| 20.4.2022 5:00 |
+| 20.4.2022 6:00 |
+| 20.4.2022 7:00 |
+| 20.4.2022 8:00 |
+| 20.4.2022 9:00 |
 
 
 ### nodes

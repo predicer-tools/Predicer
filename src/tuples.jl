@@ -910,3 +910,16 @@ function diffusion_nodes(input_data::InputData)
         return String[]
     end
 end
+
+"""
+    delay_nodes(input_data::InputData)
+
+Function to obtain the nodes that are part of a delay relation. form (n)
+"""
+function delay_nodes(input_data::InputData)
+    if input_data.setup.contains_delay
+        return unique(vcat(map(x -> x[1], input_data.node_delay), map(x -> x[2], input_data.node_delay)))
+    else
+        return String[]
+    end
+end

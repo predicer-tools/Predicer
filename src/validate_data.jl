@@ -57,8 +57,109 @@ using Predicer
     # check that the processes in groups that are linked to reserves are all is_res?
 
 
-function validate_timeseries()
+    # check that if input_data.setup.reserve_realisation==false, the reserve realisation coefficients have to be 0.
+    # check that if input_data.setup.common_timesteps > 0, then input_data.setup.common_scenario_name cannot be empty
+    # ensure that the scenario-dependent timeseries are equal for the first x timesteps if common_timesteps > 0 
+    # 
 
+function validate_common_start(error_log::OrderedDict, series, common_steps_n)
+    is_valid = error_log["is_valid"]
+    # TODO
+    # check that the start of the timeseries in the model are equal between the scenarios (per timeseries type)
+    # 
+    if common_steps_n > 0
+        for k1 in collect(keys(series))
+            for k2 in collect(keys(series[k1]))
+                scens = map(x -> string(x.scenario), series[k1][k2].ts_data)
+                starts = map(s -> series[k1][k2](s)[1:common_steps_n], scens)
+                if length(unique(starts)) > 1
+                    push!(error_log["errors"], "The scenarios are not equal in: " * k2 * ", " * k1 * ", despite a common start.\n")
+                    is_valid = false 
+                end
+            end
+        end
+    end
+    error_log["is_valid"] = is_valid
+    return error_log
+end
+
+function validate_timeseries(error_log::OrderedDict, input_data::Predicer.InputData)
+    # ensure that the timeseries provided to the model are correct
+    
+    series = Dict()
+    
+    # processes:
+    series["cf"] = Dict()
+    series["eff_ts"] = Dict()
+    series["cap_ts"] = Dict()
+    for p in collect(keys(input_data.processes))
+        # cf timeseries
+        if input_data.processes[p].is_cf
+            series["cf"][p] = input_data.processes[p].cf
+        end
+        # eff_ts
+        if !isempty(input_data.processes[p].eff_ts)        
+            series["eff_ts"][p] = input_data.processes[p].eff_ts
+        end
+
+        #topology cap_ts
+        for topo in input_data.processes[p].topos
+            if !isempty(topo.cap_ts)
+                series["cap_ts"][p] = topo.cap_ts
+            end
+        end
+    end
+
+    # nodes:
+    series["inflow"] = Dict()
+    series["cost"] = Dict()
+    for n in collect(keys(input_data.nodes))
+        # inflow
+        if input_data.nodes[n].is_inflow
+            series["inflow"][n] = input_data.nodes[n].inflow
+        end
+        # cost
+        if input_data.nodes[n].is_commodity
+            series["cost"][n] = input_data.nodes[n].cost
+        end
+
+    end
+
+    # markets:
+    series["price"] = Dict()
+    series["up_price"] = Dict()
+    series["down_price"] = Dict()
+    for m in collect(keys(input_data.markets))
+        # price
+        series["price"][m] = input_data.markets[m].price
+        # up price
+        if !isempty(input_data.markets[m].up_price)
+            series["up_price"][m] = input_data.markets[m].up_price
+        end
+        # down price
+        if !isempty(input_data.markets[m].down_price)
+            series["down_price"][m] = input_data.markets[m].down_price
+        end
+    end
+
+    # InflowBlock:
+    # data?
+    #TODO
+
+    # gen_constraints:
+    series["gen_constraint_factor"] = Dict()
+    series["gen_constraint_constant"] = Dict()
+    for c in collect(keys(input_data.gen_constraints))
+        # confactor
+        for f in input_data.gen_constraints[c].factors
+            series["gen_constraint_factor"][c*"_"*string(f.var_tuple)] = f.data
+        end
+        # constant
+        series["gen_constraint_constant"][c] = input_data.gen_constraints[c].constant
+    end
+
+    error_log = validate_common_start(error_log, series)
+    return error_log
 end
 
 function validate_node_delay(error_log::OrderedDict, input_data::Predicer.InputData)
@@ -69,12 +170,11 @@ function validate_node_delay(error_log::OrderedDict, input_data::Predicer.InputD
     # check that the model has timesteps compatible with the delay
     # The timesteps should be multipliers of each of the delays, 
     # and the timestep length has to be constant
-    if input_data.temporals.is_variable_dt && input_data.contains_delay
+    if input_data.temporals.is_variable_dt && input_data.setup.contains_delay
         push!(error_log["errors"], "The model currently doesn't support both variable timesteps and delays.\n")
         is_valid = false 
     else
-        
-        for delay in map(x -> x[t], input_data.node_delay)
+        for delay in map(x -> x[3], input_data.node_delay)
             if delay % input_data.temporals.dtf != 0
                 push!(error_log["errors"], "The delay length between two nodes must be a multiple of the timestep length.\n")
                 is_valid = false 
