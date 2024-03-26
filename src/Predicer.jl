@@ -8,8 +8,6 @@ module Predicer
     include("init.jl")
 
     include("import_input_data.jl")
-
-    
     
 
     export Initialize,
@@ -17,7 +15,6 @@ module Predicer
     export_model_contents,
     get_result_dataframe,
     write_bid_matrix,
-    resolve_delays,
     resolve_market_nodes
 
     export Node,
@@ -29,7 +26,8 @@ module Predicer
     ConFactor,
     GenConstraint,
     InputData,
-    Temporals
+    Temporals,
+    NodeHistory
 
     export add_inflow,
     add_state, 
@@ -46,9 +44,12 @@ module Predicer
     add_cf,
     add_process_to_reserve,
     add_topology,
-    add_load_limits
+    add_load_limits,
+    add_group_members,
+    add_group
 
     export create_tuples,
+    validate_tuple,
     reserve_nodes,
     reserve_market_directional_tuples,
     process_topology_tuples,
@@ -68,18 +69,24 @@ module Predicer
     fixed_limit_process_topology_tuples,
     transport_process_topology_tuples,
     reserve_node_tuples,
+    reserve_nodegroup_tuples,
     up_down_reserve_market_tuples,
     reserve_market_tuples,
     fixed_market_tuples,
     process_topology_ramp_times_tuples,
     scenarios,
-    create_delay_process_tuple,
     create_balance_market_tuple,
+    create_market_tuple,
     state_reserves,
     create_reserve_limits,
     setpoint_tuples,
     block_tuples,
-    create_group_tuples
+    create_group_tuples,
+    node_diffusion_tuple,
+    diffusion_nodes,
+    node_delay_tuple,
+    previous_balance_node_tuples,
+    previous_process_topology_tuples
 
 
     export create_variables,
@@ -88,13 +95,21 @@ module Predicer
     create_v_online,
     create_v_reserve,
     create_v_state,
-    create_v_flow_op
+    create_vq_ramp,
+    create_v_flow_op,
+    create_v_risk,
+    create_v_balance_market,
+    create_v_reserve_onlin,
+    create_v_setpoint,
+    create_v_block,
+    create_v_node_delay
 
     export create_constraints,
     setup_node_balance,
     setup_process_online_balance,
     setup_process_balance,
-    setup_processes_limits,
+    setup_node_delay_flow_limits,
+    setup_process_limits,
     setup_reserve_balances,
     setup_ramp_constraints,
     setup_fixed_values,

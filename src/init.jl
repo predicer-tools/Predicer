@@ -11,6 +11,21 @@ function get_data(fpath::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[
     return import_input_data(fpath, t_horizon)
 end
 
+
+function create_validation_dict(input_data::InputData)
+    val_dict = OrderedDict()
+    if input_data.setup.common_timesteps > 0
+        temps = input_data.temporals.t
+        for s in Predicer.scenarios(input_data), i in 1:1:input_data.setup.common_timesteps
+            val_dict[(s, temps[i])] = (input_data.setup.common_scenario_name, temps[i])
+        end
+        for s in Predicer.scenarios(input_data), i in input_data.setup.common_timesteps+1:1:length(input_data.temporals.t)
+            val_dict[(s, temps[i])] = (s, temps[i])
+        end
+    end
+    return val_dict
+end
+
 function build_model_contents_dict(input_data::Predicer.InputData)
     model_contents = OrderedDict()
     model_contents["constraint"] = OrderedDict() #constraints
@@ -18,6 +33,7 @@ function build_model_contents_dict(input_data::Predicer.InputData)
     model_contents["variable"] = OrderedDict() #variables?
     model_contents["gen_constraint"] = OrderedDict() #GenericConstraints
     model_contents["gen_expression"] = OrderedDict() #GenericConstraints
+    model_contents["validation_dict"] = create_validation_dict(input_data)
     input_data_dirs = unique(map(m -> m.direction, collect(values(input_data.markets))))
     res_dir = []
     for d in input_data_dirs
@@ -56,20 +72,16 @@ function generate_model(fpath::String, t_horizon::Vector{ZonedDateTime}=ZonedDat
     if !validation_result["is_valid"]
         return validation_result["errors"]
     end
-    # Resolve potential delays
-    if input_data.contains_delay
-        input_data = Predicer.resolve_delays(input_data)
-    end
     # Build market structures
     input_data = Predicer.resolve_market_nodes(input_data)
-    # create mc
-    mc = build_model_contents_dict(input_data)
-    mc["model"] = setup_optimizer(HiGHS.Optimizer)
+    # create model_contents
+    model_contents = Predicer.build_model_contents_dict(input_data)
+    model_contents["model"] = Predicer.setup_optimizer(HiGHS.Optimizer)
     # build model
-    build_model(mc, input_data)
-    return mc, input_data
+    Predicer.build_model(model_contents, input_data)
+    return model_contents, input_data
 end
 
-function solve_model(mc)
-    optimize!(mc["model"])
+function solve_model(model_contents::OrderedDict)
+    optimize!(model_contents["model"])
 end

@@ -8,8 +8,6 @@ using TimeZones
         is_variable_dt::Bool
         variable_dt::Vector{Tuple{String, Float64}}
         ts_format::String
-        delay::Float64
-        delay_ts::Vector{String}
     end
 
 Struct used for storing information about the timesteps in the model.
@@ -25,8 +23,6 @@ mutable struct Temporals
     is_variable_dt::Bool
     variable_dt::Vector{Tuple{String, Float64}}
     ts_format::String
-    delay::Float64
-    delay_ts::Vector{String}
 end
 
 
@@ -38,49 +34,24 @@ Constructor for the Temporals struct.
 function Temporals(ts::Vector{String}, ts_format="yyyy-mm-ddTHH:MM:SSzzzz")
     dts = []
     zdt_ts = map(x -> ZonedDateTime(x, ts_format), ts)
-    for i in 1:(length(zdt_ts)-1)
-        push!(dts, (ts[i], Dates.Minute(zdt_ts[i+1] - zdt_ts[i])/Dates.Minute(60)))
+    for i in 1:(length(zdt_ts))
+        if i < length(zdt_ts)
+            push!(dts, (ts[i], Dates.Minute(zdt_ts[i+1] - zdt_ts[i])/Dates.Minute(60)))
+        else
+            push!(push!(dts, (ts[i], dts[end][2])))
+        end
     end
     if length(unique(map(t -> t[2], dts))) == 1
-        return Temporals(ts, dts[1][2], false, [], ts_format, 0, [])
+        return Temporals(ts, dts[1][2], false, [], ts_format)
     elseif length(unique(map(t -> t[2], dts))) > 1
-        return Temporals(ts, 0.0, true, dts, ts_format, 0, [])
+        return Temporals(ts, 0.0, true, dts, ts_format)
     end
 end
-
-
-
-"""
-    function add_delay(t::Temporals, d::Float64)
-
-Sets the delay of the temporals to the provided value. If a delay already exists, the larger delay is used. 
-"""
-
-function add_delay(t::Temporals, d::Float64, force::Bool=false)
-    d_diff = d - t.delay
-    if d_diff > 0.0 || force
-        t.delay = d
-        additional_ts = round(max(1, abs(t.delay)/t.dtf))
-        extra_ts = t.t
-        for i = 1:additional_ts
-            if t.delay > 0
-                extra_ts = vcat(string(ZonedDateTime(extra_ts[1], t.ts_format) - Minute(60*t.dtf)), extra_ts)
-                extra_ts = vcat(extra_ts, string(ZonedDateTime(extra_ts[end], t.ts_format) + Minute(60*t.dtf)))
-            else
-                extra_ts = vcat(string(ZonedDateTime(extra_ts[1], t.ts_format) + Minute(60*t.dtf)), extra_ts)
-                extra_ts = vcat(extra_ts, string(ZonedDateTime(extra_ts[end], t.ts_format) - Minute(60*t.dtf)))
-            end
-        end
-        t.delay_ts = extra_ts
-    end
-    return t
-end
-
 
 """
     function (t::Temporals)(ts::ZonedDateTime)
 
-Returns the length of the timesteps between t and t+1 as a measure how many can fit into 60 minutes.
+Returns the length of the timesteps between t and t+1 compared to one hour.
 """
 function (t::Temporals)(ts::ZonedDateTime)
     if t.is_variable_dt
@@ -92,9 +63,9 @@ end
 
 
 """
-    function (t::Temporals)(ts::String)
+    function (t::Temporals)(ts::String).
 
-Returns the length of the timesteps between t and t+1 as a measure how many can fit into 60 minutes.
+Returns the length of the timesteps between t and t+1 compared to one hour.
 """
 function (t::Temporals)(ts::String)
     if t.is_variable_dt
@@ -106,6 +77,22 @@ end
 
 
 """
+    get_previous_t(t::Temporals)
+
+Function to get the previous timestep
+"""
+function get_previous_t(temporals::Temporals)
+    previous_ts = OrderedDict()
+    for (i, x) in enumerate(temporals.t)
+        if i > 1
+            previous_ts[x] = temporals.t[i-1]
+        end
+    end
+    return previous_ts
+end
+
+
+"""
     mutable struct State
         in_max::Float64
         out_max::Float64
@@ -113,9 +100,12 @@ end
         state_max::Float64
         state_min::Float64
         initial_state::Float64
+        is_scenario_independent::Bool
+        is_temp::Bool
+        T_E_conversion::Float64
         residual_value::Float64
-        function State(in_max, out_max, state_loss_proportional, state_max, state_min=0, initial_state=0, residual_value=0)
-            return new(in_max, out_max, state_loss_proportional, state_max, state_min, initial_state, residual_value)
+        function State(in_max, out_max, state_loss_proportional, state_max, state_min=0, initial_state=0, is_temp=0, T_E_conversion=1, residual_value=0)
+            return new(in_max, out_max, state_loss_proportional, state_max, state_min, initial_state, is_temp, T_E_conversion, residual_value)
         end
     end
 
@@ -127,6 +117,9 @@ A struct for node states (storage), holds information on the parameters of the s
 - `state_max::Float64`: Maximum value for state variable. 
 - `state_min::Float64`: Minimum value for state variable. 
 - `initial_state::Float64`: Initial value of the state variable at t = 0.
+- `is_scenario_independent::Bool`: Flag indicating if the variables for the state should be equal in all scenarios (true) or different for different scenarios (false).
+- `is_temp::Bool`: Indicates if the value of the state is temperature (true) or energy (false).
+- `T_E_conversion::Float64`: Conversion coefficient between temperature and energy. (E = T_E_conversion * T)
 - `residual_value::Float64`: Value of the product remaining in the state after time horizon. 
 
 """
@@ -137,9 +130,12 @@ mutable struct State
     state_max::Float64
     state_min::Float64
     initial_state::Float64
+    is_scenario_independent::Bool
+    is_temp::Bool
+    T_E_conversion::Float64
     residual_value::Float64
-    function State(in_max, out_max, state_loss_proportional, state_max, state_min=0, initial_state=0, residual_value=0)
-        return new(in_max, out_max, state_loss_proportional, state_max, state_min, initial_state, residual_value)
+    function State(in_max, out_max, state_loss_proportional, state_max, state_min=0, initial_state=0, is_scenario_independent=false, is_temp=0, T_E_conversion=1, residual_value=0)
+        return new(in_max, out_max, state_loss_proportional, state_max, state_min, initial_state, is_scenario_independent, is_temp, T_E_conversion, residual_value)
     end
 end
 
@@ -147,8 +143,8 @@ end
 # --- TimeSeries ---
 """
     struct TimeSeries
-        scenario::Any
-        series::Vector{Tuple{Any, Any}}
+        scenario::AbstractString
+        series::Vector{Tuple{AbstractString, Number}}
         function TimeSeries(scenario="", series=0)
             if series != 0
                 return new(scenario, series)
@@ -161,8 +157,8 @@ end
 A struct for time series. Includes linked scenario and a vector containing tuples of time and value.
 """
 struct TimeSeries
-    scenario::Any
-    series::Vector{Tuple{Any, Any}}
+    scenario::AbstractString
+    series::Vector{Tuple{AbstractString, Number}}
     function TimeSeries(scenario="", series=0)
         if series != 0
             return new(scenario, series)
@@ -189,6 +185,15 @@ end
 Extends the Base.getindex() function for the TimeSeries struct. Returns the value of the TimeSeries.series at the index. 
 """
 function Base.:getindex(ts::TimeSeries, i::Int64)
+    return getindex(ts.series, i)
+end
+
+"""
+    function Base.:getindex(ts::TimeSeries, i::UnitRange{Int64}
+
+Extends the Base.getindex() function for the TimeSeries struct. Returns the value of the TimeSeries.series at the range index. 
+"""
+function Base.:getindex(ts::TimeSeries, i::UnitRange{Int64})
     return getindex(ts.series, i)
 end
 
@@ -224,7 +229,7 @@ end
 
 Returns the value of the TimeSeries at the given timestep. If the exact timestep is not defined, retrieve the value corresponding to the closest previous timestep, or alternatively the first timestep. 
 """
-function (ts::TimeSeries)(t::String)
+function (ts::TimeSeries)(t::AbstractString)
     if t in map(x -> x[1], ts.series)
         return filter(x -> x[1] == t, ts.series)[1][2]
     else
@@ -267,7 +272,7 @@ end
 
 Returns the value of the TimeSeries for scenario s and timestep t.
 """
-function (tsd::TimeSeriesData)(s::String, t::String)
+function (tsd::TimeSeriesData)(s::AbstractString, t::AbstractString)
     return tsd(s)(t)
 end
 
@@ -277,7 +282,7 @@ end
 
 Returns the value of the TimeSeries for scenario s and timestep t.
 """
-function (tsd::TimeSeriesData)(s::String, t::TimeZones.ZonedDateTime)
+function (tsd::TimeSeriesData)(s::AbstractString, t::TimeZones.ZonedDateTime)
     return tsd(s)(t)
 end
 
@@ -290,8 +295,6 @@ Returns the TimeSeries for scenario s. If the scenario is not found, return Time
 function (tsd::TimeSeriesData)(s::String)
     if s in map(x -> x.scenario, tsd.ts_data)
         return filter(ts -> ts.scenario == s, tsd.ts_data)[1]
-    else
-        return tsd.ts_data[1] # is this a "risky" approach, leading to unwanted and difficult to detect errors?
     end
 end
 
@@ -304,7 +307,6 @@ Extends the Base.isempty() function for the TimeSeriesData struct. Returns true 
 function Base.:isempty(tsd::TimeSeriesData)
     return isempty(tsd.ts_data)
 end
-
 
 """ 
     struct Group
@@ -599,6 +601,8 @@ end
         VOM_cost::Float64
         ramp_up::Float64
         ramp_down::Float64
+        initial_load::Float64
+        initial_flow::Float64
         cap_ts::TimeSeriesData
         function Topology(source::String, sink::String, capacity::Float64, VOM_cost::Float64, ramp_up::Float64, ramp_down::Float64)
             return new(source, sink, capacity, VOM_cost, ramp_up, ramp_down, TimeSeriesData())
@@ -613,6 +617,8 @@ A struct for a process topology, signifying the connection between flows in a pr
 - `VOM_cost::Float64`: VOM cost of using this connection. 
 - `ramp_up::Float64`: Maximum allowed increase of the linked flow variable value between timesteps. Min 0.0 max 1.0. 
 - `ramp_down::Float64`: Minimum allowed increase of the linked flow variable value between timesteps. Min 0.0 max 1.0.
+- `initial_load::Float64`: Initial load of the process at the start of the optimization horizon. Affects the load (reserve) on the first timesteps for units with low ramping speed. 
+- `initial_flow::Float64`: Initial flow of the process at the start of the optimization horizon. Affects the flow on the first timesteps for units with low ramping speed. 
 - `cap_ts::TimeSeriesData`: TimeSeriesStruct
 """
 mutable struct Topology
@@ -622,9 +628,11 @@ mutable struct Topology
     VOM_cost::Float64
     ramp_up::Float64
     ramp_down::Float64
+    initial_load::Float64
+    initial_flow::Float64
     cap_ts::TimeSeriesData
-    function Topology(source::String, sink::String, capacity::Float64, VOM_cost::Float64, ramp_up::Float64, ramp_down::Float64)
-        return new(source, sink, capacity, VOM_cost, ramp_up, ramp_down, TimeSeriesData())
+    function Topology(source::String, sink::String, capacity::Float64, VOM_cost::Float64, ramp_up::Float64, ramp_down::Float64, initial_load::Float64, initial_flow::Float64)
+        return new(source, sink, capacity, VOM_cost, ramp_up, ramp_down, initial_load, initial_flow, TimeSeriesData())
     end
 end
 
@@ -635,7 +643,6 @@ end
         name::String
         groups::Vector{String}
         conversion::Integer # change to string-based: unit_based, market_based, transfer_based
-        delay::Float64
         is_cf::Bool
         is_cf_fix::Bool
         is_online::Bool
@@ -649,11 +656,12 @@ end
         max_online::Int64
         max_offline::Int64
         initial_state::Bool
+        is_scenario_independent::Bool
         topos::Vector{Topology}
         cf::TimeSeriesData
         eff_ts::TimeSeriesData
-        eff_ops::Vector{Any}
-        eff_fun::Vector{Tuple{Any,Any}}
+        eff_ops::Vector{AbstractString}
+        eff_fun::Vector{Tuple{Number, Number}}
     end
 
 A struct for a process (unit).
@@ -661,7 +669,6 @@ A struct for a process (unit).
 - `name::String`: Name of the process.
 - `groups::Vector{String}`: names of the groups this process is a member of. 
 - `conversion::String`: Process type; unit, market, or transport based. 
-- `delay::Float64`: The delay over the process, in hours.
 - `is_cf::Bool`: Flag indicating if the process is a cf (capacity factor) process, aka depends on a TimeSeries.
 - `is_cf_fix::Bool`: Flag indicating if the cf TimeSeries is a upper limit (false) or a set value (true).
 - `is_online::Bool`: Flag indicating if the process has an binary online variable.
@@ -676,17 +683,17 @@ A struct for a process (unit).
 - `max_online::Int64`: Maximum time the process can be online after start.
 - `max_offline::Int64`: Maximum time the process can be offline after start.
 - `initial_state::Bool`: Initial state (on/off) of the process at the start of simulation.
+- `is_scenario_independent::Bool`: Indicates whether the online variables of the process should be the same for all scenarios (true) or different (false)
 - `topos::Vector{Topology}`: Vector containing the topologies of the process.
 - `cf::TimeSeriesData`: Vector containing TimeSeries limiting a cf process.
 - `eff_ts::TimeSeriesData`: Vector of TimeSeries containing information on efficiency depending on time.
-- `eff_ops::Vector{Any}`: Vector containing operating points for a piecewise efficiency function.
-- `eff_fun::Vector{Tuple{Any,Any}}`: Vector containing efficiencies for a piecewise efficiency function.
+- `eff_ops::Vector{AbstractString}`: Vector containing operating points for a piecewise efficiency function.
+- `eff_fun::Vector{Tuple{Number, Number}}`: Vector containing efficiencies for a piecewise efficiency function.
 """
 mutable struct Process
     name::String
     groups::Vector{String}
     conversion::Integer # change to string-based: unit_based, market_based, transfer_based
-    delay::Float64
     is_cf::Bool
     is_cf_fix::Bool
     is_online::Bool
@@ -700,11 +707,12 @@ mutable struct Process
     max_online::Int64
     max_offline::Int64
     initial_state::Bool
+    is_scenario_independent::Bool
     topos::Vector{Topology}
     cf::TimeSeriesData
     eff_ts::TimeSeriesData
-    eff_ops::Vector{Any}
-    eff_fun::Vector{Tuple{Any,Any}}
+    eff_ops::Vector{AbstractString}
+    eff_fun::Vector{Tuple{Number, Number}}
 end
 
 
@@ -717,8 +725,8 @@ The constructor for the Process struct.
 - `name::String`: The name of the process.
 - `conversion::Int`: Used to differentiate between types of process. 1 = unit based, 2 = transfer process, 3 = market process.
 """
-function Process(name::String, conversion::Int=1, delay::Float64=0.0)
-    return Process(name, [], conversion, delay, false, false, false, false, -1.0, 0.0, 1.0, 0.0, 0, 0, 0, 0, true, [], TimeSeriesData(), TimeSeriesData(), [], [])
+function Process(name::String, conversion::Int=1)
+    return Process(name, [], conversion, false, false, false, false, -1.0, 0.0, 1.0, 0.0, 0, 0, 0, 0, true, false, [], TimeSeriesData(), TimeSeriesData(), [], [])
 end
 
 
@@ -751,22 +759,6 @@ function add_group(p::Process, g::String)
     push!(p.groups, g)
 end
 
-
-"""
-    function add_delay(p::Process, delay::Float64)
-
-Adds a delay to the chosen Transport process (conversion == 2). 
-"""
-function add_delay(p::Process, delay::Real)
-    if p.conversion == 2    
-        p.delay = Float64(delay)
-    elseif p.conversion == 1
-        return error("Cannot add a delay to unit based processes, only transfer processes.")
-    elseif p.conversion == 2
-        return error("Cannot add a delay to market processes, only transfer processes.")
-    end
-end
-
 """
     function add_fixed_eff(p::Process, ts::TimeSeries)
 
@@ -797,7 +789,7 @@ end
 
 Add binary online functionality to the process.
 """
-function add_online(p::Process, start_cost::Float64=0.0, min_online::Float64=0.0, min_offline::Float64=0.0, max_online::Float64=0.0, max_offline::Float64=0.0, initial_state::Bool=true)
+function add_online(p::Process, start_cost::Float64=0.0, min_online::Float64=0.0, min_offline::Float64=0.0, max_online::Float64=0.0, max_offline::Float64=0.0, initial_state::Bool=true, is_scenario_independent::Bool=false)
     if !p.is_cf
         p.is_online = true
         p.min_online = min_online >= 0 ? min_online : error("Minimum time online cannot be less than 0.")
@@ -806,6 +798,7 @@ function add_online(p::Process, start_cost::Float64=0.0, min_online::Float64=0.0
         p.max_offline = max_offline >= 0 ? max_offline : error("Maximum time offline cannot be less than 0.")
         p.start_cost = start_cost
         p.initial_state = initial_state
+        p.is_scenario_independent = is_scenario_independent
     else
         return error("A cf process cannot have online functionality.")
     end
@@ -899,18 +892,22 @@ end
     struct Market
         name::String
         type::String
-        node::Any
-        processgroup::Any
+        node::AbstractString
+        processgroup::AbstractString
         direction::String
         realisation::Dict{String, Float64}
         reserve_type::String
         is_bid::Bool
+        is_limited::Bool
+        min_bid::Float64
+        max_bid::Float64
+        fee::Float64
         price::TimeSeriesData
         up_price::TimeSeriesData
         down_price::TimeSeriesData
-        fixed::Vector{Tuple{Any,Any}}
-        function Market(name, type, node, pgroup, direction, realisation, reserve_type, is_bid)
-            return new(name, type, node, pgroup, direction, realisation, reserve_type, is_bid, [], [])
+        fixed::Vector{Tuple{AbstractString, Number}}
+        function Market(name, type, node, pgroup, direction, reserve_type, is_bid, is_limited, min_bid, max_bid, fee)
+            return new(name, type, node, pgroup, direction, Dict(), reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
         end
     end
 
@@ -918,8 +915,8 @@ A struct for markets.
 # Fields
 - `name::String`: Name of the market. 
 - `type::String`: Type of the market (energy/reserve).
-- `node::Any`: Name of the node this market is connected to.
-- `processgroup::Any`: Name of the group containing information which processes can participate in the market. 
+- `node::AbstractString`: Name of the node this market is connected to.
+- `processgroup::AbstractString`: Name of the group containing information which processes can participate in the market. 
 - `direction::String`: Direction of the market (up/down/updown).
 - `realisation::Dict{String, Float64}`: Realisation probability for each scenario.
 - `reserve_type::String`: Type of the reserve market. 
@@ -929,13 +926,13 @@ A struct for markets.
 - 'max_bid::Float64' : Minimum bid for reserve
 - 'fee::Float64' : Fee for reserve particiapation
 - `price::TimeSeriesData`: Vector containing TimeSeries of the market price in different scenarios. 
-- `fixed::Vector{Tuple{Any,Any}}`: Vector containing information on the market being fixed. 
+- `fixed::Vector{Tuple{AbstractString, Number}}`: Vector containing information on the market being fixed. 
 """
 struct Market
     name::String
     type::String
-    node::Any
-    processgroup::Any
+    node::AbstractString
+    processgroup::AbstractString
     direction::String
     realisation::Dict{String, Float64}
     reserve_type::String
@@ -947,7 +944,7 @@ struct Market
     price::TimeSeriesData
     up_price::TimeSeriesData
     down_price::TimeSeriesData
-    fixed::Vector{Tuple{Any,Any}}
+    fixed::Vector{Tuple{AbstractString, Number}}
     function Market(name, type, node, pgroup, direction, reserve_type, is_bid, is_limited, min_bid, max_bid, fee)
         return new(name, type, node, pgroup, direction, Dict(), reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
     end
@@ -958,7 +955,7 @@ end
 """
     struct ConFactor
         var_type::String
-        var_tuple::Union{Tuple{Any,Any}, String}
+        var_tuple::Union{Tuple{AbstractString, AbstractString}, String}
         data::TimeSeriesData
         function ConFactor(var_type, var_tuple)
             return new(var_type, var_tuple, TimeSeriesData())
@@ -968,12 +965,12 @@ end
 Struct for general constraints factors.
 # Fields
 - `var_type::String`: Type of the variable (v_flow, v_state, v_online)
-- `var_tuple::Tuple{Any,Any}`: Name/ID of the variable. (p, flow) for v_flow, (n, "") for v_state and (p, "") for v_online.
+- `var_tuple::Tuple{AbstractString, AbstractString}`: Name/ID of the variable. (p, flow) for v_flow, (n, "") for v_state and (p, "") for v_online.
 - `data::TimeSeriesData`: Timeseries containing the coefficients for the variable. 
 """
 struct ConFactor
     var_type::String
-    var_tuple::Tuple{Any,Any}
+    var_tuple::Tuple{AbstractString, AbstractString}
     data::TimeSeriesData
     function ConFactor(var_type, var_tuple)
         return new(var_type, var_tuple, TimeSeriesData())
@@ -982,7 +979,7 @@ end
 
 
 """
-    function OnlineConFactor(var_tuple::Tuple{Any, Any})
+    function OnlineConFactor(var_tuple::Tuple{AbstractString, AbstractString})
 
 Function to create a confactor for an online variable. 
 """
@@ -992,7 +989,7 @@ end
 
 
 """
-    function StateConFactor(var_tuple::Tuple{Any, Any})
+    function StateConFactor(var_tuple::Tuple{AbstractString, AbstractString})
 
 Function to create a confactor for a state variable. 
 """
@@ -1002,7 +999,7 @@ end
 
 
 """
-    function FlowConFactor(var_tuple::Tuple{Any, Any})
+    function FlowConFactor(var_tuple::Tuple{AbstractString, AbstractString})
 
 Function to create a confactor for a flow variable. 
 """
@@ -1048,37 +1045,108 @@ end
 
 
 """
-    struct InflowBlock
+    mutable struct InflowBlock
         name::String
         node::String
+        start_time::AbstractString
         data::TimeSeriesData
         function InflowBlock(name::String, node::String)
-            return new(name, node, TimeSeriesData())
+            return new(name, node, "", TimeSeriesData())
         end
     end
 """
-struct InflowBlock
+mutable struct InflowBlock
     name::String
     node::String
+    start_time::AbstractString
     data::TimeSeriesData
     function InflowBlock(name::String, node::String)
-        return new(name, node, TimeSeriesData())
+        return new(name, node, "", TimeSeriesData())
     end
 end
 
+"""
+    struct NodeHistory
+        node::AbstractString
+        steps::Vector{Tuple{String, Float32}}
+    end
 
+Struct for defining values for nodes for timesteps before the balance is calculated. For example if there is a delay of 2 between nodes n1 and n2, 
+the balance for n2 at the timesteps t1 and t2 (?) are defined using a NodeHistory struct.
+
+# Fields
+- `node::AbstractString`: Name of the node.
+- `steps::OrderedDict{String, Float32}`: An OrderedDict of timestep-value pairs. 
+"""
+struct NodeHistory
+    node::AbstractString
+    steps::TimeSeriesData
+    function NodeHistory(node::AbstractString)
+        return new(node, TimeSeriesData())
+    end
+end
 
 """
-    mutable struct InputData
-        temporals::Temporals
+    mutable struct InputDataSetup
         contains_reserves::Bool
         contains_online::Bool
         contains_states::Bool
         contains_piecewise_eff::Bool
         contains_risk::Bool
+        contains_diffusion::Bool
         contains_delay::Bool
+        contains_markets::Bool
+    end
+
+Struct containing the imported input data, based on which the Predicer is built.
+# Fields
+- `contains_reserves`: Boolean indicating whether the model (input_data) requires reserve functionality structures. 
+- `contains_online::Bool`: Boolean indicating whether the model (input_data) requires online functionality structures. 
+- `contains_states::Bool`: Boolean indicating whether the model (input_data) requires state functionality structures. 
+- `contains_piecewise_eff::Bool`: Boolean indicating whether the model (input_data) requires piecewise efficiency functionality structures. 
+- `contains_risk::Bool`: Boolean indicating whether the model (input_data) requires risk functionality structures. 
+- `contains_diffusion::Bool`: Boolean indicating whether the model (input_data) requires diffusion functionality structures. 
+- `contains_delay::Bool`: Boolean indicating whether the model (input_data) requires delay functionality structures. 
+- `contains_markets::Bool`: Boolean indicating whether the model (input_data) needs market structures. 
+"""
+mutable struct InputDataSetup
+    contains_reserves::Bool
+    contains_online::Bool
+    contains_states::Bool
+    contains_piecewise_eff::Bool
+    contains_risk::Bool
+    contains_diffusion::Bool
+    contains_delay::Bool
+    contains_markets::Bool
+    reserve_realisation::Bool
+    use_market_bids::Bool
+    common_timesteps::Int
+    common_scenario_name::String
+    use_node_dummy_variables::Bool
+    use_ramp_dummy_variables::Bool
+    function InputDataSetup(contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, contains_markets, reserve_realisation, use_market_bids, common_timesteps, common_scenario_name, use_node_dummy_variables, use_ramp_dummy_variables)
+        return new(contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, contains_markets, reserve_realisation, use_market_bids, common_timesteps, common_scenario_name, use_node_dummy_variables, use_ramp_dummy_variables)
+    end
+end
+
+
+"""
+    mutable struct InputData
+        temporals::Temporals
+        setup::InputDataSetup
+        contains_reserves::Bool
+        contains_online::Bool
+        contains_states::Bool
+        contains_piecewise_eff::Bool
+        contains_risk::Bool
+        contains_diffusion::Bool
+        contains_delay::Bool
+        contains_markets::Bool
         processes::OrderedDict{String, Process}
         nodes::OrderedDict{String, Node}
+        node_diffusion::Vector{Tuple{AbstractString, AbstractString, Number}}
+        node_delay::Vector{Tuple{AbstractString, AbstractString, Number, Number, Number}}
+        node_histories::OrderedDict{String, NodeHistory}
         markets::OrderedDict{String, Market}
         groups::OrderedDict{String, Group}
         scenarios::OrderedDict{String, Float64}
@@ -1096,9 +1164,14 @@ Struct containing the imported input data, based on which the Predicer is built.
 - `contains_states::Bool`: Boolean indicating whether the model (input_data) requires state functionality structures. 
 - `contains_piecewise_eff::Bool`: Boolean indicating whether the model (input_data) requires piecewise efficiency functionality structures. 
 - `contains_risk::Bool`: Boolean indicating whether the model (input_data) requires risk functionality structures. 
+- `contains_diffusion::Bool`: Boolean indicating whether the model (input_data) requires diffusion functionality structures. 
 - `contains_delay::Bool`: Boolean indicating whether the model (input_data) requires delay functionality structures. 
+- `contains_markets::Bool`: Boolean indicating whether the model (input_data) needs market structures. 
 - `processes::OrderedDict{String, Process}`: A dict containing the data relevant for processes.
 - `nodes::OrderedDict{String, Node}`: A dict containing the data relevant for nodes.
+- `node_diffusion::Vector{Tuple{AbstractString, AbstractString, Number}}`: Vector containing node diffusion connection details. 
+- `node_delay::Vector{Tuple{AbstractString, AbstractString, Number, Number, Number}}`: Vector containing connection details for node delay connections. 
+- `node_histories::OrderedDict{String, NodeHistory}`: OrderedDict containing node histories, used in delay functionalities. 
 - `markets::OrderedDict{String, Market}`: A dict containing the data relevant for markets.
 - `groups::OrderedDict{String, Group}`: A dict containing the data relevant for groups
 - `scenarios::OrderedDict{String, Float64}`:  A dict containing the data relevant for scenarios, with scenario name as key and probability as value.
@@ -1108,14 +1181,12 @@ Struct containing the imported input data, based on which the Predicer is built.
 """
 mutable struct InputData
     temporals::Temporals
-    contains_reserves::Bool
-    contains_online::Bool
-    contains_states::Bool
-    contains_piecewise_eff::Bool
-    contains_risk::Bool
-    contains_delay::Bool
+    setup::InputDataSetup
     processes::OrderedDict{String, Process}
     nodes::OrderedDict{String, Node}
+    node_diffusion::Vector{Tuple{AbstractString, AbstractString, Number}}
+    node_delay::Vector{Tuple{AbstractString, AbstractString, Number, Number, Number}}
+    node_histories::OrderedDict{String, NodeHistory}
     markets::OrderedDict{String, Market}
     groups::OrderedDict{String, Group}
     scenarios::OrderedDict{String, Float64}
@@ -1123,8 +1194,8 @@ mutable struct InputData
     risk::OrderedDict{String, Float64}
     inflow_blocks::OrderedDict{String, InflowBlock}
     gen_constraints::OrderedDict{String, GenConstraint}
-    function InputData(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, processes, nodes, markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
-        return new(temporals, contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_delay, processes, nodes, markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
+    function InputData(temporals, setup, processes, nodes, node_diffusion, node_delay, node_histories,  markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
+        return new(temporals, setup, processes, nodes, node_diffusion, node_delay, node_histories, markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
     end
 end
 

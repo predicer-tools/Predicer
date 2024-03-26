@@ -42,6 +42,8 @@ using Predicer
 
     # Check that each entity (node, process, market, etc) has all relevant information defined. 
 
+
+    #TODO!
     # Check that a process is connected to a node in the given node group during market participation
     # 
     # Check that the "node" connected to an energy market is a node, and that the 
@@ -53,8 +55,220 @@ using Predicer
     # check that reserve processes and reserve nodes match, so that the processes of a reserve product process group
     # actually connect to the nodes in the reserve nodegroup. Issue an warning if this isn't the case?
     # check that the processes in groups that are linked to reserves are all is_res?
+
+
+    # check that if input_data.setup.reserve_realisation==false, the reserve realisation coefficients have to be 0.
+    # check that if input_data.setup.common_timesteps > 0, then input_data.setup.common_scenario_name cannot be empty
+    # ensure that the scenario-dependent timeseries are equal for the first x timesteps if common_timesteps > 0 
+    # 
+
+function validate_common_start(error_log::OrderedDict, series, common_steps_n)
+    is_valid = error_log["is_valid"]
+    # TODO
+    # check that the start of the timeseries in the model are equal between the scenarios (per timeseries type)
+    # 
+    if common_steps_n > 0
+        for k1 in collect(keys(series))
+            for k2 in collect(keys(series[k1]))
+                scens = map(x -> string(x.scenario), series[k1][k2].ts_data)
+                starts = map(s -> series[k1][k2](s)[1:common_steps_n], scens)
+                if length(unique(starts)) > 1
+                    push!(error_log["errors"], "The scenarios are not equal in: " * k2 * ", " * k1 * ", despite a common start.\n")
+                    is_valid = false 
+                end
+            end
+        end
+    end
+    error_log["is_valid"] = is_valid
+    return error_log
+end
+
+function validate_timeseries(error_log::OrderedDict, input_data::Predicer.InputData)
+    # ensure that the timeseries provided to the model are correct
     
+    series = Dict()
     
+    # processes:
+    series["cf"] = Dict()
+    series["eff_ts"] = Dict()
+    series["cap_ts"] = Dict()
+    for p in collect(keys(input_data.processes))
+        # cf timeseries
+        if input_data.processes[p].is_cf
+            series["cf"][p] = input_data.processes[p].cf
+        end
+        # eff_ts
+        if !isempty(input_data.processes[p].eff_ts)        
+            series["eff_ts"][p] = input_data.processes[p].eff_ts
+        end
+
+        #topology cap_ts
+        for topo in input_data.processes[p].topos
+            if !isempty(topo.cap_ts)
+                series["cap_ts"][p] = topo.cap_ts
+            end
+        end
+    end
+
+    # nodes:
+    series["inflow"] = Dict()
+    series["cost"] = Dict()
+    for n in collect(keys(input_data.nodes))
+        # inflow
+        if input_data.nodes[n].is_inflow
+            series["inflow"][n] = input_data.nodes[n].inflow
+        end
+        # cost
+        if input_data.nodes[n].is_commodity
+            series["cost"][n] = input_data.nodes[n].cost
+        end
+
+    end
+
+    # markets:
+    series["price"] = Dict()
+    series["up_price"] = Dict()
+    series["down_price"] = Dict()
+    for m in collect(keys(input_data.markets))
+        # price
+        series["price"][m] = input_data.markets[m].price
+        # up price
+        if !isempty(input_data.markets[m].up_price)
+            series["up_price"][m] = input_data.markets[m].up_price
+        end
+        # down price
+        if !isempty(input_data.markets[m].down_price)
+            series["down_price"][m] = input_data.markets[m].down_price
+        end
+    end
+
+    # InflowBlock:
+    # data?
+    #TODO
+
+    # gen_constraints:
+    series["gen_constraint_factor"] = Dict()
+    series["gen_constraint_constant"] = Dict()
+    for c in collect(keys(input_data.gen_constraints))
+        # confactor
+        for f in input_data.gen_constraints[c].factors
+            series["gen_constraint_factor"][c*"_"*string(f.var_tuple)] = f.data
+        end
+        # constant
+        series["gen_constraint_constant"][c] = input_data.gen_constraints[c].constant
+    end
+
+    error_log = validate_common_start(error_log, series)
+    return error_log
+end
+
+function validate_node_delay(error_log::OrderedDict, input_data::Predicer.InputData)
+    is_valid = error_log["is_valid"]
+    nds = input_data.node_delay
+    nodes = input_data.nodes
+
+    # check that the model has timesteps compatible with the delay
+    # The timesteps should be multipliers of each of the delays, 
+    # and the timestep length has to be constant
+    if input_data.temporals.is_variable_dt && input_data.setup.contains_delay
+        push!(error_log["errors"], "The model currently doesn't support both variable timesteps and delays.\n")
+        is_valid = false 
+    else
+        for delay in map(x -> x[3], input_data.node_delay)
+            if delay % input_data.temporals.dtf != 0
+                push!(error_log["errors"], "The delay length between two nodes must be a multiple of the timestep length.\n")
+                is_valid = false 
+            end
+        end
+    end
+
+    # check that there is only one delay per a pair of nodes
+    if length(nds) != length(unique(map(x -> (x[1], x[2]), nds)))
+        push!(error_log["errors"], "Each node-node pair can only have one defined delay.\n")
+        is_valid = false 
+    end
+
+    # Check that the delay is positive
+    if !isempty(filter(x -> x[3] <= 0, nds))
+        push!(error_log["errors"], "The defined delays must always be larger than 0. If not, just use a transfer process.\n")
+        is_valid = false 
+    end
+
+    # check that delay limits are reasonable
+    if !isempty(filter(x -> x[4] > x[5], nds))
+        push!(error_log["errors"], "The lower limit of the defined delays must be smaller than the defined upper limit.\n")
+        is_valid = false 
+    end
+    if !isempty(filter(x -> x[4] < 0, nds))
+        push!(error_log["errors"], "The lower limit of the defined delays must be larger than or equal to zero.\n")
+        is_valid = false 
+    end
+    if !isempty(filter(x -> x[5] <= 0, nds))
+        push!(error_log["errors"], "The upper limit of the defined delays must be larger than zero.\n")
+        is_valid = false 
+    end
+
+    # Check that the nodes with delay isn't an market node
+    if !isempty(filter(x -> nodes[x[1]].is_market || nodes[x[2]].is_market, nds))
+        push!(error_log["errors"], "Market nodes cannot be part of delay connections.\n")
+        is_valid = false 
+    end
+    # Check that the nodes with delay isn't an commodity node
+    if !isempty(filter(x -> nodes[x[1]].is_commodity || nodes[x[2]].is_commodity, nds))
+        push!(error_log["errors"], "Commodity nodes cannot be part of delay connections.\n")
+        is_valid = false 
+    end
+
+    error_log["is_valid"] = is_valid
+end
+
+function validate_node_diffusion(error_log::OrderedDict, input_data::Predicer.InputData)
+    is_valid = error_log["is_valid"]
+    nodes = input_data.nodes
+
+    for n in collect(keys(nodes))
+        if nodes[n].is_state
+            if nodes[n].state.T_E_conversion <= 0.0
+                # Check that the T_E_conversion coefficient is larger than 0
+                push!(error_log["errors"], "The T_E_conversion coefficient of Node: (" * n * ") must be larger than 0.\n")
+                is_valid = false 
+            end
+        end
+    end
+    for node_conn in input_data.node_diffusion
+        if node_conn[3] <= 0 
+            # Check that the node diffusion coeff is larger than 0
+            push!(error_log["errors"], "The node diffusion coefficient of Node diffusion coefficient: (" * string(node_conn) * ") must be larger than 0.\n")
+            is_valid = false 
+        end
+        if !(node_conn[1] in collect(keys(nodes)))
+            # Check that the nodes in node diffusion connection exist
+            push!(error_log["errors"], "The node: ("*node_conn[1]*") of node diffusion connection : (" * string(node_conn) * ") is not defined.\n")
+            is_valid = false 
+        elseif !(node_conn[2] in collect(keys(nodes)))
+            # Check that the nodes in node diffusion connection exist
+            push!(error_log["errors"], "The node: ("*node_conn[2]*") of node diffusion connection : (" * string(node_conn) * ") is not defined.\n")
+            is_valid = false 
+        elseif node_conn[1] == node_conn[2]
+            # Check that the nodes in the connection are not the same
+            push!(error_log["errors"], "The node: ("*node_conn[1]*") in the node diffusion connection : (" * string(node_conn) * ") is given twice.\n")
+            is_valid = false
+        else
+            if !nodes[node_conn[1]].is_state
+                # Check that the nodes on node diffusion connections have states
+                push!(error_log["errors"], "The node: ("*node_conn[1]*") of Node diffusion connection: (" * string(node_conn) * ") has no state.\n")
+                is_valid = false
+            end
+            if !nodes[node_conn[2]].is_state
+                # Check that the nodes on node diffusion connections have states
+                push!(error_log["errors"], "The node: ("*node_conn[1]*") of Node diffusion connection: (" * string(node_conn) * ") has no state.\n")
+                is_valid = false
+            end
+        end
+    end
+
+    error_log["is_valid"] = is_valid
+end
 
 function validate_inflow_blocks(error_log::OrderedDict, input_data::Predicer.InputData)
     is_valid = error_log["is_valid"] 
@@ -239,7 +453,7 @@ function validate_gen_constraints(error_log::OrderedDict, input_data::Predicer.I
         # Check that setpoints have no constants, and non-setpoints have constants. 
         if gcs[gc].is_setpoint
             if !isempty(gcs[gc].constant)
-                push!(error_log["errors"], "The gen_constraint (" * gc * ") of the 'setpoint' can not have a series for a 'constant'.\n")
+                push!(error_log["errors"], "The gen_constraint (" * gc * ") of the 'setpoint' type can not have a series for a 'constant'.\n")
                 is_valid = false 
             end
         else
@@ -401,8 +615,8 @@ function validate_state(error_log::OrderedDict, s::Predicer.State)
         push!(error_log["errors"], "Invalid state parameters. State max cannot be smaller than 0.\n")
         is_valid = false
     end
-    if s.state_max < 0
-        push!(error_log["errors"], "Invalid state parameters. State max cannot be smaller than 0.\n")
+    if s.state_min < 0
+        push!(error_log["errors"], "Invalid state parameters. State min cannot be smaller than 0.\n")
         is_valid = false
     end
     if s.state_max < s.state_min
@@ -498,9 +712,13 @@ function validate_process_topologies(error_log::OrderedDict, input_data::Predice
     
     for p in keys(processes)
         topos = processes[p].topos
-        sources = filter(t -> t.sink == p, topos)
-        sinks = filter(t -> t.source == p, topos)
-        other = filter(t -> !(t in sources) && !(t in sinks), topos)
+        if processes[p].conversion == 2
+            sources = topos
+            sinks = topos
+        else
+            sources = filter(t -> t.sink == p, topos)
+            sinks = filter(t -> t.source == p, topos)
+        end
         for topo in sinks
             if topo.sink in keys(nodes)
                 if nodes[topo.sink].is_commodity
@@ -518,7 +736,7 @@ function validate_process_topologies(error_log::OrderedDict, input_data::Predice
         end
         for topo in sources
             if topo.source in keys(nodes)
-                if processes[topo.sink].is_cf
+                if processes[p].is_cf
                     push!(error_log["errors"], "Invalid topology: Process " * p * ". A CF process can not have a source.\n")
                     is_valid = false
                 end
@@ -536,7 +754,7 @@ function validate_process_topologies(error_log::OrderedDict, input_data::Predice
                 push!(error_log["errors"], "Invalid topology: Process " * p * ". A transport process cannot have several branches.\n")
                 is_valid = false
             end
-            if length(sources) > 0 || length(sinks) > 0
+            if p in map(t -> [t.source, t.sink], processes[p].topos)
                 push!(error_log["errors"], "Invalid topology: Process " * p * ". A transport process cannot have itself as a source or sink.\n")
                 is_valid = false
             end
@@ -564,6 +782,8 @@ function validate_data(input_data)
     validate_gen_constraints(error_log, input_data)
     validate_inflow_blocks(error_log, input_data)
     validate_groups(error_log, input_data)
+    validate_node_diffusion(error_log, input_data)
+    validate_node_delay(error_log, input_data)
     # Return log. 
     return error_log
 end

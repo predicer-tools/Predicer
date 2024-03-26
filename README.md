@@ -49,9 +49,59 @@ Pursiheimo, E., Sundell, D., Kiviluoma, J., & Hankimaa, H. (2023). Predicer: abs
         julia> mc, input_data = Predicer.generate_model(joinpath(pwd(), "input_data\\input_data.xlsx"))
 
 
-- `Predicer.solve_model(mc)` solves the model `mc`, and shows the solver output.
+- `Predicer.solve_model(mc)` optimizes the model, and shows the solver output.
 
         julia> Predicer.solve_model(mc)
+
+- After the model has been successfully optimized, the results of the variables in the model can be obtained using the `Predicer.get_result_dataframe()` or `Predicer.get_all_result_dataframes()` functions. Predicer.get_all_result_dataframes returns a dictionary with the variable names as keys, and Dataframes containing the results for those keys as values. 
+
+        julia> result_dataframes = Predicer.get_all_result_dataframes(mc, input_data)
+        julia> Predicer.get_all_result_dataframes(mc, input_data)
+                Dict{Any, Any} with 21 entries:
+                "vq_state_dw"      => 24×13 DataFrame…
+                "v_set_up"         => 24×1 DataFrame… 
+                "v_flow_bal"       => 24×7 DataFrame… 
+                "v_bid"            => 24×4 DataFrame… 
+                "v_node_delay"     => 24×1 DataFrame… 
+                "v_block"          => 0×0 DataFrame   
+                "v_res_final"      => 24×10 DataFrame…
+                "v_set_down"       => 24×1 DataFrame… 
+                "vq_ramp_dw"       => 24×22 DataFrame…
+                "v_start"          => 24×4 DataFrame… 
+                "vq_state_up"      => 24×13 DataFrame…
+                "vq_ramp_up"       => 24×22 DataFrame…
+                "v_setpoint"       => 24×1 DataFrame… 
+                "v_node_diffusion" => 24×1 DataFrame… 
+                "v_online"         => 24×4 DataFrame… 
+                "v_stop"           => 24×4 DataFrame… 
+                "v_reserve"        => 24×37 DataFrame…
+                "v_flow"           => 24×37 DataFrame…
+                "v_load"           => 24×10 DataFrame…
+                "v_reserve_online" => 24×7 DataFrame… 
+                "v_state"          => 24×7 DataFrame… 
+
+- For more specific analysis, `Predicer.get_result_dataframe()` returns a DataFrame for a specific variable type, with the option to specify the node or process as well as the scenario. Below an example where the values for the `v_flow` variable for the `hp1` process is obtained. The column names show which flow the value is for, with the notation being `processname _ from node _ to node _ scenario`; `hp1_elc_hp1_s1` is for the electricity consumption of the heat pump process, and `hp1_hp1_dh_s1` is for the heat production to the district heating node (dh). The types of the available variables can be found in the function documentation or in the example above. 
+
+        julia> Predicer.get_result_dataframe(mc, input_data, "v_flow", "hp1",  "s1")
+                24×3 DataFrame
+                Row │ t                          hp1_elc_hp1_s1  hp1_hp1_dh_s1 
+                │ String                     Float64         Float64       
+                ─────┼──────────────────────────────────────────────────────────
+                1 │ 2022-04-20T00:00:00+00:00       0.5              1.5
+                2 │ 2022-04-20T01:00:00+00:00       0.0              0.0
+                3 │ 2022-04-20T02:00:00+00:00       0.0              0.0
+                ⋮  │             ⋮                    ⋮               ⋮
+                22 │ 2022-04-20T21:00:00+00:00       0.970055         3.39519
+                23 │ 2022-04-20T22:00:00+00:00       1.42857          5.0
+                24 │ 2022-04-20T23:00:00+00:00       1.71429          6.0
+
+- The modelled costs can be retrieved using the `get_costs_dataframe()` function. This includes realised costs, controlling costs and dummy costs. The realised costs include costs of used fuels and commodities, operational costs, market costs/profits, etc. The controlling costs include the value of the storage at the end of the optimization horizon, deviation from setpoints, etc. Dummy costs include costs for dummy or slack variables, which are used to ensure feasibility during optimization. 
+
+        julia> costs_df = Predicer.get_costs_dataframe(mc, input_data)
+
+- The DataFrames obtained from the results can be exported to an xlsx-file using the `dfs_to_xlsx()` function. The Dataframes can be passed to the function either in a dictionary with the name of the dataframe as the keys, or as a single DataFrame. The other parameters passed to the function are `output_path`, which is the path to where the file is to be saved, and `fname` is the name of the exported file. An suffix with the date is automatically added to the end of the filename. 
+
+        julia> Predicer.dfs_to_xlsx(df, output_path, fname)
 
 
 - The resulting bid matrix can be exported to a .xlsx file under `Predicer\\results` by using the `Predicer.write_bid_matrix()` function
@@ -96,70 +146,139 @@ Further, the factors for the constraint are defined in the *gen_constraint* shee
 
 The basic parameters and usage of the excel-format input data are described here. The input data has to be given to Predicer in a specific form, and the excel-format input data files are not a requirement. Excel has been used during development, since they were considered more convenient than databases or other forms of data structures.
 
-### Node
+
+### setup
+
+The setup sheet is used to define specific parameters used to define the functionalities of the model. The parameters defined in this sheet often override other information, for example if use_reserves is set to 0 (false), no reserve functionalities will be used in the model even if relevant structures are defined in other parts of the input data. This enables quick testing with or without certain features without needing to change large amounts of data or needing to use separate input data files. 
+
+| Parameter                | Type   | Description                                                                                                                     |
+|--------------------------|--------|---------------------------------------------------------------------------------------------------------------------------------|
+| use_market_bids          | Bool   | Flag indicating whether market bids are used in the model                                                                       |
+| use_reserves             | Bool   | Flag indicating whether reserves are used in the model. If set to false, no reserve functionalities are used.                   |
+| use_reserve_realisation  | Bool   | Indicates whether reserves can be realised. If set to false, no realisation occurs.                                             |
+| use_node_dummy_variables | Bool   | Indicates if dummy variables should be used in the node balance equations.                                                      |
+| use_ramp_dummy_variables | Bool   | Indicates if dummy variables should be used in the ramp balance equations.                                                      |
+| common_timesteps         | Int    | Indicates the length of a common start, where the parameters and variable values are equal across all scenarios. Default is 0.  |
+| common_scenario_name     | String | Name of the common start scenario, if it is used.                                                                               |
+
+
+### nodes
 
 Nodes are fundamental building blocks in Predicer, along with Processes.
 
-| Parameter               | Type   | Description                                                |
-|-------------------------|--------|------------------------------------------------------------|
-| node                    | String | Name of the node                                           |
-| is_commodity            | Bool   | Indicates if the node is a commodity node                  |
-| is_state                | Bool   | Indicates if the node has a state (storage)                |
-| is_res                  | Bool   | Indicates if the node is involved in reserve markets       |
-| is_market               | Bool   | Indicates if the node is a market node                     |
-| is_inflow               | Bool   | Indicates if the node has an inflow                        |
-| state_max               | Float  | Storage state capacity (if node has a state)               |
-| in_max                  | Float  | Storage state charge capacity                              |
-| out_max                 | Float  | Storage state discharge capacity                           |
-| initial_state           | Float  | Initial state of the storage                               |
-| state_loss_proportional | Float  | Hourly storage loss relative to the state of the storage   |
-| residual_value          | Float  | Value of the storage contents at the end of the time range |
+| Parameter                  | Type   | Description                                                      |
+|----------------------------|--------|------------------------------------------------------------------|
+| node                       | String | Name of the node                                                 |
+| is_commodity               | Bool   | Indicates if the node is a commodity node                        |
+| is_state                   | Bool   | Indicates if the node has a state (storage)                      |
+| is_res                     | Bool   | Indicates if the node is involved in reserve markets             |
+| is_market                  | Bool   | Indicates if the node is a market node                           |
+| is_inflow                  | Bool   | Indicates if the node has an inflow                              |
+| state_max                  | Float  | Storage state capacity (if node has a state)                     |
+| state_min                  | Float  | Storage state minimum level (if node has a state)                |
+| in_max                     | Float  | Storage state charge capacity                                    |
+| out_max                    | Float  | Storage state discharge capacity                                 |
+| initial_state              | Float  | Initial state of the storage                                     |
+| state_loss_proportional    | Float  | Hourly storage loss relative to the state of the storage         |
+| scenario_independent_state | Bool  | If true, forces the state variable to be equal in all scenarios   |
+| is_temp                    | Bool   | Flag indicating whether the state of the node models temperature |
+| T_E_conversion             | Float  | Conversion coefficient from temperature to energy (kWh/K)        |
+| residual_value             | Float  | Value of the storage contents at the end of the time range       |
 
 
 
-### Processes
+### processes
 
 Processes are fundamental building blocks in Predicer, along with Nodes. They are used to convert or transfer electricity or heat, or etc. between nodes in the modelled system.
 
-| Parameter     | Type    | Description                                                                                         |
-|---------------|---------|-----------------------------------------------------------------------------------------------------|
-| process       | String  | Name of the process                                                                                 |
-| is_cf         | Bool    | Indicates if the process is limited by a capacity factor time series                                |
-| is_cf_fix     | Bool    | Indicates if the process has to match the capacity factor time series                               |
-| is_online     | Bool    | Indicates if the process is an online/offline unit                                                  |
-| is_res        | Bool    | Indicates if the process participates in reserve markets                                            |
-| conversion    | Integer | Indicates the type of the process. 1 = unit based process, 2 = transfer process, 3 = market process |
-| eff           | Float   | Process efficiency (total output / total input)                                                     |
-| load_min      | Float   | Minimum load of the process as a fraction of total capacity. Only for online processes              |
-| load_max      | Float   | Maximum load of the process as a fraction of total capacity. Only for online processes              |
-| start_cost    | Float   | Cost of starting the unit, only for online processes.                                               |
-| min_online    | Float   | Minimum time the process has to be online after start up                                            |
-| min_offline   | Float   | Minimum time the process has to be offline during shut down                                         |
-| max_online    | Float   | Maximum time the process can be online                                                              |
-| max_offline   | Float   | Maximum time the process can be offline                                                             |
-| initial_state | Bool    | Initial state of the online unit (0 = offline, 1 = online)                                          |
+| Parameter                     | Type    | Description                                                                                         |
+|-------------------------------|---------|-----------------------------------------------------------------------------------------------------|
+| process                       | String  | Name of the process                                                                                 |
+| is_cf                         | Bool    | Indicates if the process is limited by a capacity factor time series                                |
+| is_cf_fix                     | Bool    | Indicates if the process has to match the capacity factor time series                               |
+| is_online                     | Bool    | Indicates if the process is an online/offline unit                                                  |
+| is_res                        | Bool    | Indicates if the process participates in reserve markets                                            |
+| conversion                    | Integer | Indicates the type of the process. 1 = unit based process, 2 = transfer process, 3 = market process |
+| eff                           | Float   | Process efficiency (total output / total input)                                                     |
+| load_min                      | Float   | Minimum load of the process as a fraction of total capacity. Only for online processes              |
+| load_max                      | Float   | Maximum load of the process as a fraction of total capacity. Only for online processes              |
+| start_cost                    | Float   | Cost of starting the unit, only for online processes.                                               |
+| min_online                    | Float   | Minimum time the process has to be online after start up                                            |
+| min_offline                   | Float   | Minimum time the process has to be offline during shut down                                         |
+| max_online                    | Float   | Maximum time the process can be online                                                              |
+| max_offline                   | Float   | Maximum time the process can be offline                                                             |
+| scenario_independent_online   | Bool    | if true, forces the online variable of the process to be equal in all scenarios                     |
+| initial_state                 | Bool    | Initial state of the online unit (0 = offline, 1 = online)                                          |
 
 
 
-### Process topology
+### groups
 
-Process topologies are used to define the process flows and capacities in the modelled system. Flows are connections between nodes and processes, and are used to balance the modelled system.
+The user can define groups of either nodes or processes. Groups are used to define which processes or which nodes can for example participate in the realisation of a reserve. Group membership is defined row by row, with the first column being the type of the group, which is either node or process. The second column is the name of the entit (either a node or a process) which is to be part of the group named in the third column. A group can only contain entities of the specified type, for example adding the node "ng" to a process group will result in an error. Entities can be a part of several groups, and there is no limitation to the number of member sin a group.
+
+| Parameter     | Type    | Description                                                      |
+|---------------|---------|------------------------------------------------------------------|
+| type          | String  | Type of the group (node/process)                                 |
+| entity        | String  | The name of the node or process which is to be a part of a group |
+| group         | String  | The name of the group                                            |
+
+
+### node_diffusion
+
+Node diffusion is used to model flow of energy between nodes with states, with the size of the flow depending on the level of the node state and the given diffusion coefficient. One possible application of this could be the flow of heat from the inside of a building to the outside during heating season. The flow of energy between nodes *N1* and *N2* is simply calculated as *E = k (T1 - T2)*, with *T1* and *T2* being the temperatures of the nodes. If the temperature difference is negative *(T2 > T1)*, the flow of energy goes from *N2* to *N1*, and if *(T1 > T2)*, the energy flows from *N1* to *N2*. The temperatures of the nodes are linked to the level of the node states, either directly if the *is_temp* flag for the state is 1, or alternatively using the *T_E_converison* coefficient if the state is modelled as energy. 
 
 | Parameter   | Type   | Description                                                                       |
 |-------------|--------|-----------------------------------------------------------------------------------|
-| process     | String | Name of the process                                                               |
-| source_sink | String | Determines whether the connection node is a source or a sink for the process      |
-| node        | String | Name of the connection node                                                       |
-| capacity    | Float  | Capacity of the connection                                                        |
-| VOM_cost    | Float  | Variable operational and maintenance cost of using the corresponding process flow |
-| ramp_up     | Float  | Determines the hourly upward ramp rate of the corresponding process flow          |
-| ramp_down   | Float  | Determines the hourly downward ramp rate of the corresponding process flow        |
+| node1       | String | The node from which heat flows if the temperature difference T1 - T2 is positive  |
+| node2       | String | The node to which heat flows if the temperature difference T1 - T2 is positive    |
+| diff_coeff  | Float  | The diffusion coefficient between the nodes. Must be positive.                    |
 
 
+### node_history
 
-### Efficiencies
+When modelling delay flows between nodes in Predicer, there is a flow from one node *n1* at timestep *t* to another node *n2* at timestep *t+d*, where *d* is the length of the delay. The *node_history* sheet is used to define flows into node *n2* for the *d* first timesteps of the optimization horizon, when the model cannot determine the flow from node *n1*, since it is outside of the optimization horizon. Node history can be seen as an inflow into a node for *d* timesteps. 
+
+The node history data should be provided for all nodes that are on the recieving end of a delay relation. The data for each node is given in two columns, one with the relevant timesteps, and the other with the size of the flow. The notation for the first column is of form *nodename*,t,*scenario* and the notation for the second column is of form *nodename*,*scenario*. Below is an example from the *input_data_delays.xlsx* model with a delay flow ending in the *dh2* node. The length of the columns don't have to be equal for different nodes.
+
+| t | dh2,t,s1       | d2,s1 |
+|---|----------------|-------|
+| 1 | 20.4.2022 0:00 | 3     |
+| 2 | 20.4.2022 1:00 | 4     |
+| 3 |                |       |
+
+
+### node_delay
+
+Node delay is used to model a delay in the flow between two nodes, with a river hydropower system being a great example. When water is released from an upstream reservoir it takes a while until the water flow reaches a reservoir downstream. A delay flow is defined between two nodes with node balance, so commodity nodes or market nodes cannot be a part of a delay relation. The delay flow is one-way, with an efficiency of 1. 
+
+| Parameter    | Type   | Description                                                                       |
+|--------------|--------|-----------------------------------------------------------------------------------|
+| node1        | String | Name of the from node                                                             |
+| node2        | String | Name of the to node                                                               |
+| delay_       | Float | Delay between the nodes in hours                                                   |
+| min_flow     | Float | Minimum allowed value for the flow                                                 |
+| max_flow     | Float | Maximum allowed value for the flow                                                 |
+
+
+### process_topology
+
+Process topologies are used to define the process flows and capacities in the modelled system. Flows are connections between nodes and processes, and are used to balance the modelled system.
+
+| Parameter    | Type   | Description                                                                       |
+|--------------|--------|-----------------------------------------------------------------------------------|
+| process      | String | Name of the process                                                               |
+| source_sink  | String | Determines whether the connection node is a source or a sink for the process      |
+| node         | String | Name of the connection node                                                       |
+| capacity     | Float  | Capacity of the connection                                                        |
+| VOM_cost     | Float  | Variable operational and maintenance cost of using the corresponding process flow |
+| ramp_up      | Float  | Determines the hourly upward ramp rate of the corresponding process flow          |
+| ramp_down    | Float  | Determines the hourly downward ramp rate of the corresponding process flow        |
+| initial_load | Float  | Sets the initial value of the process load, from which optimization starts        |
+| initial_flow | Float  | Sets the initial value of the process flow, from which optimization starts        |
+
+
+### efficiencies
 Unit-based processes can have a flat efficiency, as defined in the *processes* sheet, or an efficiency which depends on the load of the process. Load-based efficiency can be defined in the sheet *efficiencies*. Defining an efficiency in the *efficiencies* sheet overrides the value given in the *processes* sheet. The efficiency of a process is  defined on two rows; one row for the *operating point*, *op*, and one row for the corresponding *efficiency*, *eff*.  In the example table below, the efficiency of an imaginary gas turbine *gas_turb* has been defined for four load intervals. The number of given operating points and corresponding efficiencies is chosen by the user, simply by adding or removing columns The operating points are defined on a row, where the first column has the value ***process,op***, and the efficiencies are defined on a row where the value of the first column is ***process,eff***. 
-
 
 | process      | 1    | 2    | 3    | 4    |
 |--------------|------|------|------|------|
@@ -167,8 +286,7 @@ Unit-based processes can have a flat efficiency, as defined in the *processes* s
 | gas_turb,eff | 0.27 | 0.31 | 0.33 | 0.34 |
 
 
-
-### Reserve type
+### reserve_type
 
 The sheet *reserve_type* is used to define the types of reserve used in the model, mainly differing based on reserve activation speed. 
 
@@ -178,8 +296,7 @@ The sheet *reserve_type* is used to define the types of reserve used in the mode
 | ramp_factor | Float  | Ramp rate factor of reserve activation speed. (If reserve has to activate in 1 hour, ramp_factor is 1.0. In 15 minutes, ramp_factor is 4) |
 
 
-
-### Market
+### markets
 
 Markets are a type of node, with which the modelled system can be balanced by buying or selling of a product such as electricity. Markets can either be of the *energy* type, or of the *reserve* type. 
 
@@ -187,9 +304,9 @@ Markets are a type of node, with which the modelled system can be balanced by bu
 |--------------|--------|----------------------------------------------------------------------------------|
 | market       | String | Name of the market                                                               |
 | type         | String | type of the market (energy or reserve)                                           |
-| node         | String | Node the market is connected to                                                  |
+| node         | String | Node a market is connected to, or nodegroup a reserve market is ocnnected to.    |
+| processgroup | String | The processgroup the reserve market is connected to. Not used for energy markets.|
 | direction    | String | Direction of the market, only for reserve markets                                |
-| realisation  | Float  | Determines the fraction of offered reserve product that activates each time step |
 | reserve_type | String | Determines the type of the reserve                                               |
 | is_bid       | Bool   | Determines if bids can be offered to the market                                  |
 | is_limited   | Bool   | Determines if reserve markets are limited                                        |
@@ -198,12 +315,37 @@ Markets are a type of node, with which the modelled system can be balanced by bu
 | fee          | Float  | Reserve participation fee (per time period) if limited                           |
 
 
+### reserve_realisation
+
+reserve realisation is defined for each defined reserve market separately for each defined scenario. The realisation of the reserve is the expected share of activation for the offered reserve capacity for each timestep. A value of 0.0 means that none of the offered reserve capacity is activated, and 1.0 means that 100% of the offered capacity is activated, and the corresponding energy produced by reserve processes defined by the user. The notation of the *reserve_realisation* sheet is as such: the reserve markets are given on rows 2:n in the first column, with the scenarios being defined on the first row from column B forward. The realisation probability is given in the intersection of the reserve markets and the scenarios. An example of the layout of the sheet is shown below. The model contains two reserve markets (*res_up* and *res_down*), and 3 scenarios (*s1*, *s2* and *s3*).
+
+The energy imbalance caused by reserve activation is allocated to the nodes that are members in the nodegroup linked to the reserve market, defined in the *markets* sheet. The necessary actions to produce the reserve are taken by the members of the processgroup defined in the *markets* sheet.
+
+| reserve_products | s1  | s2  | s3  |
+|------------------|-----|-----|-----|
+| res_up           | 0.3 | 0.2 | 0.3 |
+| res_down         | 0.1 | 0.2 | 0.4 |
+
 
 ### Time series data
 
 Time series are used in Predicer to represent parameters that are time-dependent. The notation to define time series data in the excel input files depend on the time series data in question. 
 
 The sheet *timeseries* contains the timesteps used in the model. This sheet contains only one column *t*, with the given time steps.
+
+Example
+
+| t              |
+| 20.4.2022 1:00 |
+| 20.4.2022 2:00 |
+| 20.4.2022 3:00 |
+| 20.4.2022 4:00 |
+| 20.4.2022 0:00 |
+| 20.4.2022 5:00 |
+| 20.4.2022 6:00 |
+| 20.4.2022 7:00 |
+| 20.4.2022 8:00 |
+| 20.4.2022 9:00 |
 
 #### Time series notation in the excel-format input data
 
@@ -224,7 +366,7 @@ As an example the inflow for the node *nn* can be given as ***nn,s1*** if the va
 
 
 
-### Scenario
+### scenario
 
 The scenarios in Predicer are separate versions of the future, with potentially differing parameter values. Predicer optimizes the optimal course of action, based on the probability of the defined scenarios.
 
@@ -235,7 +377,7 @@ The scenarios in Predicer are separate versions of the future, with potentially 
 
 
 
-### Risk
+### risk
 
 The *risk* sheet in the excel-format input data contains information about the CVaR (conditional value at risk). For details, see [[1]](#1) and [[2]](#2)
 
@@ -246,22 +388,22 @@ The *risk* sheet in the excel-format input data contains information about the C
 | beta           | Share of CVaR in objective function |
 
 
-### Inflow blocks
+### inflow_blocks
 
 *Inflow blocks*, or simply *blocks*, are potential flexibility which can be modelled with *Predicer*. A block has generally been thought of as "if a demand response action is taken on time *t* by reducing/increasing *inflow* to *node* *n* by amount x, how must the system compensate on times- t-1, t-2.. or t+1, t+2...", or "if the heating for a building is turned off on time t, what has to be done in the following hours to compensate?". The blocks can thus be seen as a potential for flexibility, and how the system has to be compensated as a consequence of using the potential.
 
 Each *block* consists of a binary variable, consequent timesteps, and a constant value for each timestep. Each block is linked to a specific node, as well as a specific scenario. Despite being called "Inflow blocks", they can be linked to nodes without any inflow as well. Node inflow is modelled for each timestep and scenario as the given value in the *inflow* sheet. The product of the block binary variable value and the given constant is added to the inflow for relevant combinations of node, scenario and timestep. Two active blocks cannot overlap in the same node, time and scenario. The user can define any number of blocks for the same time, but only one can be active for a specific node, scenario and timestep. 
 
-Inflow blocks are defined in the ***inflow_blocks*** sheet. The first column of the sheet is named *t*, and is not used in the model itself. Each block is defined using two columns for each scenario; one column with the timesteps and one column with the corresponding constant values. The first row of the first column is of the form ***blockname, nodename, scenario***, and the second column is ***blockname, scenario***. It is important, that these columns have an equal amount of rows. The columns for different blocks or different scenarios can have different amount of rows. 
+Inflow blocks are defined in the ***inflow_blocks*** sheet. The first column of the sheet is named *t*, and is not used in the model itself. Each block is defined using one column for the timesteps and scenario columns for scenario based constant values. The name for the timestep column is of the form ***blockname, nodename*** and names for the scenario columns are of the form ***blockname, scenario***. It is important, that these columns have an equal amount of rows. The columns for different blocks can have different amount of rows.
 
 As an example, assume there are two blocks, ***b1*** and ***b2***. The blocks should be defined to the *inflow_blocks* sheet as following:
 
-| t | b1, n1, s1     | b1, s1 | b1, n1, s2     | b1, s2 | b2, n2, s1     | b2, s1 |
-|---|----------------|--------|----------------|--------|----------------|--------|
-| 1 | 20.4.2022 1:00 | 6      | 20.4.2022 3:00 | 4      | 20.4.2022 6:00 | -3     |
-| 2 | 20.4.2022 2:00 | -3     | 20.4.2022 4:00 | -2     | 20.4.2022 7:00 | 2      |
-| 3 | 20.4.2022 3:00 | -2     | 20.4.2022 5:00 | -2     | 20.4.2022 8:00 | 1      |
-| 4 | 20.4.2022 4:00 | -1     |                |        | 20.4.2022 9:00 | 1      |
+| t | b1, n1         | b1, s1 | b1, s2 | b2, n2         | b2, s1 | b2, s2 |
+|---|----------------|--------|--------|----------------|--------|--------|
+| 1 | 20.4.2022 1:00 | 6      | 4      | 20.4.2022 6:00 | -3     |  -2    |
+| 2 | 20.4.2022 2:00 | -3     | -2     | 20.4.2022 7:00 | 2      | 1      |
+| 3 | 20.4.2022 3:00 | -2     | -1     | 20.4.2022 8:00 | 1      | 1      |
+| 4 | 20.4.2022 4:00 | -1     | 1      |                |        |        |
 
 
 As with the generic constraints described below, the validity of the user input is not checked. The user should thus ensure, that the node linked to the block can handle the change in inflow, especially in nodes with either only consumers or producer. If a block causes a change in the sign of the inflow (- to +, or + to -), the results may be unpredictable. As an example, using a block causing a positive flow of heat into a district heating node without any way to remove the heat would result in high penalty costs, and the model would thus not use the block.
@@ -318,7 +460,7 @@ As another example, assume that the operation of two online processes, **proc_1*
 If both the processes should be either online or offline at the same time, the coefficients for one process should be *1*, and the other should be *-1*, weith the constant set to 0. This would result in the constraint **proc_1* - *proc_2* + 0 == 0*. 
 
 
-As an example of a setpoint general constraint, assume the value of the electricity, **elc**, production of the process **gas_turb** has to be between 3 and 8. To do this, two setpoint constraints are defined, **c_up** and **c_dw**, for defining an upper and lower boundary for the process flow. As above, the constraints are defined in the *gen_constraint* sheet. The operator for *c_up* should be *st* (= smaller than), and the operator for *c_dw* should be *gt* (=greater than). Both constraints are defined as setpoint constraints, with a deviation penalty of 100. The unit of the penalty is simply per iunit of variable, meaning a variable deviation of 2 would increase the costs in the model with 200.
+As an example of a setpoint general constraint, assume the value of the electricity, **elc**, production of the process **gas_turb** has to be between 3 and 8. To do this, two setpoint constraints are defined, **c_up** and **c_dw**, for defining an upper and lower boundary for the process flow. As above, the constraints are defined in the *gen_constraint* sheet. The operator for *c_up* should be *st* (= smaller than), and the operator for *c_dw* should be *gt* (=greater than). Both constraints are defined as setpoint constraints, with a deviation penalty of 100. The unit of the penalty is simply per unit of variable, meaning a variable deviation of 2 would increase the costs in the model with 200.
 
 | name  | operator | is_setpoint | penalty |
 |-------|----------|-------------|---------|
