@@ -141,6 +141,23 @@ Further, the factors for the constraint are defined in the *gen_constraint* shee
 The basic parameters and usage of the excel-format input data are described here. The input data has to be given to Predicer in a specific form, and the excel-format input data files are not a requirement. Excel has been used during development, since they were considered more convenient than databases or other forms of data structures.
 
 
+### timeseries
+
+The timesteps used in the model should be listed here. Below an example of the timesteps used in the example model. The length of the timesteps can vary if needed, but this may cause problems with delay, etc. 
+
+| t              |
+| 20.4.2022 1:00 |
+| 20.4.2022 2:00 |
+| 20.4.2022 3:00 |
+| 20.4.2022 4:00 |
+| 20.4.2022 0:00 |
+| 20.4.2022 5:00 |
+| 20.4.2022 6:00 |
+| 20.4.2022 7:00 |
+| 20.4.2022 8:00 |
+| 20.4.2022 9:00 |
+
+
 ### nodes
 
 Nodes are fundamental building blocks in Predicer, along with Processes.
