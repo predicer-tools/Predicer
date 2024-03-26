@@ -145,8 +145,14 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
         for tup in node_balance_tuple
             cons_delays = filter(x -> x[1] == tup[1] && x[3] == tup[2] && x[4] == tup[3], delay_tups) # Get delay flows "out" of node
             prod_delays = filter(x -> x[2] == tup[1] && x[3] == tup[2] && x[5] == tup[3], delay_tups) # Get delay flows "in" to node
-            add_to_expression!(e_node_delay[tup], -1.0 .* sum(v_node_delay[cons_delays])) # consuming flows as negative
-            add_to_expression!(e_node_delay[tup], sum(v_node_delay[prod_delays])) # producing flows as positive
+            for d in cons_delays
+                # consuming flows as negative
+                add_to_expression!(e_node_delay[tup], -1, v_node_delay[d])
+            end
+            for d in prod_delays
+                # producing flows as positive
+                add_to_expression!(e_node_delay[tup], v_node_delay[d])
+            end
         end
     end
 
