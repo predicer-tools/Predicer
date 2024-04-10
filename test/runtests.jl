@@ -1,3 +1,8 @@
+#= In the project root directory:
+    ]activate .
+    ]test
+=#
+
 using Predicer
 using Test
 using JuMP
