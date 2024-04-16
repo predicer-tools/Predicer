@@ -261,11 +261,27 @@ A struct for storing TimeSeries for different scenarios.
 """
 struct TimeSeriesData
     ts_data::Vector{TimeSeries}
+    #XXX This (instead of ts_data :: Dict{String, TimeSeries}) is a bit silly,
+    # but in the long run it would be best to move from scenario names to
+    # integer indices.
+    index::Dict{String, Int}
     function TimeSeriesData()
-        return new([])
+        return new([], Dict())
     end
 end
 
+function Base.push!(tsd::TimeSeriesData, tss::TimeSeries...)
+    i = length(tsd.ts_data)
+    @assert i == length(tsd.index)
+    push!(tsd.ts_data, tss...)
+    for ts in tss
+        i += 1
+        tsd.index[ts.scenario] = i
+    end
+    # No duplicates
+    @assert i == length(tsd.index)
+    return tsd
+end
 
 """
     function (tsd::TimeSeriesData)(s::String, t::String)
@@ -290,12 +306,11 @@ end
 """
     function (tsd::TimeSeriesData)(s::String)
 
-Returns the TimeSeries for scenario s. If the scenario is not found, return TimeSeries for the first scenario
+Returns the TimeSeries for scenario s.
 """
 function (tsd::TimeSeriesData)(s::String)
-    if s in map(x -> x.scenario, tsd.ts_data)
-        return filter(ts -> ts.scenario == s, tsd.ts_data)[1]
-    end
+    @assert length(tsd.ts_data) == length(tsd.index)
+    return tsd.ts_data[tsd.index[s]]
 end
 
 
@@ -500,7 +515,7 @@ function add_inflow(n::Node, ts::TimeSeries)
         error("A market Node cannot have an inflow.")
     else
         n.is_inflow = true
-        push!(n.inflow.ts_data, ts)
+        push!(n.inflow, ts)
     end
 end
 
@@ -585,7 +600,7 @@ Adds a cost TimeSeries to a Node with is_commodity==true. Returns an error if is
 """
 function add_cost(n::Node, ts::TimeSeries)
     if n.is_commodity
-        push!(n.cost.ts_data, ts)
+        push!(n.cost, ts)
     else
         error("Can only add a cost TimeSeries to a commodity Node!")
     end
@@ -765,7 +780,7 @@ end
 Adds a time-dependent value for the efficiency of the process. 
 """
 function add_fixed_eff(p::Process, ts::TimeSeries)
-    push!(p.eff_ts.ts_data, ts)
+    push!(p.eff_ts, ts)
 end
 
 
@@ -832,7 +847,7 @@ function add_cf(p::Process, ts::TimeSeries, is_fixed::Bool=false)
     if !p.is_online
         p.is_cf = true
         p.is_cf_fix = is_fixed
-        push!(p.cf.ts_data, ts)
+        push!(p.cf, ts)
     else
         return error("Cannot add cf functionality to a process with online functionality.")
     end

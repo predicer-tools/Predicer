@@ -245,7 +245,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
             for i in 1:length(timesteps)
                 push!(ts.series,(timesteps[i],data[i]))
             end
-            push!(filter(x->x.source==nod || x.sink==nod,processes[proc].topos)[1].cap_ts.ts_data, ts)
+            push!(filter(x->x.source==nod || x.sink==nod,processes[proc].topos)[1].cap_ts, ts)
         end
     end
 
@@ -334,7 +334,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                         for i in 1:length(ts)
                             push!(t_series.series, (ts[i], vals[i]))
                         end
-                        push!(node_history[n].steps.ts_data, t_series)
+                        push!(node_history[n].steps, t_series)
                     end
                 end
             end
@@ -363,7 +363,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                         for i in 1:length(ts)
                             push!(t_series.series, (ts[i], vals[i]))
                         end
-                        push!(node_history[n].steps.ts_data, t_series)
+                        push!(node_history[n].steps, t_series)
                     end
                 end
             end
@@ -391,7 +391,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                 for i = 1:length(t_col)
                     push!(series.series, (string(ZonedDateTime(t_col[i], tz"UTC")), s_col[i]))
                 end
-                push!(inflow_blocks[b].data.ts_data,series)
+                push!(inflow_blocks[b].data,series)
             end
         end
     end
@@ -406,7 +406,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                     tup = (timesteps[i], mps[i],)
                     push!(ts.series, tup)
                 end
-                push!(processes[n].eff_ts.ts_data,ts)
+                push!(processes[n].eff_ts, ts)
             end
         end
     end
@@ -430,7 +430,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                 tup = (timesteps[i], mps[i],)
                 push!(ts.series, tup)
             end
-            push!(markets[mm.market].price.ts_data, ts)
+            push!(markets[mm.market].price, ts)
         end
         if mm.market in names(timeseries_data["fixed_ts"])
             timestamps = timeseries_data["fixed_ts"].t
@@ -457,8 +457,8 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                     push!(down_ts.series, (timesteps[i], down_data[i]))
                 end
  
-                push!(markets[mm.market].up_price.ts_data, up_ts)
-                push!(markets[mm.market].down_price.ts_data, down_ts)
+                push!(markets[mm.market].up_price, up_ts)
+                push!(markets[mm.market].down_price, down_ts)
             end
         end
     end
@@ -512,7 +512,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                     push!(con_vecs[tup],ts)
                 end
             else
-                push!(gen_constraints[constr].constant.ts_data,ts)
+                push!(gen_constraints[constr].constant,ts)
             end
         end
     end
@@ -525,7 +525,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
         elseif k[1] == "state"
             con_fac = Predicer.StateConFactor((k[3],""))
         end
-        append!(con_fac.data.ts_data, con_vecs[k])
+        push!(con_fac.data, con_vecs[k]...)
         push!(gen_constraints[k[2]].factors,con_fac)
     end
     
