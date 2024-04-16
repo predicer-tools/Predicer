@@ -545,6 +545,8 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
     reserve_realisation = Bool(filter(x -> x.parameter == "use_reserve_realisation", eachrow(system_data["setup"]))[1].value)
     use_node_dummy_variables = Bool(filter(x -> x.parameter == "use_node_dummy_variables", eachrow(system_data["setup"]))[1].value)
     use_ramp_dummy_variables = Bool(filter(x -> x.parameter == "use_ramp_dummy_variables", eachrow(system_data["setup"]))[1].value)
+    node_dummy_variable_cost = Float64(filter(x -> x.parameter == "node_dummy_variable_cost", eachrow(system_data["setup"]))[1].value)
+    ramp_dummy_variable_cost = Float64(filter(x -> x.parameter == "ramp_dummy_variable_cost", eachrow(system_data["setup"]))[1].value)
     common_timesteps = Int(filter(x -> x.parameter == "common_timesteps", eachrow(system_data["setup"]))[1].value)
     common_scenario_name_p = filter(x -> x.parameter == "common_scenario_name", eachrow(system_data["setup"]))[1]
     if ismissing(common_scenario_name_p.value)
@@ -554,7 +556,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
     end
 
     setup = InputDataSetup(contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, contains_markets, 
-        reserve_realisation, use_market_bids, common_timesteps, common_scenario_name, use_node_dummy_variables, use_ramp_dummy_variables)
+        reserve_realisation, use_market_bids, common_timesteps, common_scenario_name, use_node_dummy_variables, use_ramp_dummy_variables, node_dummy_variable_cost, ramp_dummy_variable_cost)
 
     return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), setup, processes, nodes, node_diffusion_tuples, node_delay_tuples, node_history, markets, groups, scens, reserve_type, risk, inflow_blocks, gen_constraints)
 end
