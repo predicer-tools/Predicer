@@ -1096,9 +1096,15 @@ end
         contains_diffusion::Bool
         contains_delay::Bool
         contains_markets::Bool
+        reserve_realisation::Bool
+        use_market_bids::Bool
+        common_timesteps::Int
+        common_scenario_name::String
+        use_node_dummy_variables::Bool
+        use_ramp_dummy_variables::Bool
     end
 
-Struct containing the imported input data, based on which the Predicer is built.
+Struct containing setup parameters for the model, affecting the behaviour of the modelled system. 
 # Fields
 - `contains_reserves`: Boolean indicating whether the model (input_data) requires reserve functionality structures. 
 - `contains_online::Bool`: Boolean indicating whether the model (input_data) requires online functionality structures. 
@@ -1108,6 +1114,14 @@ Struct containing the imported input data, based on which the Predicer is built.
 - `contains_diffusion::Bool`: Boolean indicating whether the model (input_data) requires diffusion functionality structures. 
 - `contains_delay::Bool`: Boolean indicating whether the model (input_data) requires delay functionality structures. 
 - `contains_markets::Bool`: Boolean indicating whether the model (input_data) needs market structures. 
+- `reserve_realisation::Bool`: Boolean indicating whether the reserve products in the model can be realized. If set to false, no realisation occurs.  
+- `use_market_bids::Bool`: Boolean indicating whether the model contains markets with bids.
+- `common_timesteps::Int`: Indicates the length of a common start, where the parameters and variable values are equal across all scenarios. Default is 0.
+- `common_scenario_name::String`: Name of the common start scenario, if it is used.     
+- `use_node_dummy_variables::Bool`: Indicates if dummy variables should be used in the node balance equations.   
+- `use_ramp_dummy_variables::Bool`: Indicates if dummy variables should be used in the process ramp balance equations.   
+- `node_dummy_variable_cost::Float64`: Defines the modelled cost for using node dummy variables. Default is 1 000 000. Only used if use_node_dummy_variables=true 
+- `ramp_dummy_variable_cost::Float64`: Defines the modelled cost for using ramp dummy variables. Default is 1 000 000. Only used if use_ramp_dummy_variables=true
 """
 mutable struct InputDataSetup
     contains_reserves::Bool
@@ -1124,8 +1138,10 @@ mutable struct InputDataSetup
     common_scenario_name::String
     use_node_dummy_variables::Bool
     use_ramp_dummy_variables::Bool
-    function InputDataSetup(contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, contains_markets, reserve_realisation, use_market_bids, common_timesteps, common_scenario_name, use_node_dummy_variables, use_ramp_dummy_variables)
-        return new(contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, contains_markets, reserve_realisation, use_market_bids, common_timesteps, common_scenario_name, use_node_dummy_variables, use_ramp_dummy_variables)
+    node_dummy_variable_cost::Float64
+    ramp_dummy_variable_cost::Float64
+    function InputDataSetup(contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, contains_markets, reserve_realisation, use_market_bids, common_timesteps, common_scenario_name, use_node_dummy_variables, use_ramp_dummy_variables, node_dummy_variable_cost, ramp_dummy_variable_cost)
+        return new(contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, contains_markets, reserve_realisation, use_market_bids, common_timesteps, common_scenario_name, use_node_dummy_variables, use_ramp_dummy_variables, node_dummy_variable_cost, ramp_dummy_variable_cost)
     end
 end
 
