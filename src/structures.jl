@@ -158,16 +158,11 @@ A struct for time series. Includes linked scenario and a vector containing tuple
 """
 struct TimeSeries
     scenario::AbstractString
-    series::Vector{Tuple{AbstractString, Number}}
-    function TimeSeries(scenario="", series=0)
-        if series != 0
-            return new(scenario, series)
-        else
-            return new(scenario, [])
-        end
-    end
+    series::SortedDict{AbstractString, Number}
 end
 
+TimeSeries(scenario, keys, values) = TimeSeries(scenario, SortedDict(keys .=> values))
+TimeSeries(scenario="") = TimeSeries(scenario, [], [])
 
 """
     function Base.:length(ts::TimeSeries)
@@ -203,26 +198,7 @@ end
 
 Returns the value of the TimeSeries at the given timestep. If the exact timestep is not defined, retrieve the value corresponding to the closest previous timestep, or alternatively the first timestep. 
 """
-function (ts::TimeSeries)(t::ZonedDateTime)
-    st = string(t)
-    if st in map(x -> x[1], ts.series)
-        return filter(x -> x[1] == st, ts.series)[1][2]
-    else
-        i = 1
-        low = 0
-        high = length(ts.series)
-        while high - low > 1
-            i = Int(ceil((high-low)/2) + low)
-            if ts.series[i][1] < st
-                low = i
-            elseif ts.series[i][1] > st
-                high = i
-            end
-        end
-        return ts.series[low][2]
-    end
-end
-
+(ts::TimeSeries)(t::ZonedDateTime) = ts(string(t))
 
 """
     function (ts::TimeSeries)(t::String)
@@ -230,22 +206,9 @@ end
 Returns the value of the TimeSeries at the given timestep. If the exact timestep is not defined, retrieve the value corresponding to the closest previous timestep, or alternatively the first timestep. 
 """
 function (ts::TimeSeries)(t::AbstractString)
-    if t in map(x -> x[1], ts.series)
-        return filter(x -> x[1] == t, ts.series)[1][2]
-    else
-        i = 1
-        low = 0
-        high = length(ts.series)
-        while high - low > 1
-            i = Int(ceil((high-low)/2) + low)
-            if ts.series[i][1] < t
-                low = i
-            elseif ts.series[i][1] > t
-                high = i
-            end
-        end
-        return ts.series[low][2]
-    end
+    st = searchsortedlast(ts.series, t)
+    return ts.series[(st == beforestartsemitoken(ts.series)
+                      ? startof(ts.series) : st)]
 end
 
 

@@ -1091,13 +1091,10 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
     price_matr = OrderedDict()
     for m in keys(markets)
         if markets[m].is_bid
-            for (i,s) in enumerate(scenarios)
-                vec = map(x -> x[2], markets[m].price(s).series)
-                if i == 1
-                    price_matr[m] = vec
-                else
-                    price_matr[m] = hcat(price_matr[m],vec)
-                end
+            pcols = []
+            sizehint!(pcols, length(scenarios))
+            for s in scenarios
+                push!(pcols, values(markets[m].price(s).series))
                 if markets[m].type == "energy"
                     for t in temporals.t
                         v_bid[(markets[m].name,s,t)] = AffExpr(0.0)
@@ -1119,6 +1116,7 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
                     end
                 end
             end
+            price_matr[m] = stack(pcols)
         end
     end
     function scen_pairs(ps)
@@ -1267,7 +1265,7 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
 
     for c in keys(gen_constraints)
         # Get timesteps for where there is data defined. (Assuming all scenarios are equal)
-        gen_const_ts = map(x -> x[1], gen_constraints[c].factors[1].data(scenarios(input_data)[1]).series)
+        gen_const_ts = keys(gen_constraints[c].factors[1].data(scenarios(input_data)[1]).series)
         # Get timesteps which are found in both temporals and gen constraints 
         relevant_ts = filter(t -> t in gen_const_ts, temporals.t)
         # use these ts to create gen_consts..
