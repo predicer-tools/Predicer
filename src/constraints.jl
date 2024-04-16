@@ -267,7 +267,10 @@ function setup_process_online_balance(model_contents::OrderedDict, input_data::P
             online_dyn_eq =  @constraint(model,online_dyn_eq[tup in proc_online_tuple], online_expr[tup] == 0)
             model_contents["constraint"]["online_dyn_eq"] = online_dyn_eq
 
-            # setup constraints for scenario independent online processes
+            ## setup constraints for scenario independent online processes
+            # v_online[s1] == v_online[s2]
+            # v_online[s2] == v_online[s3]
+            # v_online[s3] == v_online[s1]
             #e_scenario_independence = OrderedDict()
             #for sip in filter(p -> processes[p].is_scenario_independent, collect(keys(processes)))
             #    p_tups = unique(filter(x -> x[1] == sip, proc_online_tuple))
@@ -1543,7 +1546,8 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
 
     # Dummy variable costs
     dummy_costs = model_contents["expression"]["dummy_costs"] = OrderedDict()
-    p = 1000000
+    p_node = input_data.setup.node_dummy_variable_cost
+    p_ramp = input_data.setup.ramp_dummy_variable_cost
 
     if input_data.setup.use_node_dummy_variables
         vq_state_up = model_contents["variable"]["vq_state_up"]
@@ -1558,12 +1562,12 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
         dummy_costs[s] = AffExpr(0.0) 
         if input_data.setup.use_node_dummy_variables
             for tup in filter(x->x[2]==s,node_balance_tuple)
-                add_to_expression!(dummy_costs[s], sum(vq_state_up[validate_tuple(model_contents, tup, 2)])*p + sum(vq_state_dw[validate_tuple(model_contents, tup, 2)])*p)
+                add_to_expression!(dummy_costs[s], sum(vq_state_up[validate_tuple(model_contents, tup, 2)])*p_node + sum(vq_state_dw[validate_tuple(model_contents, tup, 2)])*p_node)
             end
         end
         if input_data.setup.use_ramp_dummy_variables
             for tup in filter(x -> x[4] == s, process_topology_ramp_times_tuples(input_data))
-                add_to_expression!(dummy_costs[s], sum(vq_ramp_up[validate_tuple(model_contents, tup, 4)])*p + sum(vq_ramp_dw[validate_tuple(model_contents, tup, 4)])*p)
+                add_to_expression!(dummy_costs[s], sum(vq_ramp_up[validate_tuple(model_contents, tup, 4)])*p_ramp + sum(vq_ramp_dw[validate_tuple(model_contents, tup, 4)])*p_ramp)
             end
         end
     end
