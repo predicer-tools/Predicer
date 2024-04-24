@@ -583,3 +583,78 @@ function resolve_market_nodes(input_data::InputData)
     end
     return input_data
 end
+
+
+"""
+    predicer_graph(input_data::Input_data)
+
+Function to collect the Predicer model structure into a form, which can be used to generate a figure of the model structure. 
+"""
+function predicer_graph(input_data::InputData)
+    graph = Dict()
+    graph["nodes"] = Dict()
+    graph["processes"] = Dict()
+    connections = []
+
+    for n in collect(keys(input_data.nodes))
+        graph["nodes"][n] = Dict()
+        graph["nodes"][n]["type"] = "node"       
+        properties = String[]
+        input_data.nodes[n].is_inflow ? push!(properties, "Inflow") : nothing
+        input_data.nodes[n].is_commodity ? push!(properties, "Commodity") : nothing
+        input_data.nodes[n].is_state ? push!(properties, "Storage") : nothing
+        input_data.nodes[n].is_market ? push!(properties, "Market") : nothing
+        input_data.nodes[n].is_res ? push!(properties, "Reserve") : nothing
+        graph["nodes"][n]["properties"] = properties
+    end
+    for p in collect(keys(input_data.processes))
+        graph["processes"][p] = Dict()
+        graph["processes"][p]["type"] = "process"
+        properties = String[]
+        input_data.processes[p].is_online ? push!(properties, "Online") : nothing
+        input_data.processes[p].is_cf ? push!(properties, "Cf") : nothing
+        input_data.processes[p].is_res ? push!(properties, "Reserve") : nothing
+        graph["processes"][p]["properties"] = properties
+        for topo in input_data.processes[p].topos
+            push!(connections, (topo.source, p))
+            push!(connections, (p, topo.sink))
+        end
+    end
+    graph["connections"] = unique(filter(x -> x[1] != x[2], connections))
+
+    map(x -> x[1:2], input_data.node_diffusion)
+    graph["diffusion"] = unique(filter(x -> x[1] != x[2], map(y -> y[1:2], input_data.node_diffusion)))
+    graph["delay"] = unique(filter(x -> x[1] != x[2], map(y -> y[1:2], input_data.node_delay)))
+    return graph
+end
+
+
+"""
+    function generate_mermaid_diagram(graph::Dict)
+
+Function to build a string which can be used to generate flowcharts using mermaid.
+"""
+function generate_mermaid_diagram(graph::Dict)
+    d = "```\nflowchart LR\n"
+    for n in collect(keys(graph["nodes"]))
+        d *= n * "((" * n * "))\n"
+    end
+    for p in collect(keys(graph["processes"]))
+        d *= p * "[" * p * "]\n"
+    end
+    for e in graph["connections"]
+        d *= e[1] * " --> " * e[2] * "\n"
+    end
+    for del in graph["delay"]
+        d *= del[1] * " -.-> " * del[2] * "\n"
+    end
+    for diff in graph["diffusion"]
+        d *= diff[1] * " -.-> " * diff[2] * "\n"
+    end
+    #for n in collect(keys(graph["nodes"]))
+    #    for prop in graph["nodes"][n]["properties"]
+    #        d *= n * " ~~~|\"" * prop * "\" |" * n * "\n"
+    #    end
+    #end
+    d *= "\n```"
+end
