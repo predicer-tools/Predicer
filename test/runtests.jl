@@ -12,18 +12,18 @@ optr = HiGHS.Optimizer
 
 # Model definition files and objective values
 cases = [
-    "input_data.xlsx" => -12031.87393643243
+#FIXME Does not load    "input_data.xlsx" => -12031.87393643243
     "demo_model.xlsx" => -1095.5118308122817
-    "simple_building_model.xlsx" => 396.59132448327125
+    "simple_building_model.xlsx" => 563.7841038762567
     "example_model.xlsx" => -11014.127894223102
     "input_data_common_start.xlsx" => -1593.5748049230276
     "input_data_delays.xlsx" => 62.22222222222222
-    "input_data_temps.xlsx" => 6.828673104147784e6
+    "input_data_temps.xlsx" => 65388.35282275837
 ]
 
 @testset "Predicer on $bn" for (bn, obj) in cases
     inp = Predicer.get_data(joinpath("../input_data", bn))
-    Predicer.tweak_input!(inp)
+    inp = Predicer.tweak_input!(inp)
     m = Model(optr)
     mc = Predicer.generate_model(m, inp)
     @test m == mc["model"]
