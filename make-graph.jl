@@ -18,20 +18,27 @@ function write_graph(fname :: String,
     open(fname, "w") do f
         println(f, "digraph {")
         for (n, no) in inp.nodes
-            println(f, "  $n [shape = oval]")
+            println(f, "  $n [class=\"node\", shape=oval]")
         end
         for (p, pr) in inp.processes
             # For pr.conversion == 1, pr.topos go between nodes and
             # the process.  For pr.conversion == 2, 3, they go between
             # nodes, bypassing the process.
+            cls = ["process", "transfer", "market"][pr.conversion]
             shape = ["box", "note", "tab"][pr.conversion]
             head = ["normal", "vee", "onormal"][pr.conversion]
-            println(f, "\n  $p [shape = $shape]")
+            println(f, "\n  $p [class=$cls, shape=$shape]")
             for e in pr.topos
                 (s, t) = (e.source, e.sink)
                 edges = pr.conversion == 1 ? "$s -> $t" : "$s -> $p -> $t"
-                println(f, "  $edges [arrowhead = $head]")
+                println(f, "  $edges [class=$cls, arrowhead=$head]")
             end
+        end
+        for (s, t, _...) in inp.node_delay
+            println(f, "  $s -> $t [class=delay, style=dashed, arrowhead=vee]")
+        end
+        for (s, t, _...) in inp.node_diffusion
+            println(f, "  $s -> $t [class=diffusion, style=dashed]")
         end
         println(f, "}")
     end
