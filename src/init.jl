@@ -90,19 +90,8 @@ function generate_model(fpath::String, t_horizon::Vector{ZonedDateTime}=ZonedDat
 end
 
 function generate_model(input_data::InputData)
-    # Check input_data
-    validation_result = Predicer.validate_data(input_data)
-    if !validation_result["is_valid"]
-        return validation_result["errors"]
-    end
-    # Build market structures
-    input_data = Predicer.resolve_market_nodes(input_data)
-    # create model_contents
-    model_contents = Predicer.build_model_contents_dict(input_data)
-    model_contents["model"] = Predicer.setup_optimizer(HiGHS.Optimizer)
-    # build model
-    Predicer.build_model(model_contents, input_data)
-    return model_contents, input_data
+    input_data = tweak_input!(input_data)
+    return generate_model(Predicer.setup_optimizer(), input_data), input_data
 end
 
 function solve_model(model_contents::OrderedDict)
