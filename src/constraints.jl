@@ -1259,8 +1259,9 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
     temporals = input_data.temporals
     gen_constraints = input_data.gen_constraints
 
+    const_ts = OrderedDict()
+    const_set = Dict()
     const_expr = model_contents["gen_expression"] = OrderedDict()
-    const_dict = model_contents["gen_constraint"] = OrderedDict()
     setpoint_expr_lhs = OrderedDict()
     setpoint_expr_rhs = OrderedDict()
 
@@ -1271,15 +1272,17 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
         gen_const_ts = keys(gen_constraints[c].factors[1].data(scenarios(input_data)[1]).series)
         # Get timesteps which are found in both temporals and gen constraints 
         relevant_ts = filter(t -> t in gen_const_ts, temporals.t)
-        # use these ts to create gen_consts..
-        const_expr[c] = OrderedDict((s,t) => AffExpr(0.0) for s in scenarios(input_data), t in relevant_ts)
         facs = gen_constraints[c].factors
         consta = gen_constraints[c].constant
         eq_dir = gen_constraints[c].type
         if !gen_constraints[c].is_setpoint
-            for s in scenarios(input_data), t in relevant_ts
-                add_to_expression!(const_expr[c][(s,t)], consta(s, t))
-            end
+            const_ts[c] = relevant_ts
+            const_set[c] = (eq_dir == "eq" ? MOI.EqualTo(0)
+                            : eq_dir == "gt" ? MOI.GreaterThan(0)
+                            : MOI.LessThan(0))
+            const_expr[c] = OrderedDict(
+                (s,t) => AffExpr(consta(s, t))
+                for s in scenarios(input_data), t in relevant_ts)
             for f in facs
                 if f.var_type == "flow"
                     p_flow = f.var_tuple
@@ -1291,7 +1294,9 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
                     for s in scenarios(input_data), t in relevant_ts
                         p_tup_with_s_and_t = (tup[1], tup[2], tup[3], s, t)
                         fac_data = f.data(s, t)
-                        add_to_expression!(const_expr[c][(s,t)],fac_data,v_flow[validate_tuple(model_contents, p_tup_with_s_and_t, 4)])
+                        add_to_expression!(
+                            const_expr[c][(s,t)], fac_data,
+                            v_flow[validate_tuple(model_contents, p_tup_with_s_and_t, 4)])
                     end
                 elseif f.var_type == "online"
                     p = f.var_tuple[1]
@@ -1304,7 +1309,9 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
                     for s in scenarios(input_data), t in relevant_ts
                         online_tup_with_s_and_t = (p, s, t)
                         fac_data = f.data(s, t)
-                        add_to_expression!(const_expr[c][(s,t)],fac_data,v_online[validate_tuple(model_contents, online_tup_with_s_and_t, 2)])
+                        add_to_expression!(
+                            const_expr[c][(s,t)], fac_data,
+                            v_online[validate_tuple(model_contents, online_tup_with_s_and_t, 2)])
                     end
                 elseif f.var_type == "state"
                     n = f.var_tuple[1]
@@ -1320,14 +1327,6 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
                         add_to_expression!(const_expr[c][(s,t)],fac_data,v_state[validate_tuple(model_contents, n_tup_with_s_and_t, 2)])
                     end       
                 end
-            end
-            #TODO Name.
-            if eq_dir == "eq"
-                const_dict[c] = @constraint(model,[s in scenarios(input_data),t in relevant_ts],const_expr[c][(s,t)]==0.0)
-            elseif eq_dir == "gt"
-                const_dict[c] = @constraint(model,[s in scenarios(input_data),t in relevant_ts],const_expr[c][(s,t)]>=0.0)
-            else
-                const_dict[c] = @constraint(model,[s in scenarios(input_data),t in relevant_ts],const_expr[c][(s,t)]<=0.0)
             end
         else
             for s in scenarios(input_data), t in relevant_ts
@@ -1372,7 +1371,13 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
             end
         end
     end
-    setpoint_eq = @constraint(model, setpoint_eq[tup in setpoint_tups], setpoint_expr_lhs[tup] == setpoint_expr_rhs[tup])
+    @constraint(model,
+                gen_con[c = keys(const_ts), s = scenarios(input_data),
+                        t = const_ts[c]],
+                const_expr[c][(s, t)] in const_set[c])
+    model_contents["gen_constraint"] = gen_con
+    @constraint(model, setpoint_eq[tup in setpoint_tups],
+                setpoint_expr_lhs[tup] == setpoint_expr_rhs[tup])
     model_contents["constraint"]["setpoint_eq"] = setpoint_eq
 end
 
