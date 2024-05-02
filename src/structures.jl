@@ -934,7 +934,7 @@ struct Market
     node::AbstractString
     processgroup::AbstractString
     direction::String
-    realisation::Dict{String, Float64}
+    realisation::TimeSeriesData
     reserve_type::String
     is_bid::Bool
     is_limited::Bool
@@ -946,7 +946,19 @@ struct Market
     down_price::TimeSeriesData
     fixed::Vector{Tuple{AbstractString, Number}}
     function Market(name, type, node, pgroup, direction, reserve_type, is_bid, is_limited, min_bid, max_bid, fee)
-        return new(name, type, node, pgroup, direction, Dict(), reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
+        return new(name, type, node, pgroup, direction, TimeSeriesData(), reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
+    end
+end
+
+
+struct BidSlot
+    market::String
+    time_steps::Vector{String}
+    slots::Vector{String}
+    prices::OrderedDict{Tuple{String,String}, Float64}
+    market_price_allocation::OrderedDict{Tuple{String,String}, Tuple{String,String}}
+    function BidSlot(name,time_steps,slots,prices,market_price_allocation)
+        return new(name,time_steps,slots,prices,market_price_allocation)
     end
 end
 
@@ -1209,9 +1221,10 @@ mutable struct InputData
     reserve_type::OrderedDict{String, Float64}
     risk::OrderedDict{String, Float64}
     inflow_blocks::OrderedDict{String, InflowBlock}
+    bid_slots::OrderedDict{String, BidSlot}
     gen_constraints::OrderedDict{String, GenConstraint}
-    function InputData(temporals, setup, processes, nodes, node_diffusion, node_delay, node_histories,  markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
-        return new(temporals, setup, processes, nodes, node_diffusion, node_delay, node_histories, markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
+    function InputData(temporals, setup, processes, nodes, node_diffusion, node_delay, node_histories,  markets, groups, scenarios, reserve_type, risk, inflow__blocks, bid_slots, gen_constraints)
+        return new(temporals, setup, processes, nodes, node_diffusion, node_delay, node_histories, markets, groups, scenarios, reserve_type, risk, inflow__blocks, bid_slots, gen_constraints)
     end
 end
 
