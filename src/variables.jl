@@ -24,6 +24,7 @@ function create_variables(model_contents::OrderedDict, input_data::InputData)
     create_v_setpoint(model_contents, input_data)
     create_v_block(model_contents, input_data)
     create_v_node_delay(model_contents, input_data)
+    create_v_bid_volume(model_contents,input_data)
 end
 
 
@@ -303,4 +304,21 @@ function create_v_node_delay(model_contents::OrderedDict, input_data::InputData)
     delay_tups = node_delay_tuple(input_data)
     v_node_delay = @variable(model, v_node_delay[tup in delay_tups] >= 0)
     model_contents["variable"]["v_node_delay"] = v_node_delay
+end
+
+
+"""
+    create_v_bid_volume(model_contents::OrderedDict, input_data::InputData)
+
+Function to create variables needed for bid curve creation. 
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::InputData`: struct containing user input.
+"""
+function create_v_bid_volume(model_contents::OrderedDict, input_data::InputData)
+    model = model_contents["model"]
+    bid_slot_tups = bid_slot_tuples(input_data)
+    v_bid_volume = @variable(model, v_bid_volume[tup in bid_slot_tups])
+    model_contents["variable"]["v_bid_volume"] = v_bid_volume
 end
