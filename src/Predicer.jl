@@ -114,6 +114,8 @@ module Predicer
     setup_ramp_constraints,
     setup_fixed_values,
     setup_bidding_constraints,
+    setup_bidding_curve_constraints,
+    setup_bidding_volume_constraints,
     setup_generic_constraints,
     setup_cost_calculations,
     setup_objective_function
