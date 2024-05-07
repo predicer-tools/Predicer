@@ -248,6 +248,15 @@ function (ts::TimeSeries)(t::AbstractString)
     end
 end
 
+"""
+    function Base.:values(ts::TimeSeries)
+
+Function extending the Base values() to obtain the raw values of a TimeSeries struct data. 
+"""
+function Base.:values(ts::TimeSeries)
+    return map(x -> x[2], ts.series)
+end
+
 
 """
     struct TimeSeriesData
@@ -266,6 +275,37 @@ struct TimeSeriesData
     end
 end
 
+
+"""
+    function Base.:minimum(tsd::TimeSeriesData)
+
+Function extending the base minimum function to the TimeSeriesData struct 
+"""
+function Base.:minimum(tsd::TimeSeriesData)
+    return minimum(values(tsd))
+end
+
+
+"""
+    function Base.:maximum(tsd::TimeSeriesData)
+
+Function extending the base maximum function to the TimeSeriesData struct 
+"""
+function Base.:maximum(tsd::TimeSeriesData)
+    return maximum(values(tsd))
+end
+
+
+"""
+    function Base.:values(tsd::TimeSeriesData)
+
+Extend the Base.values() funciton to obtain all the values in the TimeSeriesData struct without any specific order or identification. 
+"""
+function Base.:values(tsd::TimeSeriesData)
+    vals = []
+    map(x -> map(y -> push!(vals, y), values(x)), tsd.ts_data)
+    return vals
+end
 
 """
     function (tsd::TimeSeriesData)(s::String, t::String)
@@ -905,9 +945,10 @@ end
         price::TimeSeriesData
         up_price::TimeSeriesData
         down_price::TimeSeriesData
+        reserve_activation_price::TimeSeriesData
         fixed::Vector{Tuple{AbstractString, Number}}
         function Market(name, type, node, pgroup, direction, reserve_type, is_bid, is_limited, min_bid, max_bid, fee)
-            return new(name, type, node, pgroup, direction, Dict(), reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
+            return new(name, type, node, pgroup, direction, Dict(), reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
         end
     end
 
@@ -926,6 +967,9 @@ A struct for markets.
 - 'max_bid::Float64' : Minimum bid for reserve
 - 'fee::Float64' : Fee for reserve particiapation
 - `price::TimeSeriesData`: Vector containing TimeSeries of the market price in different scenarios. 
+- `up_price::TimeSeriesData`: Vector containing TimeSeries of the balance market price for buying in different scenarios. 
+- `down_price::TimeSeriesData`: Vector containing TimeSeries of the balance market price for selling in different scenarios. 
+- `reserve_activation_price::TimeSeriesData`: Vector containing TimeSeries of the price of activated reserve products. 
 - `fixed::Vector{Tuple{AbstractString, Number}}`: Vector containing information on the market being fixed. 
 """
 struct Market
@@ -944,9 +988,10 @@ struct Market
     price::TimeSeriesData
     up_price::TimeSeriesData
     down_price::TimeSeriesData
+    reserve_activation_price::TimeSeriesData
     fixed::Vector{Tuple{AbstractString, Number}}
     function Market(name, type, node, pgroup, direction, reserve_type, is_bid, is_limited, min_bid, max_bid, fee)
-        return new(name, type, node, pgroup, direction, TimeSeriesData(), reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
+        return new(name, type, node, pgroup, direction, TimeSeriesData(), reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
     end
 end
 
