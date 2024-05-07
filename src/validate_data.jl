@@ -62,6 +62,37 @@ using Predicer
     # ensure that the scenario-dependent timeseries are equal for the first x timesteps if common_timesteps > 0 
     # 
 
+
+function validate_bid_slots(error_log::OrderedDict, input_data::Predicer.InputData)
+    is_valid = error_log["is_valid"]
+
+    # check that the bidslot end points for a market are outside or equal to the min/max prices of the linked market
+    for m in collect(keys(input_data.bid_slots))
+        timesteps = input_data.bid_slots[m].time_steps
+        for t in timesteps
+            t_price_keys = filter(x -> x[1] == t, collect(keys(input_data.bid_slots[m].prices)))
+            bs_prices = map(x -> input_data.bid_slots[m].prices[x], t_price_keys)
+            m_prices = map(s -> input_data.markets[m].price(s, t), scenarios(input_data))
+
+            if minimum(bs_prices) > minimum(m_prices)
+                push!(error_log["errors"], "The smallest bid slot price for the timestep "* t*" for the market " * m * " is not smaller than or equal to the market prices\n")
+                is_valid = false 
+            end
+            if maximum(bs_prices) < maximum(m_prices)
+                push!(error_log["errors"], "The largest bid slot price for the timestep "* t*" for the market " * m * " is not larger than or equal to the market prices\n")
+                is_valid = false 
+            end
+
+            if !(sort(bs_prices) == bs_prices)
+                push!(error_log["errors"], "The market bid slot prices should be in ascending order. (market: " * m *", timestep: " * t * "\n")
+                is_valid = false 
+            end
+        end
+    end
+    error_log["is_valid"] = is_valid
+    return error_log
+end
+
 function validate_common_start(error_log::OrderedDict, series, common_steps_n)
     is_valid = error_log["is_valid"]
     # TODO
@@ -158,7 +189,7 @@ function validate_timeseries(error_log::OrderedDict, input_data::Predicer.InputD
         series["gen_constraint_constant"][c] = input_data.gen_constraints[c].constant
     end
 
-    error_log = validate_common_start(error_log, series)
+    error_log = validate_common_start(error_log, series, input_data.setup.common_timesteps)
     return error_log
 end
 
