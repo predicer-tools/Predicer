@@ -2,7 +2,9 @@
 
 ## Introduction
 
-This section contains a more detailed description of example models found in Predicer. The idea behind the example models is not to provide a detailed and correct ready-to-use model, but rather to explain concepts and ideas found in Predicer. These concepts and ideas can then be used to build more complex models replicating real systems. It is recommended that this section is read while having the respective example model input data file for reference.
+This section contains a more detailed description of example models found in Predicer. The idea behind the example models is not to provide a detailed and correct ready-to-use model, but rather to explain concepts and ideas found in Predicer, and how it is implemented in the input data files. These concepts and ideas can then be used to build more complex models replicating real systems. It is recommended that this section is read while having the respective example model input data file for reference.
+
+Every aspect of every model is not discussed in detail, if concepts and ideas are described in previous models.
 
 ## Simple building model
 
@@ -143,7 +145,7 @@ npe --> elc_npe_trade_process
 elc_npe_trade_process --> elc
 ```
 
-In the model there are various costs linked to power and heat generation which should be taken into consideration. These costs include fuel costs (natural gas, electricity), electricity transmission costs, carbon emission permits, as well as emission taxes for carbon and electricity. The fuel cost of natural gas is defined as a timeseries on the *price* sheet in the input data, with a value of 80.0 (*€/MWh*) for every hour. The cost of electricity, both when buying and selling is defined as a timeseries in the *market_prices* sheet in the input data. The prices are randomly generated, and vary between 2.13-85.38 (*€/MWh*), with an average price of 42.92 (*€/MWh*). 
+In the model there are various costs linked to power and heat generation which should be taken into consideration. These costs include fuel costs (natural gas, electricity), electricity transmission costs, carbon emission permits, as well as emission taxes for carbon and electricity. The fuel cost of natural gas is defined as a timeseries on the *price* sheet in the input data, with a value of 25.0 (*€/MWh*) for every hour. The cost of electricity, both when buying and selling is defined as a timeseries in the *market_prices* sheet in the input data. The prices are randomly generated, and vary between 2.13-85.38 (*€/MWh*), with an average price of 42.92 (*€/MWh*). 
 
 The sum of the carbon emission permits and carbon tax amount to 22.0 (*€*) per MWh of natural gas used. As these costs depend on the use of natural gas from the *ng* node, the VOM (variable operation and maintenance) cost of the natural gas flow for the *ngchp* process in the *process_topologies* sheet is set to 22.0. This causes a cost of 22.0 for each unit (*MWh*) of *ng* that is used by the *ngchp* process. In this example model case these costs could also have been directly added to the price of natural gas, as the *ngchp* process is the sole consumer of natural gas. Another way to implement carbon permits or taxes (*€/ton*) would be to add a "emissions" flow to relevant processes and to add the costs to the VOM of this flow. To ensure this works properly, a *gen_constraint* has to be created to fix the size of the emission flow proportional to the size of the natural gas flow into the process. Additionally, the efficiency of the process has to be adjusted to include the emissions. A third way would be to create a commodity node *carbon_permits_and_taxes*, from where there would be a flow to a process using natural gas. In this case a *gen_constraint* fixing the ratio between natural gas and "emissions" would be needed as well. The emission costs can be set as the price of the commodity node. 
 
@@ -151,7 +153,7 @@ The sum of electricity tax and distribution costs is assumed to be 15.0 (*€/MW
 
 | Process flow                     | Fuel costs   | Taxes + Carbon permits |
 |----------------------------------|--------------|------------------------|
-| ngchp, ng                        | 80.0         | 22.0                   |
+| ngchp, ng                        | 25.0         | 22.0                   |
 | ngchp, elc                       | 0.0          | 0.0                    |
 | ngchp, heat                      | 0.0          | 0.0                    |
 | heat_pump_1, elc                 | 2.13 - 85.38 | 15.0                   |
@@ -167,28 +169,42 @@ The sum of electricity tax and distribution costs is assumed to be 15.0 (*€/MW
 | elc_boiler, elc                  | 2.13 - 85.38 | 15.0                   |
 | elc_boiler, heat                 | 0.0          | 0.0                    |
 
+### Scenario and market definition
 
-### Modelling the heat pumps
+Scenarios in Predicer are user-defined possible futures the system and environment around the system can take, with different values for forecasted values, such as prices, weather, supply and demand, etc., but different scenarios can have identical values in one or several timesteps as well. These scenarios are separate from each other, with for example the weather forecast (solar/wind production, heat demand, etc.) ideally correlating with market price forecasts within the same scenario. In this model there are three scenarios: *s1*, *s2* and *s3*. The scenarios are defined on the *scenarios* sheet in the input data file. The probability of these scenarios is 0.3, 0.4 and 0.3, respectively, and is used for weighting the scenario properly in the optimization. 
 
-There are two heat pump processes, *heat_pump_1* and *heat_pump_2*, in this example model. Both of these processes convert electricity from the *elc* node to heat in the *heat* node. Additionally *heat_pump_1* is connected to the commodity node *hp_source*, from where lower-grade heat can be obtained from free, but at a limited availability. The coefficient of power (COP) of a heat pump depends on many factors, one of which is the temperature of the used heat source. As the temperature (and thus COP) and availability of some natural heat sources typically fluctuate between seasons or even days, the operational limits of heat pump can be defined using timeseries. In this example there are two heat pumps with similar parameters (capacity, cost, etc). The operation of the heat pumps is affected by the price of electricity, the efficiency, and the amount of heat available from the node *hp_source*. The heat production of *heat_pump_1* is limited by the availability of heat from the *hp_source* node, while the production for the process *heat_pump_2* depends on a timeseries-dependent efficiency.
+| scenario | probability |
+|----------|-------------|
+| s1       | 0.3         |
+| s2       | 0.4         |
+| s3       | 0.3         |
 
-The amount of heat from the *hp_source* available to the *heat_pump_1* process is limited with a timeseries, setting an upper limit for the flow between the *hp_source* node and the *heat_pump_1* process. This timeseries is defined on the *cap_ts* sheet in the example input data. Below is a part of the table found in the *cap_ts* sheet in the input data file. It is assumed, that the efficiency of *heat_pump_1* is constant at 3.0, meaning 1/3 of the generated heat comes from the electricity, and 2/3 comes from the heat source. A value of 3.13 (MW) for available heat would mean, that the amount of electricity is half (1.565 MW) and the total heat output would be 4.695 MW. 
+This example model has one defined market, *npe* which represents an electricity spot market where electricity can be bought and sold for prices and volumes that are determined the day before. Running Predicer produces a bidding curve for each defined market. This bidding curve consists of a group of price-volume pairs, and essentially indicates how much should be bought or sold from a market, if the price were x. The market prices for different scenarios for each timestep is used as a basis for the bidding curves. This means, that the price points for a specific hour on the bidding curve are defined using the market prices in the different scenarios. As a result, the number of price points on the bidding curves depends on the number of scenarios, and if the scenarios have unique values or not.
 
-| t              | heat_pump,hp_source,s1 | heat_pump,hp_source,s2 | heat_pump,hp_source,s3 |
-|----------------|------------------------|------------------------|------------------------|
-| 16.4.2024 0:00 | 3,13                   | 4,69                   | 4,99                   |
-| 16.4.2024 1:00 | 3,23                   | 4,89                   | 5,09                   |
-| 16.4.2024 2:00 | 3,23                   | 5,09                   | 4,89                   |
-| ...            | ...                    | ...                    | ...                    |
+The market *npe* is defined on the *markets* sheet in the input data file. The *type* parameter is defined to "energy" (as oppposed to "reserve" for reserve markets), and the linked node is *elc*. The parameters *processgroup*, *direction*, *realisation* and *reserve_type* are only used for reserve markets, and have been given filler values in this example. The market *npe* has a bidding functionality, but is not limited. The parameter *is_bid* is thus set to true, while the parameters *is_limited*, *min_bid* and *max_bid* are set to zero. There is no fee for bidding, so *fee* is also set to zero. 
 
-The efficiency timeseries for the *heat_pump_2* process is defined on the *eff_ts* sheet in the input data. The given timeseries limits the total efficiency of the process for every timestep, meaning *flows_in* * *eff* = *flows_out*. The heatpump has one flow in (*elc*) and one flow out (*heat*). Below is a part of the defined data in the *eff_ts* sheet in the input data file. An efficiency of 2.95 would in the case of the *heat_pump_2* process mean that the amount of heat provided to the *heat* node at time ***t*** is 2.95 times the electric power of the heat pump at time ***t***, meaning 1.0 MW of electricity and 1.95 MW of heat (not modelled for *heat_pump_2*) would be required for a heat output of 2.95 MW. 
 
-| t              | heat_pump_2,s1 | heat_pump_2,s2 | heat_pump_2,s3 |
-|----------------|----------------|----------------|----------------|
-| 16.4.2024 0:00 | 2,95           | 3,1            | 2,75           |
-| 16.4.2024 1:00 | 2,83           | 3,04           | 2,64           |
-| 16.4.2024 2:00 | 2,93           | 3,14           | 2,57           |
-| ...            | ...            | ...            | ...            |
+| market | type   | node | processgroup | direction | realisation | reserve_type | is_bid | is_limited | min_bid | max_bid | fee |
+|--------|--------|------|--------------|-----------|-------------|--------------|--------|------------|---------|---------|-----|
+| npe    | energy | elc  | p1           | none      | 0           | none         | 1      | 0          | 0       | 0       | 0   |
+
+The price forecasts for the markets in the model are defined on the *market_prices* sheet in the input data file. These are in the form of timeseries, defined for every scenario, for every market. A part of the *market_prices* table is visualized below. When an energy market is defined, the balance markets *npe_up* and *npe_down* are automatically created. The model can buy (*up*) or sell (*down*) from these markets to adjust the system energy balance if needed. 
+
+| t              | npe,s1 | npe,s2 | npe,s3 |
+|----------------|--------|--------|--------|
+| 16.4.2024 0:00 | 16,43  | 24,25  | 17,77  |
+| 16.4.2024 1:00 | 7,65   | 22,58  | 19,13  |
+| 16.4.2024 2:00 | 2,13   | 24,53  | 20,42  |
+| ...            | ...    | ...    | ...    |
+
+The prices for the balance markets are defined in the *balance_prices* sheet in the input data file. As the user-defined market *npe* and the balance markets *npe_up* and *npe_down* are connected to the same node (*elc*), the model can buy from one market and sell to the other. This causes the model to be unbounded unless buying from one market and selling to another is disadvantageous. In this example this is done by setting the price of *npe_up* to 0.01 more than the price for *npe, and *npe_down* to 0.01 less than the corresponding price given for *npe*. Parts of the table defined in the *balance_prices* sheet is visualized below. 
+
+| t              | npe,up,s1 | npe,up,s2 | npe,up,s3 | npe,dw,s1 | npe,dw,s2 | npe,dw,s3 |
+|----------------|-----------|-----------|-----------|-----------|-----------|-----------|
+| 16.4.2024 0:00 | 16,44     | 24,26     | 17,78     | 16,42     | 24,24     | 17,76     |
+| 16.4.2024 1:00 | 7,66      | 22,59     | 19,14     | 7,64      | 22,57     | 19,12     |
+| 16.4.2024 2:00 | 2,14      | 24,54     | 20,43     | 2,12      | 24,52     | 20,41     |
+| ...            | ...       | ...       | ...       | ...       | ...       | ...       |
 
 ### Modelling the CHP unit
 
@@ -208,27 +224,58 @@ Which can be written as
 
 *v_flow[heat] - 3 * v_flow[elc] = 0*
 
-The coefficients for the heat and electricity flow variables should thus be 1 and -3, respecitvely, and the constant should be zero. Below is a part of the *gen_constraints* sheet table, where the variables, coefficients and constant are defined. The types of the variables depends on the column names, and in the case of flow variables is of the form *constraint_name,process,flow,scenario*. As such the column names are *"ngchp_c1,ngchp,elc,s1"* and *"ngchp_c1,ngchp,heat,s1"*. Additionally, the constant value of the constraint is required, and is defined with a column namenotation of *constraint_name,scenario*. As the heat rate is constant, and same in all scenarios, the values must be defined for every timestep in all scenarios. 
+The coefficients for the heat and electricity flow variables should thus be 1 and -2, respecitvely, and the constant should be zero. Below is a part of the *gen_constraints* sheet table, where the variables, coefficients and constant are defined. The types of the variables depends on the column names, and in the case of flow variables is of the form *constraint_name,process,flow,scenario*. As such the column names are *"ngchp_c1,ngchp,elc,s1"* and *"ngchp_c1,ngchp,heat,s1"*. Additionally, the constant value of the constraint is required, and is defined with a column namenotation of *constraint_name,scenario*. As the heat rate is constant, and same in all scenarios, the values must be defined for every timestep in all scenarios. 
 
 | t              | ngchp_c1,ngchp,elc,s1 | ngchp_c1,ngchp,heat,s1 | ngchp_c1,s1 |
 |----------------|-----------------------|------------------------|-------------|
-| 16.4.2024 0:00 | -3                    | 1                      | 0           |
-| 16.4.2024 1:00 | -3                    | 1                      | 0           |
+| 16.4.2024 0:00 | -2                    | 1                      | 0           |
+| 16.4.2024 1:00 | -2                    | 1                      | 0           |
 | ...            | ...                   | ...                    | ...         |
 
 
 
 In this model the heat rate is set to a constant value, but it would be possible to have a varying heat rate. This could be done by making two user constraints, one defining the lower bound of the electricity-heat ratio, and one defining the upper bound of the ratio. Assuming the heat output should be between 2.5 and 3.5 times the electrical output, the constraint could be formulated as: 
 
-*v_flow[heat] >= 2.5 * v_flow[elc]*
+*v_flow[heat] >= 1.5 * v_flow[elc]*
 
-*v_flow[heat] <= 3.5 * v_flow[elc]*
+*v_flow[heat] <= 2.5 * v_flow[elc]*
 
 Which can be written as
 
-*v_flow[heat] - 2.5 * v_flow[elc] >= 0*
+*v_flow[heat] - 1.5 * v_flow[elc] >= 0*
 
-*v_flow[heat] - 3.5 * v_flow[elc] <= 0*
+*v_flow[heat] - 2.5 * v_flow[elc] <= 0*
+
+### Modelling the heat pumps
+
+There are two heat pump processes, *heat_pump_1* and *heat_pump_2*, in this example model. Both of these processes convert electricity from the *elc* node to heat in the *heat* node. Additionally *heat_pump_1* is connected to the commodity node *hp_source*, from where lower-grade heat can be obtained from free, but at a limited availability. The coefficient of power (COP) of a heat pump depends on many factors, one of which is the temperature of the used heat source. As the temperature (and thus COP) and availability of some natural heat sources typically fluctuate between seasons or even days, the operational limits of heat pump can be defined using timeseries. In this example there are two heat pumps with similar parameters (capacity, cost, etc). The operation of the heat pumps is affected by the price of electricity, the efficiency, and the amount of heat available from the node *hp_source*. The heat production of *heat_pump_1* is limited by the availability of heat from the *hp_source* node, while the production for the process *heat_pump_2* depends on a timeseries-dependent efficiency.
+
+The amount of heat from the *hp_source* available to the *heat_pump_1* process is limited with a timeseries, setting an upper limit for the flow between the *hp_source* node and the *heat_pump_1* process. This timeseries is defined on the *cap_ts* sheet in the example input data. Below is a part of the table found in the *cap_ts* sheet in the input data file. It is assumed, that the efficiency of *heat_pump_1* is constant at 2.0, meaning 1/2 of the generated heat comes from the electricity, and 1/2 comes from the heat source. A value of 1,57 (MW) for available heat would mean, that the amount of electricity is equal (1.57 MW) and the total heat output would be 3.14 MW. 
+
+| t              | heat_pump,hp_source,s1 | heat_pump,hp_source,s2 | heat_pump,hp_source,s3 |
+|----------------|------------------------|------------------------|------------------------|
+| 16.4.2024 0:00 | 1,57                   | 2,35                   | 2,50                   |
+| 16.4.2024 1:00 | 1,62                   | 2,45                   | 2,55                   |
+| 16.4.2024 2:00 | 1,62                   | 2,55                   | 2,45                   |
+| ...            | ...                    | ...                    | ...                    |
+
+Like the *ngchp* process, the ratio of the incoming flows should be fixed. This ratio is fixed using the user constraints, like the *ngchp* process. The coefficients for the variables should be -1.0 and 1.0, with the constant being 0.0. 
+
+| t |            | hp1_c1,heat_pump_1,elc,s1 | hp1_c1,heat_pump_1,hp_source,s1 | hp1_c1,s1 |
+|-|--------------|---------------------------|---------------------------------|-----------|
+| 16.4.2024 0:00 | -1                        | 1                               | 0         |
+| 16.4.2024 1:00 | -1                        | 1                               | 0         |
+| 16.4.2024 2:00 | -1                        | 1                               | 0         |
+| ...            | ...                       | ...                             | ...       |
+
+The efficiency timeseries for the *heat_pump_2* process is defined on the *eff_ts* sheet in the input data. The given timeseries limits the total efficiency of the process for every timestep, meaning *flows_in* * *eff* = *flows_out*. The heatpump has one flow in (*elc*) and one flow out (*heat*). Below is a part of the defined data in the *eff_ts* sheet in the input data file. An efficiency of 1.95 would in the case of the *heat_pump_2* process mean that the amount of heat provided to the *heat* node at time ***t*** is 1.95 times the electric power of the heat pump at time ***t***, meaning 1.0 MW of electricity and 0.95 MW of heat (not modelled for *heat_pump_2*) would be required for a heat output of 1.95 MW. Because there is only one flow in and one flow out, there is no need to create gen_constraints for *heat_pump_2*.
+
+| t              | heat_pump_2,s1 | heat_pump_2,s2 | heat_pump_2,s3 |
+|----------------|----------------|----------------|----------------|
+| 16.4.2024 0:00 | 1,95           | 2,1            | 1,75           |
+| 16.4.2024 1:00 | 1,83           | 2,04           | 1,64           |
+| 16.4.2024 2:00 | 1,93           | 2,14           | 1,57           |
+| ...            | ...            | ...            | ...            |
 
 ### Modelling the solar collector
 
@@ -249,12 +296,33 @@ In this example this means, that if the value capacity factor timeseries value f
 
 The simple district heating model contains a daily heat storage, which can be used to balance the system and offer flexibility between hours. The storage is defined in the node *heat_storage*, and it is connected to the *heat* node via the processes *heat_sto_charge* and *heat_sto_discharge*. The capacity of the storage is set to 10.0 (*MWh*), with the maximum flows in and out of the storage each being 3.0 (*MW*). As the system heat demand varies between 7-15 (*MW*), the storage alone cannot be used to generate heat into the system. The storage losses are 0.001 of the storage value per hour, and the starting value of the storage is set to 0.0. 
 
-Optimization models commonly empty storages by the end of the model horizon, as any storage content is "wasted" from the model perspective. To prevent this, a value for heat remaining in the storage at the end of the model horizon is defined. The chosen value should represent the expected costs of heat production in the "next" horizon. 
+Optimization models commonly empty storages by the end of the model horizon, as any storage content is "wasted" from the model perspective. To prevent this, a value for heat remaining in the storage at the end of the model horizon is defined. The chosen value should represent the expected costs of heat production in the "next" horizon.
 
-## Common start between scenarios
+## Two stage model
 
-- State, flow variables should be included
-- Maybe 10 timesteps, 3 scenarios, and 3 common timesteps
+The two stage dh model is an extension of the simple district heating model described above. The model is defined in the "two_stage_dh_model.xlsx" input data file. The extension consists of a simple two stage modelling implementation, with a first stage where the price of the market *npe* and all other timeseries parameters are known and identical for all scenarios (*s1*, *s2*, *s3*). After the common start, the scenarios branch out into separate forecasts in the second stage. The lengths of the first and second stages are 12 timesteps (12 hours) each. The two stage approach is defined in the *setup* sheet, with setting the *common_timesteps* parameter to 12, and the *common_scenario_name* parameter to "ALL". This leads to all variable indices to have the scenario name *ALL* for the first 12 timesteps, instead of the standard scenario names. 
+
+All of the scenario-dependent timeseries parameters are set to be identical between the scenarios for each timestep for the first 12 timesteps. In this case this means the *inflow*, *cf*, *(price)*, *market_prices*, *balance_prices*, *eff_ts*, *cap_ts*, and *constraint* timeseries. After the model has been optimized, the values for the variables for the first 12 timesteps are the same in all scenarios, after which they start to branch out. 
+
+## Simple hydropower river system
+
+The input data file for the example model can be found under "simple_hydropower_river_system.xlsx". This example model consists of a hydropower river system with a few hydropower plants and reservoirs. 
+
+### Nodes and processes
+
+There are five hydropower plants (processes) in the model *hydro1*, *hydro2*, *hydro3*, *hydro4* and *hydro5*. All of these processes have a linked node; *res1*, *res2*, *res3*, *res4* and *res5*, respectively. These nodes act as hydropower reservoirs, where water can be stored before 
+
+
+```mermaid
+flowchart TD
+
+
+```
+
+- river inflow
+- delays
+- reservoirs, spill, etc
+
 
 ## Large convenience store
 
