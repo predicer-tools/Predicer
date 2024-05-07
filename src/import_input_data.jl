@@ -13,7 +13,7 @@ end
 function read_xlsx(input_data_path::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[])
 
     sheetnames_system = ["setup", "nodes", "processes", "groups", "process_topology", "node_diffusion", "node_history", "node_delay", "inflow_blocks", "markets","scenarios","efficiencies", "reserve_type","risk", "cap_ts", "gen_constraint", "constraints", "bid_slots"]
-    sheetnames_timeseries = ["cf", "inflow", "market_prices", "reserve_realisation", "price","eff_ts", "fixed_ts", "balance_prices"]
+    sheetnames_timeseries = ["cf", "inflow", "market_prices", "reserve_realisation", "reserve_activation_price", "price","eff_ts", "fixed_ts", "balance_prices"]
 
     system_data = OrderedDict()
     timeseries_data = OrderedDict()
@@ -468,7 +468,16 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                 end
                 push!(markets[mm.market].realisation.ts_data, ts)
             end
-
+            for s in keys(scens)
+                timesteps = timeseries_data["scenarios"][s]["reserve_activation_price"].t
+                rap = timeseries_data["scenarios"][s]["reserve_activation_price"][!, mm.market]
+                ts = Predicer.TimeSeries(s)
+                for i in 1:length(timesteps)
+                    tup = (timesteps[i], rap[i],)
+                    push!(ts.series, tup)
+                end
+                push!(markets[mm.market].reserve_activation_price.ts_data, ts)
+            end
         end
     end
 

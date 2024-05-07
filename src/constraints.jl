@@ -1572,6 +1572,23 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
         end
     end
 
+    # reserve activation profits
+    reserve_activation_costs = model_contents["expression"]["reserve_activation_costs"] = OrderedDict()
+    for s in scenarios
+        reserve_activation_costs[s] = AffExpr(0.0)
+    end
+    if input_data.setup.contains_reserves
+        v_res_final = model_contents["variable"]["v_res_final"]
+        res_final_tup = reserve_market_tuples(input_data)
+        for s in scenarios
+            for tup in filter(x -> x[2] == s, res_final_tup)
+                real_p = input_data.markets[tup[1]].realisation(tup[2], tup[3])
+                act_p = input_data.markets[tup[1]].reserve_activation_price(tup[2], tup[3])
+                add_to_expression!(reserve_activation_costs[s], v_res_final[validate_tuple(model_contents, tup, 2)] * real_p * act_p)
+            end
+        end
+    end
+
     # Reserve fee costs:
     reserve_fees = model_contents["expression"]["reserve_fee_costs"] = OrderedDict()
     for s in scenarios
@@ -1653,7 +1670,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     # Total model costs
     total_costs = model_contents["expression"]["total_costs"] = OrderedDict()
     for s in scenarios
-        total_costs[s] = sum(commodity_costs[s]) + sum(market_costs[s]) + sum(vom_costs[s]) + sum(reserve_costs[s]) + sum(start_costs[s]) + sum(state_residue_costs[s]) + sum(reserve_fees[s]) + sum(setpoint_deviation_costs[s]) + sum(dummy_costs[s])
+        total_costs[s] = sum(commodity_costs[s]) + sum(market_costs[s]) + sum(vom_costs[s]) + sum(reserve_costs[s]) + sum(start_costs[s]) + sum(state_residue_costs[s]) + sum(reserve_fees[s]) + sum(setpoint_deviation_costs[s]) + sum(dummy_costs[s]) + sum(reserve_activation_costs[s])
     end
 end
 
