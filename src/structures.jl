@@ -211,6 +211,15 @@ function (ts::TimeSeries)(t::AbstractString)
                       ? startof(ts.series) : st)]
 end
 
+"""
+    function Base.:values(ts::TimeSeries)
+
+Function extending the Base values() to obtain the raw values of a TimeSeries struct data. 
+"""
+function Base.:values(ts::TimeSeries)
+    return map(x -> x[2], ts.series)
+end
+
 
 """
     struct TimeSeriesData
@@ -244,6 +253,37 @@ function Base.push!(tsd::TimeSeriesData, tss::TimeSeries...)
     # No duplicates
     @assert i == length(tsd.index)
     return tsd
+end
+
+"""
+    function Base.:minimum(tsd::TimeSeriesData)
+
+Function extending the base minimum function to the TimeSeriesData struct 
+"""
+function Base.:minimum(tsd::TimeSeriesData)
+    return minimum(values(tsd))
+end
+
+
+"""
+    function Base.:maximum(tsd::TimeSeriesData)
+
+Function extending the base maximum function to the TimeSeriesData struct 
+"""
+function Base.:maximum(tsd::TimeSeriesData)
+    return maximum(values(tsd))
+end
+
+
+"""
+    function Base.:values(tsd::TimeSeriesData)
+
+Extend the Base.values() funciton to obtain all the values in the TimeSeriesData struct without any specific order or identification. 
+"""
+function Base.:values(tsd::TimeSeriesData)
+    vals = []
+    map(x -> map(y -> push!(vals, y), values(x)), tsd.ts_data)
+    return vals
 end
 
 """
@@ -883,9 +923,10 @@ end
         price::TimeSeriesData
         up_price::TimeSeriesData
         down_price::TimeSeriesData
+        reserve_activation_price::TimeSeriesData
         fixed::Vector{Tuple{AbstractString, Number}}
         function Market(name, type, node, pgroup, direction, reserve_type, is_bid, is_limited, min_bid, max_bid, fee)
-            return new(name, type, node, pgroup, direction, Dict(), reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
+            return new(name, type, node, pgroup, direction, Dict(), reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
         end
     end
 
@@ -904,6 +945,9 @@ A struct for markets.
 - 'max_bid::Float64' : Minimum bid for reserve
 - 'fee::Float64' : Fee for reserve particiapation
 - `price::TimeSeriesData`: Vector containing TimeSeries of the market price in different scenarios. 
+- `up_price::TimeSeriesData`: Vector containing TimeSeries of the balance market price for buying in different scenarios. 
+- `down_price::TimeSeriesData`: Vector containing TimeSeries of the balance market price for selling in different scenarios. 
+- `reserve_activation_price::TimeSeriesData`: Vector containing TimeSeries of the price of activated reserve products. 
 - `fixed::Vector{Tuple{AbstractString, Number}}`: Vector containing information on the market being fixed. 
 """
 struct Market
@@ -912,7 +956,7 @@ struct Market
     node::AbstractString
     processgroup::AbstractString
     direction::String
-    realisation::Dict{String, Float64}
+    realisation::TimeSeriesData
     reserve_type::String
     is_bid::Bool
     is_limited::Bool
@@ -922,9 +966,22 @@ struct Market
     price::TimeSeriesData
     up_price::TimeSeriesData
     down_price::TimeSeriesData
+    reserve_activation_price::TimeSeriesData
     fixed::Vector{Tuple{AbstractString, Number}}
     function Market(name, type, node, pgroup, direction, reserve_type, is_bid, is_limited, min_bid, max_bid, fee)
-        return new(name, type, node, pgroup, direction, Dict(), reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
+        return new(name, type, node, pgroup, direction, TimeSeriesData(), reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
+    end
+end
+
+
+struct BidSlot
+    market::String
+    time_steps::Vector{String}
+    slots::Vector{String}
+    prices::OrderedDict{Tuple{String,String}, Float64}
+    market_price_allocation::OrderedDict{Tuple{String,String}, Tuple{String,String}}
+    function BidSlot(name,time_steps,slots,prices,market_price_allocation)
+        return new(name,time_steps,slots,prices,market_price_allocation)
     end
 end
 
@@ -1187,9 +1244,10 @@ mutable struct InputData
     reserve_type::OrderedDict{String, Float64}
     risk::OrderedDict{String, Float64}
     inflow_blocks::OrderedDict{String, InflowBlock}
+    bid_slots::OrderedDict{String, BidSlot}
     gen_constraints::OrderedDict{String, GenConstraint}
-    function InputData(temporals, setup, processes, nodes, node_diffusion, node_delay, node_histories,  markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
-        return new(temporals, setup, processes, nodes, node_diffusion, node_delay, node_histories, markets, groups, scenarios, reserve_type, risk, inflow__blocks, gen_constraints)
+    function InputData(temporals, setup, processes, nodes, node_diffusion, node_delay, node_histories,  markets, groups, scenarios, reserve_type, risk, inflow__blocks, bid_slots, gen_constraints)
+        return new(temporals, setup, processes, nodes, node_diffusion, node_delay, node_histories, markets, groups, scenarios, reserve_type, risk, inflow__blocks, bid_slots, gen_constraints)
     end
 end
 

@@ -12,8 +12,8 @@ end
 
 function read_xlsx(input_data_path::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[])
 
-    sheetnames_system = ["setup", "nodes", "processes", "groups", "process_topology", "node_diffusion", "node_history", "node_delay", "inflow_blocks", "markets", "reserve_realisation", "scenarios","efficiencies", "reserve_type","risk", "cap_ts", "gen_constraint", "constraints"]
-    sheetnames_timeseries = ["cf", "inflow", "market_prices", "price","eff_ts", "fixed_ts", "balance_prices"]
+    sheetnames_system = ["setup", "nodes", "processes", "groups", "process_topology", "node_diffusion", "node_history", "node_delay", "inflow_blocks", "markets","scenarios","efficiencies", "reserve_type","risk", "cap_ts", "gen_constraint", "constraints", "bid_slots"]
+    sheetnames_timeseries = ["cf", "inflow", "market_prices", "reserve_realisation", "reserve_activation_price", "price","eff_ts", "fixed_ts", "balance_prices"]
 
     system_data = OrderedDict()
     timeseries_data = OrderedDict()
@@ -53,6 +53,8 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
     risk = OrderedDict{String, Float64}()
     inflow_blocks = OrderedDict{String, Predicer.InflowBlock}()
     gen_constraints = OrderedDict{String, Predicer.GenConstraint}()
+    
+    bid_slots = OrderedDict{String, Predicer.BidSlot}()
     
 
     for i in 1:nrow(system_data["scenarios"])
@@ -412,28 +414,73 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
             end
         end
         if mm.type == "energy" && mm.is_bid == true
-            
             for s in keys(scens)
                 timesteps = timeseries_data["scenarios"][s]["balance_prices"]["up"].t
                 up_data = timeseries_data["scenarios"][s]["balance_prices"]["up"][!, mm.market]
                 down_data = timeseries_data["scenarios"][s]["balance_prices"]["down"][!, mm.market]
-
                 up_ts = Predicer.TimeSeries(s, timesteps, up_data)
                 down_ts = Predicer.TimeSeries(s, timesteps, down_data)
  
                 push!(markets[mm.market].up_price, up_ts)
                 push!(markets[mm.market].down_price, down_ts)
             end
+        elseif mm.type == "reserve"
+            for s in keys(scens)
+                timesteps = timeseries_data["scenarios"][s]["reserve_realisation"].t
+                rrs = timeseries_data["scenarios"][s]["reserve_realisation"][!, mm.market]
+                ts = Predicer.TimeSeries(s)
+                for i in 1:length(timesteps)
+                    tup = (timesteps[i], rrs[i],)
+                    push!(ts.series, tup)
+                end
+                push!(markets[mm.market].realisation.ts_data, ts)
+            end
+            for s in keys(scens)
+                timesteps = timeseries_data["scenarios"][s]["reserve_activation_price"].t
+                rap = timeseries_data["scenarios"][s]["reserve_activation_price"][!, mm.market]
+                ts = Predicer.TimeSeries(s)
+                for i in 1:length(timesteps)
+                    tup = (timesteps[i], rap[i],)
+                    push!(ts.series, tup)
+                end
+                push!(markets[mm.market].reserve_activation_price.ts_data, ts)
+            end
         end
     end
 
-    for i in 1:nrow(system_data["reserve_realisation"])
-        mm = system_data["reserve_realisation"][i, :]
-        sscens = names(mm)[2:end]
-        for s in sscens
-            markets[mm.reserve_product].realisation[s] = mm[s]
+    #---market bid slot----------------------------------
+
+    if length(names(system_data["bid_slots"])) > 1
+        system_data["bid_slots"].t = string.(ZonedDateTime.(system_data["bid_slots"].t, tz"UTC"))
+        ns = names(system_data["bid_slots"])[2:end]
+        market_names = unique(map(n -> map(x -> strip(x), split(n, ","))[1], ns))
+        time_steps = system_data["bid_slots"].t
+
+        for m in market_names
+            price_dict = OrderedDict()
+            alloc_dict = OrderedDict()
+            slot_names = unique(map(x->x[2],filter(x->x[1]==m,map(n -> map(x -> strip(x), split(n, ",")), ns))))
+            for s in slot_names
+                for (i,t) in enumerate(time_steps)
+                    tup = (t,string(s))
+                    price_dict[tup]=system_data["bid_slots"][i,string(m*","*s)]
+                end
+            end
+            prices = markets[m].price
+            for (i,t) in enumerate(time_steps)
+                bid_vec = collect(system_data["bid_slots"][i,filter(x->split(x,",")[1]==m,ns)])
+                for s in keys(scens)
+                    alloc_dict[s,t] = (slot_names[searchsorted(bid_vec,prices(s,t)).stop],slot_names[searchsorted(bid_vec,prices(s,t)).start])
+                end
+            end
+
+            bid_slots[m] = BidSlot(m,time_steps,slot_names,price_dict,alloc_dict)
         end
     end
+
+
+    #---
+
 
     for i in 1:nrow(system_data["constraints"])
         con = system_data["constraints"][i,1]
@@ -521,5 +568,5 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
     setup = InputDataSetup(contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, contains_markets, 
         reserve_realisation, use_market_bids, common_timesteps, common_scenario_name, use_node_dummy_variables, use_ramp_dummy_variables, node_dummy_variable_cost, ramp_dummy_variable_cost)
 
-    return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), setup, processes, nodes, node_diffusion_tuples, node_delay_tuples, node_history, markets, groups, scens, reserve_type, risk, inflow_blocks, gen_constraints)
+    return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), setup, processes, nodes, node_diffusion_tuples, node_delay_tuples, node_history, markets, groups, scens, reserve_type, risk, inflow_blocks, bid_slots, gen_constraints)
 end

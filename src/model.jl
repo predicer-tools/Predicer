@@ -323,7 +323,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
     elseif type == "v_bid"
         v_bid = expr[type]
         if !isempty(name)
-            bid_tups = map(x->(x[1]),filter(x->x[1]==name,tuples["balance_market_tuple"]))
+            bid_tups = unique(map(x->(x[1]),filter(x->x[1]==name,tuples["balance_market_tuple"])))
         else
             bid_tups = map(x->(x[1]),tuples["balance_market_tuple"])
         end
@@ -337,6 +337,22 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 end
                 df[!,colname] = dat_vec
             end
+        end
+    elseif type == "v_bid_volume"
+        v_bid_vol = vars[type]
+        if !isempty(name)
+            bid_vol_tups = unique(map(x -> (x[1], x[2]), filter(y -> y[1] == name, tuples["bid_slot_tuple"])))
+        else
+            bid_vol_tups = unique(map(x ->(x[1], x[2]), tuples["bid_slot_tuple"]))
+        end
+        for bvt in bid_vol_tups
+            col_tup = filter(x -> x[2] == bvt[2] && x[1] == bvt[1], tuples["bid_slot_tuple"])
+            dat_vec = []
+            colname = bvt[1] * ", " * bvt[2]
+            for tup in col_tup
+                push!(dat_vec, JuMP.value.(v_bid_vol[tup]))
+            end
+            df[!,colname] = dat_vec
         end
     elseif type == "v_flow_bal"
         v_bal = vars[type]
@@ -451,7 +467,7 @@ Collect all of the available variable results into DataFrames collected in a dic
 """
 function get_all_result_dataframes(model_contents::OrderedDict, input_data::InputData, scenario="", name="")
     dfs = Dict()
-    types = ["v_flow", "v_load", "v_reserve", "v_res_final", "v_online", "v_start", "v_stop", "v_state", "vq_state_up", "vq_state_dw", "v_bid",
+    types = ["v_flow", "v_load", "v_reserve", "v_res_final", "v_online", "v_start", "v_stop", "v_state", "vq_state_up", "vq_state_dw", "v_bid", "v_bid_volume",
         "vq_ramp_up", "vq_ramp_dw", "v_flow_bal", "v_block", "v_setpoint", "v_set_up", "v_set_down", "v_reserve_online", "v_node_diffusion", "v_node_delay"]
     for type in types
         dfs[type] = Predicer.get_result_dataframe(model_contents, input_data, type, name, scenario)

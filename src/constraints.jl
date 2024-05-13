@@ -19,7 +19,9 @@ function create_constraints(model_contents::OrderedDict, input_data::Predicer.In
     setup_process_limits(model_contents, input_data)
     setup_reserve_balances(model_contents, input_data)
     setup_ramp_constraints(model_contents, input_data)
+    setup_bidding_curve_constraints(model_contents, input_data)
     setup_bidding_constraints(model_contents, input_data)
+    setup_bidding_volume_constraints(model_contents, input_data)
     setup_fixed_values(model_contents, input_data)
     setup_generic_constraints(model_contents, input_data)
     setup_cost_calculations(model_contents, input_data)
@@ -665,7 +667,7 @@ function setup_reserve_realisation(model_contents::OrderedDict, input_data::Pred
             v_res_real_node[tup] = AffExpr(0.0)
             for res_tup in filter(x -> x[2] == tup[1] && x[4] == tup[2] && x[5] == tup[3], res_market_dir_tups)
                 res_final_tup = (res_tup[1], res_tup[4:5]...)
-                real = markets[res_tup[1]].realisation[res_tup[4]]
+                real = markets[res_tup[1]].realisation(res_tup[4])(res_tup[5])
                 if res_tup[3] == "res_up"
                     add_to_expression!(v_res_real_tot[tup], real * v_res_final[validate_tuple(model_contents, res_final_tup, 2)])
                 elseif res_tup[3] == "res_down"
@@ -1065,6 +1067,81 @@ function setup_fixed_values(model_contents::OrderedDict, input_data::Predicer.In
     model_contents["constraint"]["fixed_value_eq"] = fixed_value_eq
 end
 
+
+"""
+    setup_bidding_curve_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
+
+Setup constraints for market bidding curves.   
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+"""
+function setup_bidding_curve_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
+    model = model_contents["model"]
+    markets = input_data.markets
+    b_slots = input_data.bid_slots
+    bid_scen_tuple = bid_scenario_tuples(input_data)
+    process_tuple = process_topology_tuples(input_data)
+    balance_process_tuple = create_balance_market_tuple(input_data)
+    v_flow = model_contents["variable"]["v_flow"]
+    v_flow_bal = model_contents["variable"]["v_flow_bal"]
+    v_bid_vol = model_contents["variable"]["v_bid_volume"]
+
+    v_bid = model_contents["expression"]["v_bid"] = OrderedDict()
+    e_bid_slot = OrderedDict()
+
+    for tup in bid_scen_tuple
+        v_bid[tup] = AffExpr(0.0)
+        e_bid_slot[tup] = AffExpr(0.0)
+        if markets[tup[1]].type == "energy"
+            add_to_expression!(v_bid[tup],v_flow[filter(x->x[3]==tup[1] && x[5]==tup[3] && x[4]==tup[2],process_tuple)[1]],1.0)
+            add_to_expression!(v_bid[tup],v_flow_bal[filter(x->x[1]==tup[1] && x[2]=="up" && x[4]==tup[3] && x[3]==tup[2],balance_process_tuple)[1]],1.0)
+            add_to_expression!(v_bid[tup],v_flow[filter(x->x[2]==tup[1] && x[5]==tup[3] && x[4]==tup[2],process_tuple)[1]],-1.0)
+            add_to_expression!(v_bid[tup],v_flow_bal[filter(x->x[1]==tup[1] && x[2]=="dw" && x[4]==tup[3] && x[3]==tup[2],balance_process_tuple)[1]],-1.0)
+        else
+            add_to_expression!(v_bid[tup],v_res_final[tup],1.0)
+        end
+        bn0 = b_slots[tup[1]].market_price_allocation[(tup[2],tup[3])][1]
+        bn1 = b_slots[tup[1]].market_price_allocation[(tup[2],tup[3])][2]
+        p0 = b_slots[tup[1]].prices[(tup[3],bn0)]
+        p1 = b_slots[tup[1]].prices[(tup[3],bn1)]
+        ps = markets[tup[1]].price(tup[2],tup[3])
+        add_to_expression!(e_bid_slot[tup],v_bid_vol[(tup[1],bn0,tup[3])],1-(ps-p0)/(p1-p0))
+        add_to_expression!(e_bid_slot[tup],v_bid_vol[(tup[1],bn1,tup[3])],(ps-p0)/(p1-p0))
+    end
+    bid_slot_eq = @constraint(model, bid_slot_eq[tup in bid_scen_tuple], v_bid[tup] == e_bid_slot[tup])
+    model_contents["constraint"]["bid_slot_eq"] = bid_slot_eq
+end
+
+"""
+    setup_bidding_volume_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
+
+Setup constraints for market bidding volumes.   
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+"""
+function setup_bidding_volume_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
+    model = model_contents["model"]
+    b_slots = input_data.bid_slots
+    markets = input_data.markets
+    v_bid_vol = model_contents["variable"]["v_bid_volume"]
+    for m in keys(b_slots)
+        for t in b_slots[m].time_steps
+            for (i,s) in enumerate(b_slots[m].slots)
+                if i == 1
+                    if markets[m].type == "reserve"
+                        @constraint(model,v_bid_vol[(m,s,t)] >= 0.0)
+                    end
+                else
+                    @constraint(model,v_bid_vol[(m,s,t)]>=v_bid_vol[(m,b_slots[m].slots[i-1],t)])
+                end
+            end
+        end
+    end
+end
 
 """
     setup_bidding_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
@@ -1505,6 +1582,23 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
         end
     end
 
+    # reserve activation profits
+    reserve_activation_costs = model_contents["expression"]["reserve_activation_costs"] = OrderedDict()
+    for s in scenarios
+        reserve_activation_costs[s] = AffExpr(0.0)
+    end
+    if input_data.setup.contains_reserves
+        v_res_final = model_contents["variable"]["v_res_final"]
+        res_final_tup = reserve_market_tuples(input_data)
+        for s in scenarios
+            for tup in filter(x -> x[2] == s, res_final_tup)
+                real_p = input_data.markets[tup[1]].realisation(tup[2], tup[3])
+                act_p = input_data.markets[tup[1]].reserve_activation_price(tup[2], tup[3])
+                add_to_expression!(reserve_activation_costs[s], v_res_final[validate_tuple(model_contents, tup, 2)] * real_p * act_p)
+            end
+        end
+    end
+
     # Reserve fee costs:
     reserve_fees = model_contents["expression"]["reserve_fee_costs"] = OrderedDict()
     for s in scenarios
@@ -1586,7 +1680,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     # Total model costs
     total_costs = model_contents["expression"]["total_costs"] = OrderedDict()
     for s in scenarios
-        total_costs[s] = sum(commodity_costs[s]) + sum(market_costs[s]) + sum(vom_costs[s]) + sum(reserve_costs[s]) + sum(start_costs[s]) + sum(state_residue_costs[s]) + sum(reserve_fees[s]) + sum(setpoint_deviation_costs[s]) + sum(dummy_costs[s])
+        total_costs[s] = sum(commodity_costs[s]) + sum(market_costs[s]) + sum(vom_costs[s]) + sum(reserve_costs[s]) + sum(start_costs[s]) + sum(state_residue_costs[s]) + sum(reserve_fees[s]) + sum(setpoint_deviation_costs[s]) + sum(dummy_costs[s]) + sum(reserve_activation_costs[s])
     end
 end
 

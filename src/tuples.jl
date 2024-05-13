@@ -45,7 +45,9 @@ function create_tuples(input_data::InputData) # unused, should be debricated
     tuplebook["group_tuples"] = create_group_tuples(input_data)
     tuplebook["node_diffusion_tuple"] = node_diffusion_tuple(input_data)
     tuplebook["diffusion_nodes"] = diffusion_nodes(input_data)
-    tuplebook["node_delay_tuple"] = node_delay_tuple(input_data)    
+    tuplebook["node_delay_tuple"] = node_delay_tuple(input_data)
+    tuplebook["bid_slot_tuple"] = bid_slot_tuples(input_data)
+    tuplebook["bid_scen_tuple"] = bid_scenario_tuples(input_data)   
     return tuplebook
 end
 
@@ -922,4 +924,45 @@ function delay_nodes(input_data::InputData)
     else
         return String[]
     end
+end
+
+
+"""
+    bid_slot_tuples(input_data::InputData)
+
+Function to create bid slot tuples. Form (m,slot,t)
+"""
+function bid_slot_tuples(input_data::InputData)
+    b_slots = input_data.bid_slots
+    bid_slot_tup = NTuple{3, String}[]
+    markets = keys(b_slots)
+    for m in markets
+        for s in b_slots[m].slots
+            for t in b_slots[m].time_steps
+                push!(bid_slot_tup,(m,s,t))
+            end
+        end
+    end
+    return bid_slot_tup
+end
+
+
+"""
+    bid_scenario_tuples(input_data::InputData)
+
+Function to create bid scenario tuples linked to bid slots. Form (m,s,t)
+"""
+function bid_scenario_tuples(input_data::InputData)
+    b_slots = input_data.bid_slots
+    bid_scen_tup = NTuple{3, String}[]
+    markets = keys(b_slots)
+    scenarios = collect(keys(input_data.scenarios))
+    for m in markets
+        for s in scenarios
+            for t in b_slots[m].time_steps
+                push!(bid_scen_tup,(m,s,t))
+            end
+        end
+    end
+    return bid_scen_tup
 end
