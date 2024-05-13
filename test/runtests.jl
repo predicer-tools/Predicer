@@ -13,7 +13,7 @@ using HiGHS: Optimizer
 # Model definition files and objective values.  obj = NaN to disable
 # comparison.
 cases = [
-    "input_data.xlsx" => -10984.374666617387
+    "input_data.xlsx" => -10985.034456374564
     "input_data_bidcurve.xlsx" => -4371.579033779262
 #FIXME Does not load    "demo_model.xlsx" => -1095.5118308122817
 #FIXME Does not load    "example_model.xlsx" => -11014.127894223102
