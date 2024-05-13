@@ -9,6 +9,7 @@ using JuMP
 
 using HiGHS: Optimizer
 #using Cbc: Optimizer
+#using CPLEX: Optimizer
 
 # Model definition files and objective values.  obj = NaN to disable
 # comparison.
@@ -35,9 +36,13 @@ cases = [
     @test m == mc["model"]
     Predicer.solve_model(mc)
     @test termination_status(m) == MOI.OPTIMAL
-    if isnan(obj)
-        @show objective_value(m)
-    else
-        @test objective_value(m) ≈ obj atol=1e-6
+    rgap = relative_gap(m)
+    # Apparently infinite for LP
+    if !isfinite(rgap)
+        rgap = 1e-8
     end
+    if !isnan(obj)
+        @test objective_value(m) ≈ obj rtol=rgap
+    end
+    @show objective_value(m) obj relative_gap(m)
 end
