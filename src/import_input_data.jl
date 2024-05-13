@@ -430,20 +430,18 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                 rrs = timeseries_data["scenarios"][s]["reserve_realisation"][!, mm.market]
                 ts = Predicer.TimeSeries(s)
                 for i in 1:length(timesteps)
-                    tup = (timesteps[i], rrs[i],)
-                    push!(ts.series, tup)
+                    ts.series[timesteps[i]] = rrs[i]
                 end
-                push!(markets[mm.market].realisation.ts_data, ts)
+                push!(markets[mm.market].realisation, ts)
             end
             for s in keys(scens)
                 timesteps = timeseries_data["scenarios"][s]["reserve_activation_price"].t
                 rap = timeseries_data["scenarios"][s]["reserve_activation_price"][!, mm.market]
                 ts = Predicer.TimeSeries(s)
                 for i in 1:length(timesteps)
-                    tup = (timesteps[i], rap[i],)
-                    push!(ts.series, tup)
+                    ts.series[timesteps[i]] = rap[i]
                 end
-                push!(markets[mm.market].reserve_activation_price.ts_data, ts)
+                push!(markets[mm.market].reserve_activation_price, ts)
             end
         end
     end
