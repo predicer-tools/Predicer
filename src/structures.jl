@@ -144,24 +144,19 @@ end
 """
     struct TimeSeries
         scenario::AbstractString
-        series::Vector{Tuple{AbstractString, Number}}
-        function TimeSeries(scenario="", series=0)
-            if series != 0
-                return new(scenario, series)
-            else
-                return new(scenario, [])
-            end
-        end
+        series::SortedDict{AbstractString, Number}
     end
 
-A struct for time series. Includes linked scenario and a vector containing tuples of time and value.
+A struct for time series.  Includes a scenario name.  The representation
+of time may change at some point.
 """
 struct TimeSeries
     scenario::AbstractString
     series::SortedDict{AbstractString, Number}
 end
 
-TimeSeries(scenario, keys, values) = TimeSeries(scenario, SortedDict(keys .=> values))
+TimeSeries(scenario, keys, values) = TimeSeries(
+    scenario, SortedDict(keys .=> values))
 TimeSeries(scenario="") = TimeSeries(scenario, [], [])
 
 """
@@ -224,12 +219,12 @@ end
 """
     struct TimeSeriesData
         ts_data::Vector{TimeSeries}
-        function TimeSeriesData()
-            return new([])
-        end
+        ...
     end
 
-A struct for storing TimeSeries for different scenarios. 
+A struct for storing TimeSeries for different scenarios.  Add elements
+with `push!(tsd, ...)` and read with `tsd(...)`.  Do not
+`push!(tsd.ts_data, ...)`.  Reading `tsd.ts_data` is OK.
 """
 struct TimeSeriesData
     ts_data::Vector{TimeSeries}
