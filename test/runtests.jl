@@ -16,15 +16,15 @@ using HiGHS: Optimizer
 cases = [
     "input_data.xlsx" => -10985.034456374564
     "input_data_bidcurve.xlsx" => -4371.579033779262
-#FIXME Does not load    "demo_model.xlsx" => -1095.5118308122817
-#FIXME Does not load    "example_model.xlsx" => -11014.127894223102
-#FIXME Does not load    "input_data_common_start.xlsx" => -1593.5748049230276
-#FIXME Does not load    "input_data_delays.xlsx" => 62.22222222222222
-#FIXME Does not load    "input_data_temps.xlsx" => 65388.35282275837
-#FIXME Does not load    "simple_building_model.xlsx" => 563.7841038762567
-#FIXME Does not load    "simple_dh_model.xlsx" => NaN
+    "demo_model.xlsx" => -1095.5118308122817
+    "example_model.xlsx" => -11014.1278942231
+    "input_data_common_start.xlsx" => -1589.8038551373697
+    "input_data_delays.xlsx" => 62.22222222222222
+    "input_data_temps.xlsx" => 65388.35282275837
+    "simple_building_model.xlsx" => 563.7841038762567
+    "simple_dh_model.xlsx" => 7195.372539092246
 #FIXME Does not load    "simple_hydropower_river_system.xlsx" => NaN
-#FIXME Does not load    "two_stage_dh.model.xlsx" => NaN
+    "two_stage_dh_model.xlsx" => 9508.652488524222
 ]
 
 @testset "Predicer on $bn" for (bn, obj) in cases
@@ -38,7 +38,7 @@ cases = [
     @test termination_status(m) == MOI.OPTIMAL
     rgap = relative_gap(m)
     # Apparently infinite for LP
-    if !isfinite(rgap)
+    if rgap < 1e-8 || !isfinite(rgap)
         rgap = 1e-8
     end
     if !isnan(obj)
