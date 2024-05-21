@@ -267,36 +267,37 @@ function validate_node_diffusion(error_log::OrderedDict, input_data::Predicer.In
         end
     end
     for node_conn in input_data.node_diffusion
-        if node_conn[3] <= 0 
+        if minimum(node_conn.coefficient) <= 0 
             # Check that the node diffusion coeff is larger than 0
-            push!(error_log["errors"], "The node diffusion coefficient of Node diffusion coefficient: (" * string(node_conn) * ") must be larger than 0.\n")
+            push!(error_log["errors"], "The node diffusion coefficient of Node diffusion coefficient: (" * (node_conn.node1, node_conn.node2) * ") must be larger than 0.\n")
             is_valid = false 
         end
-        if !(node_conn[1] in collect(keys(nodes)))
+        if !(node_conn.node1 in collect(keys(nodes)))
             # Check that the nodes in node diffusion connection exist
-            push!(error_log["errors"], "The node: ("*node_conn[1]*") of node diffusion connection : (" * string(node_conn) * ") is not defined.\n")
+            push!(error_log["errors"], "The node: ("*node_conn.node1*") of node diffusion connection : (" * (node_conn.node1, node_conn.node2) * ") is not defined.\n")
             is_valid = false 
-        elseif !(node_conn[2] in collect(keys(nodes)))
+        elseif !(node_conn.node2 in collect(keys(nodes)))
             # Check that the nodes in node diffusion connection exist
-            push!(error_log["errors"], "The node: ("*node_conn[2]*") of node diffusion connection : (" * string(node_conn) * ") is not defined.\n")
+            push!(error_log["errors"], "The node: ("*node_conn.node2*") of node diffusion connection : (" * (node_conn.node1, node_conn.node2) * ") is not defined.\n")
             is_valid = false 
-        elseif node_conn[1] == node_conn[2]
+        elseif node_conn.node1 == node_conn.node2
             # Check that the nodes in the connection are not the same
-            push!(error_log["errors"], "The node: ("*node_conn[1]*") in the node diffusion connection : (" * string(node_conn) * ") is given twice.\n")
+            push!(error_log["errors"], "The node: ("*node_conn.node1* ") in the node diffusion connection : (" * (node_conn.node1, node_conn.node2) * ") is given twice.\n")
             is_valid = false
         else
-            if !nodes[node_conn[1]].is_state
+            if !nodes[node_conn.node1].is_state
                 # Check that the nodes on node diffusion connections have states
-                push!(error_log["errors"], "The node: ("*node_conn[1]*") of Node diffusion connection: (" * string(node_conn) * ") has no state.\n")
+                push!(error_log["errors"], "The node: ("*node_conn.node1*") of Node diffusion connection: (" * (node_conn.node1, node_conn.node2) * ") has no state.\n")
                 is_valid = false
             end
-            if !nodes[node_conn[2]].is_state
+            if !nodes[node_conn.node2].is_state
                 # Check that the nodes on node diffusion connections have states
-                push!(error_log["errors"], "The node: ("*node_conn[1]*") of Node diffusion connection: (" * string(node_conn) * ") has no state.\n")
+                push!(error_log["errors"], "The node: ("*node_conn.node2*") of Node diffusion connection: (" * (node_conn.node1, node_conn.node2) * ") has no state.\n")
                 is_valid = false
             end
         end
     end
+    
 
     error_log["is_valid"] = is_valid
 end
