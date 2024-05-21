@@ -225,7 +225,7 @@ The user can define groups of either nodes or processes. Groups are used to defi
 
 ### node_diffusion
 
-Node diffusion is used to model flow of energy between nodes with states, with the size of the flow depending on the level of the node state and the given diffusion coefficient. One possible application of this could be the flow of heat from the inside of a building to the outside during heating season. The flow of energy between nodes *N1* and *N2* is simply calculated as *E = k (T1 - T2)*, with *T1* and *T2* being the temperatures of the nodes. If the temperature difference is negative *(T2 > T1)*, the flow of energy goes from *N2* to *N1*, and if *(T1 > T2)*, the energy flows from *N1* to *N2*. The temperatures of the nodes are linked to the level of the node states, either directly if the *is_temp* flag for the state is 1, or alternatively using the *T_E_converison* coefficient if the state is modelled as energy. 
+Node diffusion is used to model flow of energy between nodes with states, with the size of the flow depending on the level of the node state and the given diffusion coefficient. One possible application of this could be the flow of heat from the inside of a building to the outside during heating season. The flow of energy between nodes *N1* and *N2* is simply calculated as *E = k (T1 - T2)*, with *T1* and *T2* being the temperatures of the nodes. If the temperature difference is negative *(T2 > T1)*, the flow of energy goes from *N2* to *N1*, and if *(T1 > T2)*, the energy flows from *N1* to *N2*. The temperatures of the nodes are linked to the level of the node states, either directly if the *is_temp* flag for the state is 1, or alternatively using the *T_E_converison* coefficient if the state is modelled as energy. The data for the node diffusion functionality is provided on the *node_diffusion* sheet in the example excel file in a timeseries format. 
 
 | Parameter   | Type   | Description                                                                       |
 |-------------|--------|-----------------------------------------------------------------------------------|
@@ -358,6 +358,7 @@ As an example the inflow for the node *nn* can be given as ***nn,s1*** if the va
 | cf             | Capacity factor time series for processes with cf functionality             | process, scenario(s)              |
 | inflow         | Inflow time series for nodes (inflow positive value, demand negative value) | node, scenario(s)                 |
 | price          | Price time series for the cost of using commodity nodes                     | node, scenario(s)                 |
+| node_diffusion | Node diffusion relation nodes and diffusion coefficient                     | node1, node2, scenario(s)         |
 | market_prices  | Price time series for the defined markets                                   | market, scenario(s)               |
 | balance_prices | Price time series for balance markets                                       | market, direction, scenario(s)    |
 | fixed_ts       | Value time series for setting market volumes to a fixed value               | market                            |
