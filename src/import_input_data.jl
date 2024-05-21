@@ -168,12 +168,9 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                 nds = node_diffs[1]
             end
             scen = col[3]
-            ts = Predicer.TimeSeries(scen)
             data = system_data["node_diffusion"][!, n]
-            for i in 1:length(timesteps)
-                push!(ts.series, (timesteps[i], data[i]))
-            end
-            push!(nds.coefficient.ts_data, ts)
+            ts = Predicer.TimeSeries(scen, timesteps, data)
+            push!(nds.coefficient, ts)
             if isempty(node_diffs)
                 push!(node_diffusion, nds)
             end
