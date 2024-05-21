@@ -117,11 +117,12 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
                 d_node_state /= nodes[d_node].state.T_E_conversion
             end
 
-            from_diff = filter(x -> x[1] == d_node, input_data.node_diffusion) #diff direction "from" d_node
-            to_diff = filter(x -> x[2] == d_node, input_data.node_diffusion) #diff direction "to" d_node
+            from_diff = filter(x -> x.node1 == d_node, input_data.node_diffusion)
+            to_diff = filter(x -> x.node2 == d_node, input_data.node_diffusion)
+
             for from_node in from_diff
-                c = from_node[3]
-                n_ = from_node[2]
+                c = from_node.coefficient(s, t)
+                n_ = from_node.node2
                 n_node_state = v_state[validate_tuple(model_contents, (n_, s, t), 2)]
                 if !nodes[n_].state.is_temp
                     n_node_state /= nodes[n_].state.T_E_conversion
@@ -129,8 +130,8 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
                 add_to_expression!(e_node_diff[d_tup], - c * (d_node_state - n_node_state))
             end
             for to_node in to_diff
-                c = to_node[3]
-                n_ = to_node[1]
+                c = to_node.coefficient(s, t)
+                n_ = to_node.node1
                 n_node_state = v_state[validate_tuple(model_contents, (n_, s, t), 2)]
                 if !nodes[n_].state.is_temp
                     n_node_state /= nodes[n_].state.T_E_conversion

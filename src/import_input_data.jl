@@ -12,7 +12,7 @@ end
 
 function read_xlsx(input_data_path::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[])
 
-    sheetnames_system = ["setup", "nodes", "processes", "groups", "process_topology", "node_diffusion", "node_history", "node_delay", "inflow_blocks", "markets","scenarios","efficiencies", "reserve_type","risk", "cap_ts", "gen_constraint", "constraints", "bid_slots"]
+    sheetnames_system = ["setup", "nodes", "processes", "groups", "process_topology", "node_history", "node_delay", "node_diffusion", "inflow_blocks", "markets","scenarios","efficiencies", "reserve_type","risk", "cap_ts", "gen_constraint", "constraints", "bid_slots"]
     sheetnames_timeseries = ["cf", "inflow", "market_prices", "reserve_realisation", "reserve_activation_price", "price","eff_ts", "fixed_ts", "balance_prices"]
 
     system_data = OrderedDict()
@@ -40,7 +40,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
 
     processes = OrderedDict{String, Predicer.Process}()
     nodes = OrderedDict{String, Predicer.Node}()
-    node_diffusion_tuples = []
+    node_diffusion = []
     node_delay_tuples = []
     node_history = OrderedDict{String, Predicer.NodeHistory}()
     groups = OrderedDict{String, Predicer.Group}()
@@ -161,10 +161,29 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
         end
     end
 
-    for i in 1:nrow(system_data["node_diffusion"])
-        row = system_data["node_diffusion"][i, :]
-        tup = (row.node1, row.node2, row.diff_coeff)
-        push!(node_diffusion_tuples, tup)
+    for n in names(system_data["node_diffusion"])
+        timesteps = map(x -> string(ZonedDateTime(x, tz"UTC")), system_data["node_diffusion"].t)
+        if n != "t"
+            col = split(n, ",")
+            node1 = col[1]
+            node2 = col[2]
+            node_diffs = filter(x -> x.node1 == node1 && x.node2 == node2, node_diffusion)
+            if isempty(node_diffs)
+                nds = Predicer.NodeDiffusion(node1, node2)
+            else 
+                nds = node_diffs[1]
+            end
+            scen = col[3]
+            ts = Predicer.TimeSeries(scen)
+            data = system_data["node_diffusion"][!, n]
+            for i in 1:length(timesteps)
+                push!(ts.series, (timesteps[i], data[i]))
+            end
+            push!(nds.coefficient.ts_data, ts)
+            if isempty(node_diffs)
+                push!(node_diffusion, nds)
+            end
+        end
     end
 
     for i in 1:nrow(system_data["node_delay"])
@@ -578,7 +597,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
     contains_states = (true in map(n -> n.is_state, collect(values(nodes))))
     contains_piecewise_eff = (false in map(p -> isempty(p.eff_ops), collect(values(processes))))
     contains_risk = (risk["beta"] > 0)
-    contains_diffusion = !isempty(node_diffusion_tuples)
+    contains_diffusion = !isempty(node_diffusion)
     contains_delay = !isempty(node_delay_tuples)
     contains_markets = !isempty(markets)
 
@@ -604,5 +623,5 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
     setup = InputDataSetup(contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, contains_markets, 
         reserve_realisation, use_market_bids, common_timesteps, common_scenario_name, use_node_dummy_variables, use_ramp_dummy_variables, node_dummy_variable_cost, ramp_dummy_variable_cost)
 
-    return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), setup, processes, nodes, node_diffusion_tuples, node_delay_tuples, node_history, markets, groups, scens, reserve_type, risk, inflow_blocks, bid_slots, gen_constraints)
+    return  Predicer.InputData(Predicer.Temporals(unique(sort(temps))), setup, processes, nodes, node_diffusion, node_delay_tuples, node_history, markets, groups, scens, reserve_type, risk, inflow_blocks, bid_slots, gen_constraints)
 end

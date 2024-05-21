@@ -1202,6 +1202,28 @@ mutable struct InputDataSetup
     end
 end
 
+"""
+    struct NodeDiffusion
+        from_node::String
+        to_node::String
+        coefficient::TimeSeriesData
+    end
+
+Struct for storing node diffusion relationships in the model. 
+    # Fields
+- `node1::String`: The first node in the diffusion relation.
+- `node2::String`: The second node in the diffusion relation.
+- `coefficient::TimeSeriesData`: The diffusion coefficient as timeseriesdata. 
+"""
+
+struct NodeDiffusion
+    node1::String
+    node2::String
+    coefficient::TimeSeriesData
+    function NodeDiffusion(from_node, to_node)
+        return new(from_node, to_node, TimeSeriesData())
+    end
+end
 
 """
     mutable struct InputData
@@ -1242,7 +1264,7 @@ Struct containing the imported input data, based on which the Predicer is built.
 - `contains_markets::Bool`: Boolean indicating whether the model (input_data) needs market structures. 
 - `processes::OrderedDict{String, Process}`: A dict containing the data relevant for processes.
 - `nodes::OrderedDict{String, Node}`: A dict containing the data relevant for nodes.
-- `node_diffusion::Vector{Tuple{AbstractString, AbstractString, Number}}`: Vector containing node diffusion connection details. 
+- `node_diffusion::Vector{NodeDiffusion}`: Vector containing node diffusion connection details. 
 - `node_delay::Vector{Tuple{AbstractString, AbstractString, Number, Number, Number}}`: Vector containing connection details for node delay connections. 
 - `node_histories::OrderedDict{String, NodeHistory}`: OrderedDict containing node histories, used in delay functionalities. 
 - `markets::OrderedDict{String, Market}`: A dict containing the data relevant for markets.
@@ -1257,7 +1279,7 @@ mutable struct InputData
     setup::InputDataSetup
     processes::OrderedDict{String, Process}
     nodes::OrderedDict{String, Node}
-    node_diffusion::Vector{Tuple{AbstractString, AbstractString, Number}}
+    node_diffusion::Vector{NodeDiffusion}
     node_delay::Vector{Tuple{AbstractString, AbstractString, Number, Number, Number}}
     node_histories::OrderedDict{String, NodeHistory}
     markets::OrderedDict{String, Market}

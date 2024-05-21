@@ -907,7 +907,7 @@ Function to obtain the nodes that are part of a diffusion relation. form (n)
 """
 function diffusion_nodes(input_data::InputData)
     if input_data.setup.contains_diffusion
-        return unique(vcat(map(x -> x[1], input_data.node_diffusion), map(x -> x[2], input_data.node_diffusion)))
+        return unique(vcat(map(x -> x.node1, input_data.node_diffusion), map(y -> y.node2, input_data.node_diffusion)))
     else
         return String[]
     end
