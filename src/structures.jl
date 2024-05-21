@@ -277,7 +277,7 @@ Extend the Base.values() funciton to obtain all the values in the TimeSeriesData
 """
 function Base.:values(tsd::TimeSeriesData)
     vals = []
-    map(x -> map(y -> push!(vals, y), values(x)), tsd.ts_data)
+    map(x -> map(y -> push!(vals, y), collect(values(x.series))), tsd.ts_data)
     return vals
 end
 
