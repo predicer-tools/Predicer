@@ -14,3 +14,9 @@ JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 TimeZones = "f269a46b-ccf7-5d73-abea-4c690281aa53"
 XLSX = "fdbf4ff8-1666-58a4-91e7-1b58723a45e0"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

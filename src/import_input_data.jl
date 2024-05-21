@@ -19,18 +19,20 @@ function read_xlsx(input_data_path::String, t_horizon::Vector{ZonedDateTime}=Zon
     timeseries_data = OrderedDict()
     timeseries_data["scenarios"] = OrderedDict()
 
+    xl = XLSX.readxlsx(input_data_path)
+
     for sn in sheetnames_system
-        system_data[sn] = DataFrame(XLSX.readtable(input_data_path, sn))
+        system_data[sn] = DataFrame(XLSX.gettable(xl[sn]))
     end
 
     for sn in sheetnames_timeseries
-        timeseries_data[sn] = DataFrame(XLSX.readtable(input_data_path, sn))
+        timeseries_data[sn] = DataFrame(XLSX.gettable(xl[sn]))
     end
 
     if !isempty(t_horizon)
         temps = map(ts -> string(ts), t_horizon)
     else
-        temps = map(t-> string(ZonedDateTime(t, tz"UTC")), DataFrame(XLSX.readtable(input_data_path, "timeseries")).t)
+        temps = map(t-> string(ZonedDateTime(t, tz"UTC")), DataFrame(XLSX.gettable(xl["timeseries"])).t)
     end
 
     return system_data, timeseries_data, temps
@@ -133,11 +135,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
             for s in keys(scens)
                 timesteps = timeseries_data["scenarios"][s]["price"].t
                 prices = timeseries_data["scenarios"][s]["price"][!, n.node]
-                ts = Predicer.TimeSeries(s)
-                for i in 1:length(timesteps)
-                    tup = (timesteps[i], prices[i],)
-                    push!(ts.series, tup)
-                end
+                ts = Predicer.TimeSeries(s, timesteps, prices)
                 Predicer.add_cost(nodes[n.node], ts)
             end
         end
@@ -145,11 +143,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
             for s in keys(scens)
                 timesteps = timeseries_data["scenarios"][s]["inflow"].t
                 flows = timeseries_data["scenarios"][s]["inflow"][!, n.node]
-                ts = Predicer.TimeSeries(s)
-                for i in 1:length(timesteps)
-                    tup = (timesteps[i], flows[i],)
-                    push!(ts.series, tup)
-                end
+                ts = Predicer.TimeSeries(s, timesteps, flows)
                 Predicer.add_inflow(nodes[n.node], ts)
             end
         end
@@ -207,11 +201,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
             for s in keys(scens)
                 timesteps = timeseries_data["scenarios"][s]["cf"].t
                 cf = timeseries_data["scenarios"][s]["cf"][!, p.process]
-                ts = Predicer.TimeSeries(s)
-                for i in 1:length(timesteps)
-                    tup = (timesteps[i], cf[i],)
-                    push!(ts.series, tup)
-                end
+                ts = Predicer.TimeSeries(s, timesteps, cf)
                 Predicer.add_cf(processes[p.process], ts, Bool(p.is_cf_fix))
             end
         end
@@ -259,12 +249,9 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
             proc = col[1]
             nod = col[2]
             scen = col[3]
-            ts = Predicer.TimeSeries(scen)
             data = system_data["cap_ts"][!,n]
-            for i in 1:length(timesteps)
-                push!(ts.series,(timesteps[i],data[i]))
-            end
-            push!(filter(x->x.source==nod || x.sink==nod,processes[proc].topos)[1].cap_ts.ts_data, ts)
+            ts = Predicer.TimeSeries(scen, timesteps, data)
+            push!(filter(x->x.source==nod || x.sink==nod,processes[proc].topos)[1].cap_ts, ts)
         end
     end
 
@@ -349,11 +336,8 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                     return Error("Invalid node history column lengths for node: ", n, " and scenario: ", s, ".")
                 else
                     for s in collect(keys(scens))
-                        t_series = TimeSeries(s)
-                        for i in 1:length(ts)
-                            push!(t_series.series, (ts[i], vals[i]))
-                        end
-                        push!(node_history[n].steps.ts_data, t_series)
+                        t_series = TimeSeries(s, ts, vals)
+                        push!(node_history[n].steps, t_series)
                     end
                 end
             end
@@ -378,11 +362,8 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                     if isempty(ts) || isempty(vals) || length(ts) != length(vals)
                         return Error("Invalid node history column lengths for node: ", n, " and scenario: ", s, ".")
                     else
-                        t_series = TimeSeries(s)
-                        for i in 1:length(ts)
-                            push!(t_series.series, (ts[i], vals[i]))
-                        end
-                        push!(node_history[n].steps.ts_data, t_series)
+                        t_series = TimeSeries(s, ts, vals)
+                        push!(node_history[n].steps, t_series)
                     end
                 end
             end
@@ -406,11 +387,9 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                     msg = "The data columns of the inflow block " * String(b) * " are not the same length!"
                     throw(ErrorException(msg))
                 end
-                series = TimeSeries(s)
-                for i = 1:length(t_col)
-                    push!(series.series, (string(ZonedDateTime(t_col[i], tz"UTC")), s_col[i]))
-                end
-                push!(inflow_blocks[b].data.ts_data,series)
+                series = TimeSeries(
+                    s, string.(ZonedDateTime.(t_col, tz"UTC")), s_col)
+                push!(inflow_blocks[b].data,series)
             end
         end
     end
@@ -420,12 +399,8 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
             timesteps = timeseries_data["scenarios"][s]["eff_ts"].t
             for n in names(timeseries_data["scenarios"][s]["eff_ts"])[2:end]
                 mps = timeseries_data["scenarios"][s]["eff_ts"][!,n]
-                ts = Predicer.TimeSeries(s)
-                for i in 1:length(timesteps)
-                    tup = (timesteps[i], mps[i],)
-                    push!(ts.series, tup)
-                end
-                push!(processes[n].eff_ts.ts_data,ts)
+                ts = Predicer.TimeSeries(s, timesteps, mps)
+                push!(processes[n].eff_ts, ts)
             end
         end
     end
@@ -444,12 +419,8 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
         for s in keys(scens)
             timesteps = timeseries_data["scenarios"][s]["market_prices"].t
             mps = timeseries_data["scenarios"][s]["market_prices"][!, mm.market]
-            ts = Predicer.TimeSeries(s)
-            for i in 1:length(timesteps)
-                tup = (timesteps[i], mps[i],)
-                push!(ts.series, tup)
-            end
-            push!(markets[mm.market].price.ts_data, ts)
+            ts = Predicer.TimeSeries(s, timesteps, mps)
+            push!(markets[mm.market].price, ts)
         end
         if mm.market in names(timeseries_data["fixed_ts"])
             timestamps = timeseries_data["fixed_ts"].t
@@ -466,15 +437,11 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                 timesteps = timeseries_data["scenarios"][s]["balance_prices"]["up"].t
                 up_data = timeseries_data["scenarios"][s]["balance_prices"]["up"][!, mm.market]
                 down_data = timeseries_data["scenarios"][s]["balance_prices"]["down"][!, mm.market]
-                up_ts = Predicer.TimeSeries(s)
-                down_ts = Predicer.TimeSeries(s)
-                for (i, t) in enumerate(timesteps)
-                    push!(up_ts.series, (timesteps[i], up_data[i]))
-                    push!(down_ts.series, (timesteps[i], down_data[i]))
-                end
+                up_ts = Predicer.TimeSeries(s, timesteps, up_data)
+                down_ts = Predicer.TimeSeries(s, timesteps, down_data)
  
-                push!(markets[mm.market].up_price.ts_data, up_ts)
-                push!(markets[mm.market].down_price.ts_data, down_ts)
+                push!(markets[mm.market].up_price, up_ts)
+                push!(markets[mm.market].down_price, down_ts)
             end
         elseif mm.type == "reserve"
             for s in keys(scens)
@@ -482,20 +449,18 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                 rrs = timeseries_data["scenarios"][s]["reserve_realisation"][!, mm.market]
                 ts = Predicer.TimeSeries(s)
                 for i in 1:length(timesteps)
-                    tup = (timesteps[i], rrs[i],)
-                    push!(ts.series, tup)
+                    ts.series[timesteps[i]] = rrs[i]
                 end
-                push!(markets[mm.market].realisation.ts_data, ts)
+                push!(markets[mm.market].realisation, ts)
             end
             for s in keys(scens)
                 timesteps = timeseries_data["scenarios"][s]["reserve_activation_price"].t
                 rap = timeseries_data["scenarios"][s]["reserve_activation_price"][!, mm.market]
                 ts = Predicer.TimeSeries(s)
                 for i in 1:length(timesteps)
-                    tup = (timesteps[i], rap[i],)
-                    push!(ts.series, tup)
+                    ts.series[timesteps[i]] = rap[i]
                 end
-                push!(markets[mm.market].reserve_activation_price.ts_data, ts)
+                push!(markets[mm.market].reserve_activation_price, ts)
             end
         end
     end
@@ -550,10 +515,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
             constr = col[1]
             scen = col[end]
             data = system_data["gen_constraint"][!,n]
-            ts = Predicer.TimeSeries(scen)
-            for i in 1:length(timesteps)
-                push!(ts.series,(timesteps[i],data[i]))
-            end
+            ts = Predicer.TimeSeries(scen, timesteps, data)
             if length(col) == 4 # This means it is a flow variable
                 tup = ("flow", col[1],col[2],col[3])
                 if tup in keys(con_vecs)
@@ -575,7 +537,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                     push!(con_vecs[tup],ts)
                 end
             else
-                push!(gen_constraints[constr].constant.ts_data,ts)
+                push!(gen_constraints[constr].constant,ts)
             end
         end
     end
@@ -588,7 +550,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
         elseif k[1] == "state"
             con_fac = Predicer.StateConFactor((k[3],""))
         end
-        append!(con_fac.data.ts_data, con_vecs[k])
+        push!(con_fac.data, con_vecs[k]...)
         push!(gen_constraints[k[2]].factors,con_fac)
     end
     

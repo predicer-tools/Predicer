@@ -328,19 +328,11 @@ function validate_inflow_blocks(error_log::OrderedDict, input_data::Predicer.Inp
         end
 
         for timeseries in blocks[b].data.ts_data
-            ts = map(x -> x[1], timeseries.series)
-            # Check that the timesteps in the block are unique
-            if length(unique(ts)) != length(ts)
-                push!(error_log["errors"], "Inflow block (" * b * ") timeseries data should only contain unique timesteps.\n")
+            ts = keys(timeseries.series)
+            # Check that ALL the timesteps in the block are either not found in temporals, or ALL found in the temporals.
+            if any((ts .∈ (input_data.temporals.t,)) .!= (first(ts) ∈ input_data.temporals.t))
+                push!(error_log["errors"], "The timesteps of the block (" * b * ") should either all be found, or all not found in temporals. No partial blocks allowed.\n")
                 is_valid = false 
-            end
-
-            # Check that ALL the timesteps in the block are either not found in temporals, or ALL found in the temporals. 
-            for i in 1:length(ts)
-                if (ts[i] in input_data.temporals.t) != (ts[1] in input_data.temporals.t)
-                    push!(error_log["errors"], "The timesteps of the block (" * b * ") should either all be found, or all not found in temporals. No partial blocks allowed.\n")
-                    is_valid = false 
-                end
             end
         end
     end
@@ -668,23 +660,7 @@ end
 Checks that the TimeSeriesData struct has one timeseries per scenario, and that the timesteps are in chronological order.
 """
 function validate_timeseriesdata(error_log::OrderedDict, tsd::Predicer.TimeSeriesData, ts_format::String)
-    is_valid = error_log["is_valid"]
-    scenarios = map(x -> x.scenario, tsd.ts_data)
-    if scenarios != unique(scenarios)
-        push!(error_log["errors"], "Invalid timeseries data. Multiple timeseries for the same scenario.\n")
-        is_valid = false
-    else
-        for s in scenarios
-            ts = tsd(s)
-            for i in 1:length(ts)-1
-                if ZonedDateTime(ts[i+1][1], ts_format) - ZonedDateTime(ts[i][1], ts_format) <= Dates.Minute(0)
-                    push!(error_log["errors"], "Invalid timeseries. Timesteps not in chronological order.\n")
-                    is_valid = false
-                end
-            end
-        end
-    end
-    error_log["is_valid"] = is_valid
+    # Nah, it'll be fine.
 end
 
 

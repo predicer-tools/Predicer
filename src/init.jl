@@ -53,8 +53,8 @@ function build_model_contents_dict(input_data::Predicer.InputData)
     return model_contents
 end
 
-function setup_optimizer(solver::Any)
-    m = JuMP.Model(solver)
+function setup_optimizer()
+    m = JuMP.Model(HiGHS.Optimizer)
     set_optimizer_attribute(m, "presolve", "on")
     return m
 end
@@ -64,38 +64,34 @@ function build_model(model_contents::OrderedDict, input_data::Predicer.InputData
     create_constraints(model_contents, input_data)
 end
 
-function generate_model(fpath::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[])
-    # get input_data
-    input_data = Predicer.get_data(fpath, t_horizon)
+function tweak_input!(input_data :: InputData) :: InputData
     # Check input_data
     validation_result = Predicer.validate_data(input_data)
     if !validation_result["is_valid"]
         return validation_result["errors"]
     end
     # Build market structures
-    input_data = Predicer.resolve_market_nodes(input_data)
+    return Predicer.resolve_market_nodes(input_data)
+end
+
+function generate_model(model :: Model, input_data :: InputData)
     # create model_contents
     model_contents = Predicer.build_model_contents_dict(input_data)
-    model_contents["model"] = Predicer.setup_optimizer(HiGHS.Optimizer)
+    model_contents["model"] = model
     # build model
     Predicer.build_model(model_contents, input_data)
-    return model_contents, input_data
+    return model_contents
+end
+
+function generate_model(fpath::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[])
+    # get input_data
+    input_data = Predicer.get_data(fpath, t_horizon) |> tweak_input!
+    return generate_model(Predicer.setup_optimizer(), input_data), input_data
 end
 
 function generate_model(input_data::InputData)
-    # Check input_data
-    validation_result = Predicer.validate_data(input_data)
-    if !validation_result["is_valid"]
-        return validation_result["errors"]
-    end
-    # Build market structures
-    input_data = Predicer.resolve_market_nodes(input_data)
-    # create model_contents
-    model_contents = Predicer.build_model_contents_dict(input_data)
-    model_contents["model"] = Predicer.setup_optimizer(HiGHS.Optimizer)
-    # build model
-    Predicer.build_model(model_contents, input_data)
-    return model_contents, input_data
+    input_data = tweak_input!(input_data)
+    return generate_model(Predicer.setup_optimizer(), input_data), input_data
 end
 
 function solve_model(model_contents::OrderedDict)
