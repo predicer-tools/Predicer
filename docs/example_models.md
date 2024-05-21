@@ -48,12 +48,14 @@ The building heat loss is modelled as transfer of heat through the *buildingenve
 
 ***P<sub>loss</sub> = c * (state<sub>1</sub> - state<sub>2</sub>)***
 
-The unit of the heat transfer coefficient ***c*** in this model case would be *kW/K*. The value of the diffusion coefficient is chosen to be 0.25 *(kW/K)* between the *interiorair* and *buildingenvelope* nodes and 0.2 *(kW/K)* between the *buildingenvelope* and *outside* nodes. In the example Excel file, this is done on the *node_diffusion* sheet.
+The unit of the heat transfer coefficient ***c*** in this model case would be *kW/K*. The value of the diffusion coefficient is chosen to be 0.25 *(kW/K)* between the *interiorair* and *buildingenvelope* nodes and 0.2 *(kW/K)* between the *buildingenvelope* and *outside* nodes. The diffusion coefficient is provided as a timeseries, and can vary between the timesteps even if in this example it is constant. One use case for a timeseries-dependent diffusion could be a wind forecast, with higher wind speeds resulting in a higher heat loss.
 
-| node1	           | node2	          | diff_coeff |
-|------------------|------------------|------------|
-| interiorair      | buildingenvelope | 0.25       |
-| buildingenvelope | outside          | 0.2        |
+In the example Excel file, this is done on the *node_diffusion* sheet, where data is defined for each scenario and timestep for both diffusion relations. 
+
+| t	                  | interiorair,buildingenvelope,s1 | interiorair,buildingenvelope,s1 |
+|---------------------|---------------------------------|---------------------------------|
+| 2022-01-05T08:00:00 | 0.25                            | 0.2                             |
+| 2022-01-05T08:15:00 | 0.25                            | 0.2                             |
 
 To be able to model heat loss, the *buildingenvelope*, *interiorair* and *outside* nodes are given states which represent the temperature in the respective nodes. This is done by setting the *is_state* and *is_temp* flags to **True**. 
 
@@ -306,18 +308,34 @@ All of the scenario-dependent timeseries parameters are set to be identical betw
 
 ## Simple hydropower river system
 
-The input data file for the example model can be found under "simple_hydropower_river_system.xlsx". This example model consists of a hydropower river system with a few hydropower plants and reservoirs. 
+The input data file for the example model can be found under "simple_hydropower_river_system.xlsx". This example model consists of a hydropower river system with five hydropower plants connected by a river. Each hydropower plant contains a reservoir, where water can be stored for optimal use timing. Each reservoir has a inflow of water from smaller rivers or rainfall Each hydropower plant also contains a turbine by-pass, which can be used to release water from the reservoir to the river without producing electricity. The model contains a delay between the hydropower plant, meaning it takes a while for the released water to reach the next plant. 
+
+The goal of the model is to maimize the profits on the linked electricity markets by optimizing the use of the water in the reservoirs as well as possible. The system is constrained by minimum and maximum flow requirements for the river, as well as minimum and maximum water levels in the reservoirs. The model contains three scenarios *"dry"*, *"normal"* and *"wet"*, with differing electricity market prices and inflow to the reservoirs. The scenario *"dry"* contains a lower inflow into the reservoirs and resulting higher electricity prices. The scenario *"wet"* containts a higher inflow into the reservoirs and lower electricity prices, while the scenario *"medium"* lies somewhere in between *"dry"* and *"wet"*in regards to inflow and electricity prices. 
+
+The depicted system is fictional, and all timeseries data (inflows, market prices, etc.) is randomly generated, with some modifications. The time horizon for the model is 30 days, with the first two days being modelled in higher resolution with one hour timesteps, the following two days modelled with 4 hour timesteps, and the rest being modelled with one day timesteps. 
 
 ### Nodes and processes
 
-There are five hydropower plants (processes) in the model *hydro1*, *hydro2*, *hydro3*, *hydro4* and *hydro5*. All of these processes have a linked node; *res1*, *res2*, *res3*, *res4* and *res5*, respectively. These nodes act as hydropower reservoirs, where water can be stored before 
-
+There are five hydropower plants (processes) in the model *hydro1*, *hydro2*, *hydro3*, *hydro4* and *hydro5*, representing hydropower turbines. All of these processes have a linked node; *res1*, *res2*, *res3*, *res4* and *res5*, respectively. Each plant also has a linked spill process *hydro1_spill*, *hydro2_spill*, *hydro3_spill*, *hydro4_spill*, and *hydro5_spill*, which can be used to release water from the linked reservoir without producing electricity. A simple schematic of the river system can be seen in the figure below. The reservoirs linked to the processes *hydro1* and *hydro2* do not have an "upstream" connection, and the processes both connect with the reservoir linked with *hydro3*. The process *hydro3* is upstream of  *hydro4*, which is upstream of *hydro5*. The process *hydro5* doesn't have a downstream node, and it could be thought that this is where the river system flows out to the sea. The modellled system also has an electricity node *elc*, which is linked to electricity energy and reserve markets. Each of the hydropower plants has a connection to the *elc* node. 
 
 ```mermaid
 flowchart TD
 
 
 ```
+
+The reservoir nodes (both inflows and flows) are modelled as water (*m<sup>3</sup>*). As the flows are large, the unit of one water is assumed to be 1000 m<sup>3</sup> instead of 1 m<sup>3</sup>. This reduces scaling issues in the model as well. The amount of energy available in the water can be calculated using the potential energy of the water, and assuming some losses in the conversion process. The process electrical generation ber unit of water (1000 m<sup>3</sup>), the corresponding process (electrical) efficiency p, as well as reservoir and flow limitations are shown in the table below. All the water-related numbers are per 1000 m<sup>3</sup>.
+
+| Process | Elc per water | Efficiency | Reservoir max | Reservoir min| Min flow | Max flow |
+|---------|---------------|------------|---------------|--------------|----------|----------|
+| hydro1  | 0.0818 MWh    | 0.073      | 2000          | 800          | 40       | 300      |
+| hydro2  | 0.1227 MWh    | 0.110      | 2000          | 800          | 40       | 300      |
+| hydro3  | 0.1092 MWh    | 0.098      | 2000          | 800          | 40       | 300      |
+| hydro4  | 0.0956 MWh    | 0.086      | 2000          | 800          | 40       | 300      |
+| hydro5  | 0.0437 MWh    | 0.039      | 2000          | 800          | 40       | 300      |
+
+
+
 
 - river inflow
 - delays
