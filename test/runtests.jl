@@ -27,12 +27,26 @@ cases = [
     "two_stage_dh_model.xlsx" => 9508.652488524222
 ]
 
-@testset "Predicer on $bn" for (bn, obj) in cases
+inputs = Dict{String, Predicer.InputData}()
+
+get_input(bn) = get!(inputs, bn) do
     inp = Predicer.get_data(joinpath("../input_data", bn))
-    inp = Predicer.tweak_input!(inp)
+    Predicer.tweak_input!(inp)
+end
+
+include("../make-graph.jl")
+
+@testset "make-graph on $bn" for (bn, _) in cases
+    of = joinpath("..", "input_data",
+                  replace(bn, r"[.][^.]*$" => "") * ".dot")
+    println("$bn |-> $of")
+    @test (write_graph(of, get_input(bn)); true)
+end
+
+@testset "Predicer on $bn" for (bn, obj) in cases
     m = Model(Optimizer)
     #set_silent(m)
-    mc = Predicer.generate_model(m, inp)
+    mc = Predicer.generate_model(m, get_input(bn))
     @test m == mc["model"]
     Predicer.solve_model(mc)
     @test termination_status(m) == MOI.OPTIMAL
