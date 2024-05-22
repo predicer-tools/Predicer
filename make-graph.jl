@@ -37,7 +37,8 @@ function write_graph(fname :: String,
         for (s, t, _...) in inp.node_delay
             println(f, "  $s -> $t [class=delay, style=dashed, arrowhead=vee]")
         end
-        for (s, t, _...) in inp.node_diffusion
+        for nd in inp.node_diffusion
+            (s, t) = (nd.node1, nd.node2)
             println(f, "  $s -> $t [class=diffusion, style=dashed]")
         end
         println(f, "}")
