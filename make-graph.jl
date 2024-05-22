@@ -48,7 +48,7 @@ end
 if abspath(PROGRAM_FILE) == @__FILE__
     aps = ArgParseSettings(
         description="Plot graphs (dot) of Predicer input")
-    @add_arg_table aps begin
+    @add_arg_table! aps begin
         "file"
         help = "input files (xlsx)"
         nargs = '+'
