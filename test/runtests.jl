@@ -30,7 +30,7 @@ cases = [
 inputs = Dict{String, Predicer.InputData}()
 
 get_input(bn) = get!(inputs, bn) do
-    inp = Predicer.get_data(joinpath("../input_data", bn))
+    inp = Predicer.get_data(joinpath("..", "input_data", bn))
     Predicer.tweak_input!(inp)
 end
 

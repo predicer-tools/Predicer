@@ -546,7 +546,7 @@ Function to export a DataFrame to an xlsx file.
 - `fname::String`: Name of the xlsx file. (a suffix of date, time, and ".xlsx" are added automatically)
 """
 function dfs_to_xlsx(df::DataFrame, fpath::String, fname::String="")
-    output_path = joinpath(pwd(), fpath, fname * "_" * Dates.format(Dates.now(), "yyyy-mm-dd-HH-MM-SS")*".xlsx")
+    output_path = joinpath(fpath, fname * "_" * Dates.format(Dates.now(), "yyyy-mm-dd-HH-MM-SS")*".xlsx")
     XLSX.openxlsx(output_path, mode="w") do xf
         XLSX.addsheet!(xf, "df")
         XLSX.writetable!(xf[2], collect(eachcol(df)), names(df))
@@ -566,7 +566,7 @@ Function to export a dictionary containing DataFrames to an xlsx file.
 - `fname::String`: Name of the xlsx file. (a suffix of date, time, and ".xlsx" are added automatically)
 """
 function dfs_to_xlsx(dfs::Dict{Any, Any}, fpath::String, fname::String="")
-    output_path = joinpath(pwd(), fpath, fname * "_" * Dates.format(Dates.now(), "yyyy-mm-dd-HH-MM-SS")*".xlsx")
+    output_path = joinpath(fpath, fname * "_" * Dates.format(Dates.now(), "yyyy-mm-dd-HH-MM-SS")*".xlsx")
     XLSX.openxlsx(output_path, mode="w") do xf
         for (i, sn) in enumerate(collect(keys(dfs)))
             XLSX.addsheet!(xf, sn)
