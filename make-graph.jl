@@ -39,7 +39,8 @@ function write_graph(fname :: String,
         end
         for nd in inp.node_diffusion
             (s, t) = (nd.node1, nd.node2)
-            println(f, "  $s -> $t [class=diffusion, style=dashed]")
+            println(f, "  $s -> $t [class=diffusion, style=dashed,"
+                    * " arrowhead=odot]")
         end
         println(f, "}")
     end
