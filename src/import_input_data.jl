@@ -5,6 +5,10 @@ using TimeZones
 
 import Predicer
 
+function test_function()
+    println("works!")
+end
+
 function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[])
     system_data, timeseries_data, temps = Predicer.read_xlsx(input_data_path, t_horizon)
     return Predicer.compile_input_data(system_data, timeseries_data, temps)
