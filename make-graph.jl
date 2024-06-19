@@ -34,9 +34,11 @@ function write_graph(fname :: String,
                 println(f, "  $edges [class=$cls, arrowhead=$head]")
             end
         end
+        isempty(inp.node_delay) || println(f)
         for (s, t, _...) in inp.node_delay
             println(f, "  $s -> $t [class=delay, style=dashed, arrowhead=vee]")
         end
+        isempty(inp.node_diffusion) || println(f)
         for nd in inp.node_diffusion
             (s, t) = (nd.node1, nd.node2)
             println(f, "  $s -> $t [class=diffusion, style=dashed,"
