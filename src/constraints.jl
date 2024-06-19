@@ -1208,7 +1208,10 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
     cons = Dict()
     for m in keys(markets)
         markets[m].is_bid || continue
+        slots = get(input_data.bid_slots, m, nothing)
+        slot_times = Set(isnothing(slots) ? [] : slots.time_steps)
         for (i,t) in enumerate(temporals.t)
+            t in slot_times && continue
             if markets[m].type == "energy"
                 #XXX Is this ever different from m?
                 mn = markets[m].name
