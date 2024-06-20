@@ -85,7 +85,6 @@ module Predicer
     node_diffusion_tuple,
     diffusion_nodes,
     node_delay_tuple,
-    previous_balance_node_tuples,
     previous_process_topology_tuples
 
 

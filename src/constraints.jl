@@ -48,7 +48,7 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
     
     node_state_tuple = state_node_tuples(input_data)
     node_balance_tuple = balance_node_tuples(input_data)
-    previous_node_balance_tuple = previous_balance_node_tuples(input_data)
+    prev_times = previous_times(input_data)
     v_flow = model_contents["variable"]["v_flow"]
     v_block = model_contents["variable"]["v_block"]
     if input_data.setup.contains_states
@@ -215,16 +215,19 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
     
             if nodes[tu[1]].is_state
                 add_to_expression!(e_state[tu], v_state[validate_tuple(model_contents, tu, 2)])
-                if tu[3] == temporals.t[1]
-                    add_to_expression!(e_state[tu], - nodes[tu[1]].state.initial_state)
-                    add_to_expression!(e_state_losses[tu], nodes[tu[1]].state.state_loss_proportional*temporals(tu[3])*nodes[tu[1]].state.initial_state)
-                else
-                    add_to_expression!(e_state[tu], - v_state[validate_tuple(model_contents, previous_node_balance_tuple[tu], 2)])
-                    add_to_expression!(e_state_losses[tu], nodes[tu[1]].state.state_loss_proportional*temporals(tu[3])*v_state[validate_tuple(model_contents, previous_node_balance_tuple[tu], 2)])
-                end
+                prev_st = (tu[3] == temporals.t[1]
+                           ? nodes[tu[1]].state.initial_state
+                           : v_state[validate_tuple(
+                                model_contents,
+                                (tu[1 : 2]..., prev_times[tu[3]]), 2)])
+                add_to_expression!(e_state[tu], -1, prev_st)
+                add_to_expression!(
+                    e_state_losses[tu],
+                    nodes[tu[1]].state.state_loss_proportional * temporals(tu[3]),
+                    prev_st)
                 if nodes[tu[1]].state.is_temp
-                    e_state[tu] = e_state[tu] * nodes[tu[1]].state.T_E_conversion
-                    e_state_losses[tu] = e_state_losses[tu] * nodes[tu[1]].state.T_E_conversion
+                    e_state[tu] *= nodes[tu[1]].state.T_E_conversion
+                    e_state_losses[tu] *= nodes[tu[1]].state.T_E_conversion
                 end
             end
         end

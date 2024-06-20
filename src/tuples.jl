@@ -74,11 +74,11 @@ end
 
 Helper function used to correct generated index tuples in cases when the start of the optimization horizon is the same for all scenarios.
 """
-function validate_tuple(mc::OrderedDict, tuple::Vector{T} where T, s_index::Int)
+function validate_tuple(mc::OrderedDict, tuples::Vector{T} where T, s_index::Int)
     if !isempty(mc["validation_dict"])
-        return map(x -> Predicer.validate_tuple(mc, x, s_index), tuple)
+        return [Predicer.validate_tuple(mc, x, s_index) for x in tuples]
     else
-        return tuple
+        return tuples
     end
 end
 
@@ -392,34 +392,19 @@ end
 Return tuples for each node over which balance should be maintained for every time step and scenario. Form: (n s, t).
 """
 function balance_node_tuples(input_data::InputData) # original name: create_node_balance_tuple()
-    balance_node_tuples = NTuple{3, String}[]
-    nodes = input_data.nodes
-    scenarios = collect(keys(input_data.scenarios))
-    temporals = input_data.temporals
-    for n in values(nodes)
-        if !(n.is_commodity) & !(n.is_market)
-            for s in scenarios, t in temporals.t
-                push!(balance_node_tuples, (n.name, s, t))
-            end
-        end
-    end
-    return balance_node_tuples
+    [(n.name, s, t)
+     for n in values(input_data.nodes) if !n.is_commodity && !n.is_market
+     for s in keys(input_data.scenarios) for t in input_data.temporals.t]
 end
 
 """
-    previous_balance_node_tuples(input_data::InputData)
+    previous_times(inp::InputData)
 
-Function to gather the node balance tuple for the previous timestep. Returns a Dict() with the node_bal_tup as key and the previous tup as value. 
+Return a Dict mapping time steps to the previous time step.
 """
-function previous_balance_node_tuples(input_data::InputData)
-    pbnt = OrderedDict()
-    node_bal_tups = balance_node_tuples(input_data)
-    for (i, n) in enumerate(node_bal_tups)
-        if n[3] != input_data.temporals.t[1]
-            pbnt[n] = node_bal_tups[i-1]
-        end
-    end
-    return pbnt
+function previous_times(inp::InputData)
+    ts = inp.temporals.t
+    return Dict(ts[i] => ts[i - 1] for i in 2 : length(ts))
 end
 
 """
