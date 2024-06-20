@@ -74,9 +74,9 @@ end
 
 Helper function used to correct generated index tuples in cases when the start of the optimization horizon is the same for all scenarios.
 """
-function validate_tuple(mc::OrderedDict, tuples::Vector{T} where T, s_index::Int)
+function validate_tuples(mc::OrderedDict, tuples::Vector{T} where T, s_index::Int)
     if !isempty(mc["validation_dict"])
-        return [Predicer.validate_tuple(mc, x, s_index) for x in tuples]
+        return [validate_tuple(mc, x, s_index) for x in tuples]
     else
         return tuples
     end

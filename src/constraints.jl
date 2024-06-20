@@ -207,10 +207,10 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
             end
     
             if !isempty(cons_procs_with_s_and_t)
-                add_to_expression!(e_cons[tu], -sum(v_flow[validate_tuple(model_contents, cons_procs_with_s_and_t, 4)]))
+                add_to_expression!(e_cons[tu], -sum(v_flow[validate_tuples(model_contents, cons_procs_with_s_and_t, 4)]))
             end
             if !isempty(prod_procs_with_s_and_t)
-                add_to_expression!(e_prod[tu], sum(v_flow[validate_tuple(model_contents, prod_procs_with_s_and_t, 4)]))
+                add_to_expression!(e_prod[tu], sum(v_flow[validate_tuples(model_contents, prod_procs_with_s_and_t, 4)]))
             end
     
             if nodes[tu[1]].is_state
@@ -420,7 +420,7 @@ function setup_process_balance(model_contents::OrderedDict, input_data::Predicer
             tup = (p, s, t)
             sources_with_s_and_t = map(x -> (x[1], x[2], x[3], s, t), sources)
             sinks_with_s_and_t = map(x -> (x[1], x[2], x[3], s, t), sinks)
-            nod_eff[tup] = sum(v_flow[validate_tuple(model_contents, sinks_with_s_and_t, 4)]) - (length(sources_with_s_and_t) > 0 ? eff * sum(v_flow[validate_tuple(model_contents, sources_with_s_and_t, 4)]) : 0)
+            nod_eff[tup] = sum(v_flow[validate_tuples(model_contents, sinks_with_s_and_t, 4)]) - (length(sources_with_s_and_t) > 0 ? eff * sum(v_flow[validate_tuples(model_contents, sources_with_s_and_t, 4)]) : 0)
         end
     end
 
@@ -447,15 +447,15 @@ function setup_process_balance(model_contents::OrderedDict, input_data::Predicer
             op_eff[tup] = processes[p].eff_fun[i][2]
         end
 
-        flow_op_out_sum = @constraint(model,flow_op_out_sum[tup in proc_op_tuple],sum(v_flow_op_out[validate_tuple(model_contents, filter(x->x[1:3]==tup,proc_op_balance_tuple), 2)]) == sum(v_flow[validate_tuple(model_contents, filter(x->x[2]==tup[1] && x[4] == tup[2] && x[5] == tup[3],process_tuple), 4)]))
-        flow_op_in_sum = @constraint(model,flow_op_in_sum[tup in proc_op_tuple],sum(v_flow_op_in[validate_tuple(model_contents, filter(x->x[1:3]==tup,proc_op_balance_tuple), 2)]) == sum(v_flow[validate_tuple(model_contents, filter(x->x[3]==tup[1] && x[4] == tup[2] && x[5] == tup[3],process_tuple), 4)]))
+        flow_op_out_sum = @constraint(model,flow_op_out_sum[tup in proc_op_tuple],sum(v_flow_op_out[validate_tuples(model_contents, filter(x->x[1:3]==tup,proc_op_balance_tuple), 2)]) == sum(v_flow[validate_tuples(model_contents, filter(x->x[2]==tup[1] && x[4] == tup[2] && x[5] == tup[3],process_tuple), 4)]))
+        flow_op_in_sum = @constraint(model,flow_op_in_sum[tup in proc_op_tuple],sum(v_flow_op_in[validate_tuples(model_contents, filter(x->x[1:3]==tup,proc_op_balance_tuple), 2)]) == sum(v_flow[validate_tuples(model_contents, filter(x->x[3]==tup[1] && x[4] == tup[2] && x[5] == tup[3],process_tuple), 4)]))
         model_contents["constraint"]["flow_op_out_sum"] = flow_op_out_sum
         model_contents["constraint"]["flow_op_in_sum"] = flow_op_in_sum
 
         flow_op_lo = @constraint(model,flow_op_lo[tup in proc_op_balance_tuple], v_flow_op_out[validate_tuple(model_contents, tup, 2)] >= v_flow_op_bin[validate_tuple(model_contents, tup, 2)] .* op_min[tup])
         flow_op_up = @constraint(model,flow_op_up[tup in proc_op_balance_tuple], v_flow_op_out[validate_tuple(model_contents, tup, 2)] <= v_flow_op_bin[validate_tuple(model_contents, tup, 2)] .* op_max[tup])
         flow_op_ef = @constraint(model,flow_op_ef[tup in proc_op_balance_tuple], v_flow_op_out[validate_tuple(model_contents, tup, 2)] == op_eff[tup] .* v_flow_op_in[validate_tuple(model_contents, tup, 2)])
-        flow_bin = @constraint(model,flow_bin[tup in proc_op_tuple], sum(v_flow_op_bin[validate_tuple(model_contents, filter(x->x[1:3] == tup, proc_op_balance_tuple), 2)]) == 1)
+        flow_bin = @constraint(model,flow_bin[tup in proc_op_tuple], sum(v_flow_op_bin[validate_tuples(model_contents, filter(x->x[1:3] == tup, proc_op_balance_tuple), 2)]) == 1)
         model_contents["constraint"]["flow_op_lo"] = flow_op_lo
         model_contents["constraint"]["flow_op_up"] = flow_op_up
         model_contents["constraint"]["flow_op_ef"] = flow_op_ef
@@ -591,16 +591,16 @@ function setup_process_limits(model_contents::OrderedDict, input_data::Predicer.
                 p_r_c_down = map(x -> (x[1], x[2], x[3], x[4], x[5], s, t), p_reserve_cons_down)
                 p_r_p_down = map(x -> (x[1], x[2], x[3], x[4], x[5], s, t), p_reserve_prod_down)
                 if !isempty(p_reserve_cons_up)
-                    add_to_expression!(e_lim_res_min[index_tup], -sum(v_reserve[validate_tuple(model_contents, p_r_c_up, 6)]))
+                    add_to_expression!(e_lim_res_min[index_tup], -sum(v_reserve[validate_tuples(model_contents, p_r_c_up, 6)]))
                 end
                 if !isempty(p_reserve_prod_up)
-                    add_to_expression!(e_lim_res_max[index_tup], sum(v_reserve[validate_tuple(model_contents, p_r_p_up, 6)]))
+                    add_to_expression!(e_lim_res_max[index_tup], sum(v_reserve[validate_tuples(model_contents, p_r_p_up, 6)]))
                 end
                 if !isempty(p_reserve_cons_down)
-                    add_to_expression!(e_lim_res_max[index_tup], sum(v_reserve[validate_tuple(model_contents, p_r_c_down, 6)]))
+                    add_to_expression!(e_lim_res_max[index_tup], sum(v_reserve[validate_tuples(model_contents, p_r_c_down, 6)]))
                 end
                 if !isempty(p_reserve_prod_down)
-                    add_to_expression!(e_lim_res_min[index_tup], -sum(v_reserve[validate_tuple(model_contents, p_r_p_down, 6)]))
+                    add_to_expression!(e_lim_res_min[index_tup], -sum(v_reserve[validate_tuples(model_contents, p_r_p_down, 6)]))
                 end
             end
         end
@@ -687,7 +687,10 @@ function setup_reserve_realisation(model_contents::OrderedDict, input_data::Pred
                 p_tup_with_s_and_t = (p_tup[1], p_tup[2], p_tup[3], s, t)
                 v_res_real_flow[p_tup_with_s_and_t] = AffExpr(0.0)
                 if !isempty(res_p_tup)
-                    add_to_expression!(v_res_real_flow[p_tup_with_s_and_t], v_flow[ validate_tuple(model_contents, p_tup_with_s_and_t, 4)] - v_load[validate_tuple(model_contents, p_tup_with_s_and_t, 4)])
+                    add_to_expression!(
+                        v_res_real_flow[p_tup_with_s_and_t],
+                        v_flow[validate_tuple(model_contents, p_tup_with_s_and_t, 4)]
+                        - v_load[validate_tuple(model_contents, p_tup_with_s_and_t, 4)])
                 end
             end
         end
@@ -830,10 +833,10 @@ function setup_reserve_balances(model_contents::OrderedDict, input_data::Predice
             res_u = filter(x -> x[3] == "res_up" && markets[x[1]].reserve_type == r && x[4] == s && x[5] == t && x[2] == ng, res_tuple)
             res_d = filter(x -> x[3] == "res_down" && markets[x[1]].reserve_type == r && x[4] == s && x[5] == t && x[2] == ng, res_tuple)
             if !isempty(res_u)
-                add_to_expression!(e_res_bal_up[tup], -sum(v_res[validate_tuple(model_contents, res_u, 4)]))
+                add_to_expression!(e_res_bal_up[tup], -sum(v_res[validate_tuples(model_contents, res_u, 4)]))
             end
             if !isempty(res_d)
-                add_to_expression!(e_res_bal_dn[tup], -sum(v_res[validate_tuple(model_contents, res_d, 4)]))
+                add_to_expression!(e_res_bal_dn[tup], -sum(v_res[validate_tuples(model_contents, res_d, 4)]))
             end
 
             for n in unique(map(y -> y[3], filter(x -> x[2] == ng, group_tuples)))
@@ -841,10 +844,10 @@ function setup_reserve_balances(model_contents::OrderedDict, input_data::Predice
                     res_pot_u = filter(x -> x[1] == "res_up" && x[2] == r && x[6] == s && x[7] == t && (x[4] == n || x[5] == n), res_potential_tuple)
                     res_pot_d = filter(x -> x[1] == "res_down" && x[2] == r && x[6] == s && x[7] == t && (x[4] == n || x[5] == n), res_potential_tuple)
                     if !isempty(res_pot_u)
-                        add_to_expression!(e_res_bal_up[tup], sum(v_reserve[validate_tuple(model_contents, res_pot_u, 6)]))
+                        add_to_expression!(e_res_bal_up[tup], sum(v_reserve[validate_tuples(model_contents, res_pot_u, 6)]))
                     end
                     if !isempty(res_pot_d)
-                        add_to_expression!(e_res_bal_dn[tup], sum(v_reserve[validate_tuple(model_contents, res_pot_d, 6)]))
+                        add_to_expression!(e_res_bal_dn[tup], sum(v_reserve[validate_tuples(model_contents, res_pot_d, 6)]))
                     end
                 end
             end
@@ -872,7 +875,7 @@ function setup_reserve_balances(model_contents::OrderedDict, input_data::Predice
             elseif markets[tup[1]].direction == "up_down" || markets[tup[1]].direction == "res_up_down"
                 r_tup = filter(x -> x[1] == tup[1] && x[4] == tup[2] && x[5] == tup[3], res_tuple)
             end
-            reserve_final_exp[tup] = @expression(model, sum(v_res[validate_tuple(model_contents, r_tup, 4)]) .* (markets[tup[1]].direction == "up_down" ? 0.5 : 1.0) .- v_res_final[validate_tuple(model_contents, tup, 2)])
+            reserve_final_exp[tup] = @expression(model, sum(v_res[validate_tuples(model_contents, r_tup, 4)]) .* (markets[tup[1]].direction == "up_down" ? 0.5 : 1.0) .- v_res_final[validate_tuple(model_contents, tup, 2)])
         end
         reserve_final_eq = @constraint(model, reserve_final_eq[tup in res_final_tuple], reserve_final_exp[tup] == 0)
         model_contents["constraint"]["reserve_final_eq"] = reserve_final_eq
@@ -1502,7 +1505,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
                 flow_tups = filter(x -> x[2] == n && x[4] == s, process_tuple)
                 cost_ts = nodes[n].cost(s)
                 # Add to expression for each t found in series
-                for tup in unique(validate_tuple(model_contents, flow_tups, 4))
+                for tup in unique(validate_tuples(model_contents, flow_tups, 4))
                     add_to_expression!(commodity_costs[s], sum(v_flow[tup]) * cost_ts(tup[5]) * temporals(tup[5]))
                 end
             end
@@ -1567,7 +1570,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
                 if !isempty(start_tup)
                     v_start = model_contents["variable"]["v_start"]
                     cost = processes[p].start_cost
-                    add_to_expression!(start_costs[s], sum(v_start[validate_tuple(model_contents, start_tup, 2)]) * cost)
+                    add_to_expression!(start_costs[s], sum(v_start[validate_tuples(model_contents, start_tup, 2)]) * cost)
                 end
             end
         end
