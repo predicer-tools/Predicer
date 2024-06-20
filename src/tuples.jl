@@ -89,20 +89,13 @@ end
 Return nodes which have a reserve. Form: (n).
 """
 function reserve_nodes(input_data::InputData) # original name: create_res_nodes_tuple()
-    reserve_nodes = String[]
     if input_data.setup.contains_reserves
-        markets = input_data.markets
-        for m in collect(keys(markets))
-            if markets[m].type == "reserve"
-                for n in unique(map(y -> y[3], filter(x -> x[2] == markets[m].node, create_group_tuples(input_data))))
-                    if input_data.nodes[n].is_res
-                        push!(reserve_nodes, n)
-                    end
-                end
-            end
-        end
+        unique(n for m in values(input_data.markets) if m.type == "reserve"
+                 for n in input_data.groups[m.node].members
+                 if input_data.nodes[n].is_res)
+    else
+        String[]
     end
-    return unique(reserve_nodes)
 end
 
 
@@ -822,16 +815,9 @@ end
 Function to create tuples for inflow blocks. Form (blockname, node, s, t).
 """
 function block_tuples(input_data::InputData)
-    blocks = input_data.inflow_blocks
-    block_tuples = NTuple{4, String}[]
-    for b in collect(keys(blocks))
-        for t_series in blocks[b].data.ts_data
-            for t in t_series.series
-                push!(block_tuples, (b, blocks[b].node, t_series.scenario, t[1]))
-            end
-        end
-    end
-    return block_tuples
+    [(bn, b.node, ts.scenario, t)
+     for (bn, b) in input_data.inflow_blocks
+     for ts in b.data.ts_data for t in keys(ts.series)]
 end
 
 
@@ -841,14 +827,7 @@ end
 Function to create tuples for groups and their members. Form (group_type, groupname, member_name)
 """
 function create_group_tuples(input_data::InputData)
-    groups = input_data.groups
-    group_tuples = NTuple{3, String}[]
-    for gn in collect(keys(groups))
-        for gm in groups[gn].members
-            push!(group_tuples, (groups[gn].type, gn, gm))
-        end
-    end
-    return group_tuples
+    [(g.type, gn, gm) for (gn, g) in input_data.groups for gm in g.members]
 end
 
 """
@@ -907,7 +886,8 @@ Function to obtain the nodes that are part of a diffusion relation. form (n)
 """
 function diffusion_nodes(input_data::InputData)
     if input_data.setup.contains_diffusion
-        return unique(vcat(map(x -> x.node1, input_data.node_diffusion), map(y -> y.node2, input_data.node_diffusion)))
+        return unique(hcat(([x.node1, x.node2]
+                            for x in input_data.node_diffusion)...))
     else
         return String[]
     end
@@ -920,7 +900,7 @@ Function to obtain the nodes that are part of a delay relation. form (n)
 """
 function delay_nodes(input_data::InputData)
     if input_data.setup.contains_delay
-        return unique(vcat(map(x -> x[1], input_data.node_delay), map(x -> x[2], input_data.node_delay)))
+        return unique(x[i] for i in 1 : 2 for x in input_data.node_delay)
     else
         return String[]
     end
@@ -933,19 +913,9 @@ end
 Function to create bid slot tuples. Form (m,slot,t)
 """
 function bid_slot_tuples(input_data::InputData)
-    b_slots = input_data.bid_slots
-    bid_slot_tup = NTuple{3, String}[]
-    markets = keys(b_slots)
-    for m in markets
-        for s in b_slots[m].slots
-            for t in b_slots[m].time_steps
-                push!(bid_slot_tup,(m,s,t))
-            end
-        end
-    end
-    return bid_slot_tup
+    ((m, s, t) for (m, bs) in input_data.bid_slots
+               for s in bs.slots for t in bs.time_steps)
 end
-
 
 """
     bid_scenario_tuples(input_data::InputData)
@@ -953,16 +923,6 @@ end
 Function to create bid scenario tuples linked to bid slots. Form (m,s,t)
 """
 function bid_scenario_tuples(input_data::InputData)
-    b_slots = input_data.bid_slots
-    bid_scen_tup = NTuple{3, String}[]
-    markets = keys(b_slots)
-    scenarios = collect(keys(input_data.scenarios))
-    for m in markets
-        for s in scenarios
-            for t in b_slots[m].time_steps
-                push!(bid_scen_tup,(m,s,t))
-            end
-        end
-    end
-    return bid_scen_tup
+    ((m, s, t) for (m, bs) in input_data.bid_slots
+               for s in keys(input_data.scenarios) for t in bs.time_steps)
 end
