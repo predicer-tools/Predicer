@@ -306,6 +306,7 @@ function create_v_node_delay(model_contents::OrderedDict, input_data::InputData)
     model_contents["variable"]["v_node_delay"] = v_node_delay
 end
 
+bid_lower_bound(m::Market) = m.type == "reserve" ? 0 : -Inf
 
 """
     create_v_bid_volume(model_contents::OrderedDict, input_data::InputData)
@@ -319,6 +320,7 @@ Function to create variables needed for bid curve creation.
 function create_v_bid_volume(model_contents::OrderedDict, input_data::InputData)
     model = model_contents["model"]
     bid_slot_tups = bid_slot_tuples(input_data)
-    v_bid_volume = @variable(model, v_bid_volume[tup in bid_slot_tups])
+    v_bid_volume = @variable(model, v_bid_volume[(m, s, t) in bid_slot_tups]
+                                    ≥ bid_lower_bound(input_data.markets[m]))
     model_contents["variable"]["v_bid_volume"] = v_bid_volume
 end
