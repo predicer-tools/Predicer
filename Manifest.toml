@@ -209,15 +209,15 @@ uuid = "9fa8497b-333b-5362-9e8d-4d0656e87820"
 
 [[deps.HiGHS]]
 deps = ["HiGHS_jll", "MathOptInterface", "PrecompileTools", "SparseArrays"]
-git-tree-sha1 = "a216e32299172b83abfe699604584f413ffbb045"
+git-tree-sha1 = "1042e72e93e5916bbfe034576f2fc2fae73d5ec7"
 uuid = "87dc4568-4c63-4d18-b0c0-bb2238e4078b"
-version = "1.9.0"
+version = "1.9.1"
 
 [[deps.HiGHS_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "Zlib_jll"]
-git-tree-sha1 = "9a550d55c49334beb538c5ad9504f07fc29a13dc"
+git-tree-sha1 = "656db2048ed731484df16fc91e7232a190e330fb"
 uuid = "8fd58aa0-07eb-5a78-9b36-339c94fd15ea"
-version = "1.7.0+0"
+version = "1.7.1+0"
 
 [[deps.InlineStrings]]
 deps = ["Parsers"]
@@ -355,9 +355,9 @@ version = "5.1.2+0"
 
 [[deps.MUMPS_seq_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl", "METIS_jll", "libblastrampoline_jll"]
-git-tree-sha1 = "840b83c65b27e308095c139a457373850b2f5977"
+git-tree-sha1 = "61c2312113e05b4b182da987effd2582cebc69be"
 uuid = "d7ed1dd3-d0ae-5e8e-bfb4-87a502085b8d"
-version = "500.600.201+0"
+version = "500.700.200+0"
 
 [[deps.MacroTools]]
 deps = ["Markdown", "Random"]
