@@ -40,7 +40,7 @@ plugins:
       minify_html: true
       
 markdown_extensions:
-- abbr
+  - abbr
   - admonition
   - attr_list
   - def_list
