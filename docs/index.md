@@ -3,4 +3,4 @@
 ![whoarewe](images/Predicer_logo.svg)
 
 # Contact us
-You can contact us by email: [does-info@vtt.fi](does-info@vtt.fi)
+You can contact us by email: [does-info@vtt.fi](mailto:does-info@vtt.fi)
