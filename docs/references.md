@@ -1,8 +1,8 @@
 # References
 
- [1.](dx.doi.org/10.21314/jor.2002.057) Krokhmal, P., Uryasev, S., and Palmquist, J., “Portfolio optimization with conditional value-at-risk objective and constraints,” J. Risk, vol. 4, no. 2, pp. 43–68, 2001, doi: [10.21314/jor.2002.057](dx.doi.org/10.21314/jor.2002.057).
+ [1.](dx.doi.org/10.21314/jor.2002.057) Krokhmal, P., Uryasev, S., and Palmquist, J., “Portfolio optimization with conditional value-at-risk objective and constraints,” J. Risk, vol. 4, no. 2, pp. 43–68, 2001, doi: [10.21314/jor.2002.057](https://dx.doi.org/10.21314/jor.2002.057).
 
- [2.](dx.doi.org/10.1016/j.ejor.2006.08.023) Fleten, S. E. and Kristoffersen, T. K., “Stochastic programming for optimizing bidding strategies of a Nordic hydropower producer,” Eur. J. Oper. Res., vol. 181, no. 2, pp. 916–928, 2007, doi:  [10.1016/j.ejor.2006.08.023](dx.doi.org/10.1016/j.ejor.2006.08.023) .
+ [2.](dx.doi.org/10.1016/j.ejor.2006.08.023) Fleten, S. E. and Kristoffersen, T. K., “Stochastic programming for optimizing bidding strategies of a Nordic hydropower producer,” Eur. J. Oper. Res., vol. 181, no. 2, pp. 916–928, 2007, doi:  [10.1016/j.ejor.2006.08.023](https://dx.doi.org/10.1016/j.ejor.2006.08.023) .
 
 # Funding
 
@@ -22,4 +22,3 @@ The development of Predicer has been partially funded in the EU Horizon [ELEXIA]
 </table>
 </table>
 </center>
-
