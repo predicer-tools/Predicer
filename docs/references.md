@@ -17,8 +17,9 @@ The development of Predicer has been partially funded in the EU Horizon [ELEXIA]
 <table width=500px frame="none">
 <tr>
 <td valign="middle" width=100px>
-<img src=images/Flag_of_Europe.svg alt="EU emblem" width=100%></td>
+<img src=https://upload.wikimedia.org/wikipedia/commons/b/b7/Flag_of_Europe.svg alt="EU emblem" width=100%></td>
 <td valign="middle">This work has been partially supported by the EU project ELEXIA (2022-2026), which has received funding from the European Climate, Energy and Mobility programme under the European Union's HORIZON research and Innovation actions under grant N°101075656.</td> 
 </table>
 </table>
 </center>
+
