@@ -450,7 +450,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 d_conn = filter(x -> x[1] == c[1] && x[2] == c[2] && x[3] == s, node_delay_tuple(input_data))
                 colname = c[1] * "_" * c[2] * "_" * s
                 if !isempty(d_conn)
-                    df[!, colname] = value.(v_node_delays[validate_tuple(model_contents, d_conn, 4)].data)
+                    df[!, colname] = value.(v_node_delays[d_conn].data)
                 end
             end
         end
@@ -637,9 +637,7 @@ function predicer_graph(input_data::InputData)
         end
     end
     graph["connections"] = unique(filter(x -> x[1] != x[2], connections))
-
-    map(x -> x[1:2], input_data.node_diffusion)
-    graph["diffusion"] = unique(filter(x -> x[1] != x[2], map(y -> y[1:2], input_data.node_diffusion)))
+    graph["diffusion"] = unique(filter(x -> x[1] != x[2], map(y -> [y.node1, y.node2], input_data.node_diffusion)))
     graph["delay"] = unique(filter(x -> x[1] != x[2], map(y -> y[1:2], input_data.node_delay)))
     return graph
 end
