@@ -267,9 +267,9 @@ function validate_node_diffusion(error_log::OrderedDict, input_data::Predicer.In
         end
     end
     for node_conn in input_data.node_diffusion
-        if minimum(node_conn.coefficient) <= 0 
+        if minimum(node_conn.coefficient) < 0 
             # Check that the node diffusion coeff is larger than 0
-            push!(error_log["errors"], "The node diffusion coefficient of Node diffusion coefficient: (" * (node_conn.node1, node_conn.node2) * ") must be larger than 0.\n")
+            push!(error_log["errors"], "The node diffusion coefficient of Node diffusion coefficient: (" * (node_conn.node1, node_conn.node2) * ") must be equal to or larger than 0.\n")
             is_valid = false 
         end
         if !(node_conn.node1 in collect(keys(nodes)))
