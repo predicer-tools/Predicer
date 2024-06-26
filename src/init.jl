@@ -86,6 +86,7 @@ end
 function generate_model(fpath::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[])
     # get input_data
     input_data = Predicer.get_data(fpath, t_horizon) |> tweak_input!
+    inputdata_to_json_file(input_data, "building.json")
     return generate_model(Predicer.setup_optimizer(), input_data), input_data
 end
 

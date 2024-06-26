@@ -9,6 +9,8 @@ module Predicer
 
     include("import_input_data.jl")
     
+    export test_function
+    export inputdata_to_json_file
 
     export Initialize,
     solve_model,
