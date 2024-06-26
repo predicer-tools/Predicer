@@ -306,18 +306,17 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
     # node history
     if length(names(system_data["node_history"])) > 1
         ns = names(system_data["node_history"])[2:end]
-        ns_with_all = filter(x -> occursin("ALL", x) || !occursin("ALL", x) || !occursin("ALL", x), ns)
-        ns_without_all = filter(x -> !occursin("ALL", x) || !occursin("ALL", x) || !occursin("ALL", x), ns)
+        ns_with_all = filter(x -> occursin("ALL", x), ns)
+        ns_without_all = filter(x -> !occursin("ALL", x), ns)
         unique_nodenames_without_all = unique(map(x -> x[1], map(n -> map(x -> strip(x), split(n, ",")), ns_without_all)))
         unique_nodenames_with_all = unique(map(x -> x[1], map(n -> map(x -> strip(x), split(n, ",")), ns_with_all)))
         unique_scenarios_without_all = unique(map(x -> x[end], map(n -> map(x -> strip(x), split(n, ",")), ns_without_all)))
 
-        for n in unique_nodenames_with_all
+        for n in unique_nodenames_with_all, s in unique_scenarios_without_all
             node_history[n] = NodeHistory(n)
-            cols = filter(x -> n == strip(split(x, ",")[1]), ns)
-
+            cols = filter(x -> n == strip(split(x, ",")[1]) && s == strip(split(x, ",")[end]), ns)
             if length(cols) != 2
-                return Error("Invalid amount of columns for node: ", n, " and scenario: ", s, "!")
+                return error("Invalid amount of columns for node: ", n, " and scenario: ", s, "!")
             else
                 ts = []
                 vals = []
@@ -330,7 +329,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                     end
                 end
                 if isempty(ts) || isempty(vals) || length(ts) != length(vals)
-                    return Error("Invalid node history column lengths for node: ", n, " and scenario: ", s, ".")
+                    return error("Invalid node history column lengths for node: ", n, " and scenario: ", s, ".")
                 else
                     for s in collect(keys(scens))
                         t_series = TimeSeries(s, ts, vals)
@@ -344,7 +343,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
             for s in unique_scenarios_without_all
                 cols = filter(x -> n == strip(split(x, ",")[1]) &&  s == strip(split(x, ",")[end]), ns)
                 if length(cols) != 2
-                    return Error("Invalid amount of columns for node: ", n, " and scenario: ", s, "!")
+                    return error("Invalid amount of columns for node: ", n, " and scenario: ", s, "!")
                 else
                     ts = []
                     vals = []
@@ -357,7 +356,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                         end
                     end
                     if isempty(ts) || isempty(vals) || length(ts) != length(vals)
-                        return Error("Invalid node history column lengths for node: ", n, " and scenario: ", s, ".")
+                        return error("Invalid node history column lengths for node: ", n, " and scenario: ", s, ".")
                     else
                         t_series = TimeSeries(s, ts, vals)
                         push!(node_history[n].steps, t_series)
@@ -382,7 +381,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                 s_col = collect(skipmissing(system_data["inflow_blocks"][!,inflow_blocks[b].name*","*s]))
                 if length(t_col) != length(s_col)
                     msg = "The data columns of the inflow block " * String(b) * " are not the same length!"
-                    throw(ErrorException(msg))
+                    throw(errorException(msg))
                 end
                 series = TimeSeries(
                     s, string.(ZonedDateTime.(t_col, tz"UTC")), s_col)
