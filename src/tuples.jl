@@ -56,7 +56,7 @@ end
 
 Helper function used to correct generated index tuples in cases when the start of the optimization horizon is the same for all scenarios.
 """
-function validate_tuple(mc::OrderedDict, tuple::NTuple{N, String} where N, s_index::Int)
+function validate_tuple(mc::OrderedDict, tuple::NTuple{N, AbstractString} where N, s_index::Int)
     if !isempty(mc["validation_dict"])
         if s_index + 1 < length(tuple)
             return (tuple[1:s_index-1]..., mc["validation_dict"][tuple[s_index:s_index+1]]..., tuple[s_index+2:end]...)
