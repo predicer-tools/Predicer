@@ -270,7 +270,7 @@ Process topologies are used to define the process flows and capacities in the mo
 | source_sink  | String | Determines whether the connection node is a source or a sink for the process      |
 | node         | String | Name of the connection node                                                       |
 | capacity     | Float  | Capacity of the connection                                                        |
-| VOM_cost     | Float  | Variable operational and maintenance cost of using the corresponding process flow |
+| vom_cost     | Float  | Variable operational and maintenance cost of using the corresponding process flow |
 | ramp_up      | Float  | Determines the hourly upward ramp rate of the corresponding process flow          |
 | ramp_down    | Float  | Determines the hourly downward ramp rate of the corresponding process flow        |
 | initial_load | Float  | Sets the initial value of the process load, from which optimization starts        |

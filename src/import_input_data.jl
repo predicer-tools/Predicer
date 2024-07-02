@@ -148,7 +148,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
             end
         end
         if Bool(n.is_state)
-            Predicer.add_state(nodes[n.node], Predicer.State(n.in_max, n.out_max, n.state_loss_proportional, n.state_max, n.state_min, n.initial_state, n.scenario_independent_state, n.is_temp, n.T_E_conversion, n.residual_value))
+            Predicer.add_state(nodes[n.node], Predicer.State(n.in_max, n.out_max, n.state_loss_proportional, n.state_max, n.state_min, n.initial_state, n.scenario_independent_state, n.is_temp, n.t_e_conversion, n.residual_value))
         end
         if Bool(n.is_res)
             Predicer.add_node_to_reserve(nodes[n.node])
@@ -208,9 +208,9 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
             pt = system_data["process_topology"][j, :]
             if pt.process == p.process
                 if pt.source_sink == "source"
-                    push!(sources, (pt.node, pt.capacity, pt.VOM_cost, pt.ramp_up, pt.ramp_down, pt.initial_load, pt.initial_flow))
+                    push!(sources, (pt.node, pt.capacity, pt.vom_cost, pt.ramp_up, pt.ramp_down, pt.initial_load, pt.initial_flow))
                 elseif pt.source_sink == "sink"
-                    push!(sinks, (pt.node, pt.capacity, pt.VOM_cost, pt.ramp_up, pt.ramp_down, pt.initial_load, pt.initial_flow))
+                    push!(sinks, (pt.node, pt.capacity, pt.vom_cost, pt.ramp_up, pt.ramp_down, pt.initial_load, pt.initial_flow))
                 end
             end
         end
@@ -254,7 +254,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
 
     for i in 1:nrow(system_data["groups"])
         d_row = system_data["groups"][i, :]
-        gtype = d_row.type
+        gtype = d_row.group_type
         gname = d_row.group
         if gtype == "node" || gtype == "Node" || gtype == "NODE" || gtype == "n"
             if !(gname in collect(keys(groups)))
@@ -403,14 +403,14 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
 
     for i in 1:nrow(system_data["reserve_type"])
         tt = system_data["reserve_type"][i,:]
-        reserve_type[tt.type] = tt.ramp_factor
+        reserve_type[tt.reserve_type] = tt.ramp_factor
     end
 
     #-----------------------------------------------
    
     for i in 1:nrow(system_data["markets"])
         mm = system_data["markets"][i, :]
-        markets[mm.market] = Predicer.Market(mm.market, mm.type, mm.node, mm.processgroup, mm.direction, mm.reserve_type, mm.is_bid, mm.is_limited, mm.min_bid, mm.max_bid, mm.fee)
+        markets[mm.market] = Predicer.Market(mm.market, mm.market_type, mm.node, mm.processgroup, mm.direction, mm.reserve_type, mm.is_bid, mm.is_limited, mm.min_bid, mm.max_bid, mm.fee)
         #
         for s in keys(scens)
             timesteps = timeseries_data["scenarios"][s]["market_prices"].t
@@ -428,7 +428,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                 end
             end
         end
-        if mm.type == "energy" && mm.is_bid == true
+        if mm.market_type == "energy" && mm.is_bid == true
             for s in keys(scens)
                 timesteps = timeseries_data["scenarios"][s]["balance_prices"]["up"].t
                 up_data = timeseries_data["scenarios"][s]["balance_prices"]["up"][!, mm.market]
@@ -439,7 +439,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                 push!(markets[mm.market].up_price, up_ts)
                 push!(markets[mm.market].down_price, down_ts)
             end
-        elseif mm.type == "reserve"
+        elseif mm.market_type == "reserve"
             for s in keys(scens)
                 timesteps = timeseries_data["scenarios"][s]["reserve_realisation"].t
                 rrs = timeseries_data["scenarios"][s]["reserve_realisation"][!, mm.market]

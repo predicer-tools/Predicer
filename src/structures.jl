@@ -102,10 +102,10 @@ end
         initial_state::Float64
         is_scenario_independent::Bool
         is_temp::Bool
-        T_E_conversion::Float64
+        t_e_conversion::Float64
         residual_value::Float64
-        function State(in_max, out_max, state_loss_proportional, state_max, state_min=0, initial_state=0, is_temp=0, T_E_conversion=1, residual_value=0)
-            return new(in_max, out_max, state_loss_proportional, state_max, state_min, initial_state, is_temp, T_E_conversion, residual_value)
+        function State(in_max, out_max, state_loss_proportional, state_max, state_min=0, initial_state=0, is_temp=0, t_e_conversion=1, residual_value=0)
+            return new(in_max, out_max, state_loss_proportional, state_max, state_min, initial_state, is_temp, t_e_conversion, residual_value)
         end
     end
 
@@ -119,7 +119,7 @@ A struct for node states (storage), holds information on the parameters of the s
 - `initial_state::Float64`: Initial value of the state variable at t = 0.
 - `is_scenario_independent::Bool`: Flag indicating if the variables for the state should be equal in all scenarios (true) or different for different scenarios (false).
 - `is_temp::Bool`: Indicates if the value of the state is temperature (true) or energy (false).
-- `T_E_conversion::Float64`: Conversion coefficient between temperature and energy. (E = T_E_conversion * T)
+- `t_e_conversion::Float64`: Conversion coefficient between temperature and energy. (E = t_e_conversion * T)
 - `residual_value::Float64`: Value of the product remaining in the state after time horizon. 
 
 """
@@ -132,10 +132,10 @@ mutable struct State
     initial_state::Float64
     is_scenario_independent::Bool
     is_temp::Bool
-    T_E_conversion::Float64
+    t_e_conversion::Float64
     residual_value::Float64
-    function State(in_max, out_max, state_loss_proportional, state_max, state_min=0, initial_state=0, is_scenario_independent=false, is_temp=0, T_E_conversion=1, residual_value=0)
-        return new(in_max, out_max, state_loss_proportional, state_max, state_min, initial_state, is_scenario_independent, is_temp, T_E_conversion, residual_value)
+    function State(in_max, out_max, state_loss_proportional, state_max, state_min=0, initial_state=0, is_scenario_independent=false, is_temp=0, t_e_conversion=1, residual_value=0)
+        return new(in_max, out_max, state_loss_proportional, state_max, state_min, initial_state, is_scenario_independent, is_temp, t_e_conversion, residual_value)
     end
 end
 
@@ -324,22 +324,22 @@ end
 """ 
     struct Group
         name::String
-        type::String
+        g_type::String
         members::Vector{String}
     end
 
 A struct for defining groups of processes or nodes in the model
 # Fields
 - `name::String`: Name of the group
-- `type::String`: Type of the group. Either process or Node
+- `g_type::String`: Type of the group. Either process or Node
 - `members::Vector{String}`: Names of the members in the group. 
 """
 struct Group
     name::String
-    type::String
+    g_type::String
     members::Vector{String}
-    function Group(name::String, type::String, members::Vector{String}=[])
-        return new(name, type, members)
+    function Group(name::String, g_type::String, members::Vector{String}=[])
+        return new(name, g_type, members)
     end
 end
 
@@ -611,14 +611,14 @@ end
         source::String
         sink::String
         capacity::Float64
-        VOM_cost::Float64
+        vom_cost::Float64
         ramp_up::Float64
         ramp_down::Float64
         initial_load::Float64
         initial_flow::Float64
         cap_ts::TimeSeriesData
-        function Topology(source::String, sink::String, capacity::Float64, VOM_cost::Float64, ramp_up::Float64, ramp_down::Float64)
-            return new(source, sink, capacity, VOM_cost, ramp_up, ramp_down, TimeSeriesData())
+        function Topology(source::String, sink::String, capacity::Float64, vom_cost::Float64, ramp_up::Float64, ramp_down::Float64)
+            return new(source, sink, capacity, vom_cost, ramp_up, ramp_down, TimeSeriesData())
         end
     end
 
@@ -627,7 +627,7 @@ A struct for a process topology, signifying the connection between flows in a pr
 - `source::String`: Name of the source of the topology.
 - `sink::String`: Name of the sink of the topology.
 - `capacity::Float64`: Upper limit of the flow variable for the topology. 
-- `VOM_cost::Float64`: VOM cost of using this connection. 
+- `vom_cost::Float64`: vom cost of using this connection. 
 - `ramp_up::Float64`: Maximum allowed increase of the linked flow variable value between timesteps. Min 0.0 max 1.0. 
 - `ramp_down::Float64`: Minimum allowed increase of the linked flow variable value between timesteps. Min 0.0 max 1.0.
 - `initial_load::Float64`: Initial load of the process at the start of the optimization horizon. Affects the load (reserve) on the first timesteps for units with low ramping speed. 
@@ -638,14 +638,14 @@ mutable struct Topology
     source::String
     sink::String
     capacity::Float64
-    VOM_cost::Float64
+    vom_cost::Float64
     ramp_up::Float64
     ramp_down::Float64
     initial_load::Float64
     initial_flow::Float64
     cap_ts::TimeSeriesData
-    function Topology(source::String, sink::String, capacity::Float64, VOM_cost::Float64, ramp_up::Float64, ramp_down::Float64, initial_load::Float64, initial_flow::Float64)
-        return new(source, sink, capacity, VOM_cost, ramp_up, ramp_down, initial_load, initial_flow, TimeSeriesData())
+    function Topology(source::String, sink::String, capacity::Float64, vom_cost::Float64, ramp_up::Float64, ramp_down::Float64, initial_load::Float64, initial_flow::Float64)
+        return new(source, sink, capacity, vom_cost, ramp_up, ramp_down, initial_load, initial_flow, TimeSeriesData())
     end
 end
 
@@ -904,7 +904,7 @@ end
 """
     struct Market
         name::String
-        type::String
+        m_type::String
         node::AbstractString
         processgroup::AbstractString
         direction::String
@@ -928,7 +928,7 @@ end
 A struct for markets.
 # Fields
 - `name::String`: Name of the market. 
-- `type::String`: Type of the market (energy/reserve).
+- `m_type::String`: Type of the market (energy/reserve).
 - `node::AbstractString`: Name of the node this market is connected to.
 - `processgroup::AbstractString`: Name of the group containing information which processes can participate in the market. 
 - `direction::String`: Direction of the market (up/down/updown).
@@ -947,7 +947,7 @@ A struct for markets.
 """
 struct Market
     name::String
-    type::String
+    m_type::String
     node::AbstractString
     processgroup::AbstractString
     direction::String
@@ -963,8 +963,8 @@ struct Market
     down_price::TimeSeriesData
     reserve_activation_price::TimeSeriesData
     fixed::Vector{Tuple{AbstractString, Number}}
-    function Market(name, type, node, pgroup, direction, reserve_type, is_bid, is_limited, min_bid, max_bid, fee)
-        return new(name, type, node, pgroup, direction, TimeSeriesData(), reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
+    function Market(name, m_type, node, pgroup, direction, reserve_type, is_bid, is_limited, min_bid, max_bid, fee)
+        return new(name, m_type, node, pgroup, direction, TimeSeriesData(), reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
     end
 end
 
@@ -1042,7 +1042,7 @@ end
 """
     struct GenConstraint
         name::String
-        type::String
+        gc_type::String
         is_setpoint::Bool
         penalty::Float64
         factors::Vector{ConFactor}
@@ -1057,13 +1057,13 @@ Struct for general constraints.
 - `name::String`: Name of the generic constraint. 
 - `is_setpoint::Bool`: Indicates whether the constraint is a setpoint (=true) with possible deviation from the given value, or fixed (=false) 
 - `penalty::Float64`: Name of the generic constraint. 
-- `type::String`: Type of the generic constraint. 
+- `gc_type::String`: Type of the generic constraint. 
 - `factors::Vector{ConFactor}`: Vector of ConFactors. 
 - `constant::TimeSeriesData`: TimeSeries?
 """
 struct GenConstraint
     name::String
-    type::String
+    gc_type::String
     is_setpoint::Bool
     penalty::Float64
     factors::Vector{ConFactor}
