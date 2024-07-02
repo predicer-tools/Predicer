@@ -43,119 +43,171 @@ Setup node balance constraints used in the model.
 """
 function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
-    process_tuple = process_topology_tuples(input_data)
-    block_tuples = Predicer.block_tuples(input_data)
-    
-    node_state_tuple = state_node_tuples(input_data)
-    node_balance_tuple = balance_node_tuples(input_data)
-    previous_node_balance_tuple = previous_balance_node_tuples(input_data)
+
+    constraint_indices = balance_node_tuples(input_data)
+
+    # initialize expressions
+    e_constraint_node_bal_eq = @expression(model, e_constraint_node_bal_eq[tup in constraint_indices], AffExpr(0.0))
+    e_node_bal_eq_prod = @expression(model, e_node_bal_eq_prod[tup in constraint_indices], AffExpr(0.0))
+    e_node_bal_eq_cons = @expression(model, e_node_bal_eq_cons[tup in constraint_indices], AffExpr(0.0))
+    e_node_bal_eq_history = @expression(model, e_node_bal_eq_history[tup in constraint_indices], AffExpr(0.0))
+    e_node_bal_eq_inflow_expr =  @expression(model, e_node_bal_eq_inflow_expr[tup in constraint_indices], AffExpr(0.0))
+    e_node_bal_eq_inflow_block_expr =  @expression(model, e_node_bal_eq_inflow_block_expr[tup in constraint_indices], AffExpr(0.0))
+    e_node_bal_eq_diffusion = @expression(model, e_node_bal_eq_diffusion[tup in constraint_indices], AffExpr(0.0))
+    e_node_bal_eq_state_balance = @expression(model, e_node_bal_eq_state_balance[tup in constraint_indices], AffExpr(0.0))
+    e_node_bal_eq_state_losses = @expression(model, e_node_bal_eq_state_losses[tup in constraint_indices], AffExpr(0.0))
+    e_node_bal_eq_delay = @expression(model, e_node_bal_eq_delay[tup in constraint_indices], AffExpr(0.0))
+    e_node_bal_eq_res_real = @expression(model, e_node_bal_eq_res_real[tup in constraint_indices], AffExpr(0.0))
+
+    # consumer/producer flows and loads
     v_flow = model.obj_dict[:v_flow]
-    v_block = model.obj_dict[:v_block]
+    ("hp1", "elc", "hp1", "s1", "2022-04-20T00:00:00+00:00")
+    reduced_v_flow_inds = unique(map(x -> (x[1:3]), process_topology_tuples(input_data)))
+    for n in unique(map(nbt -> nbt[1], balance_node_tuples(input_data)))
+        cons_flows = filter(rvfi -> rvfi[2] == n, reduced_v_flow_inds)
+        prod_flows = filter(rvfi -> rvfi[3] == n, reduced_v_flow_inds)
+        for s in scenarios(input_data), t in input_data.temporals.t
+            e_constraint_node_bal_eq[(n, s, t)] = AffExpr(0.0)
+            if !isempty(cons_flows)
+                add_to_expression!(e_node_bal_eq_cons[(n, s, t)], sum(v_flow[Predicer.validate_tuple(model_contents, map(x -> (x..., s, t), cons_flows), 4)])) 
+            end
+            if !isempty(prod_flows)
+                add_to_expression!(e_node_bal_eq_prod[(n, s, t)], sum(v_flow[Predicer.validate_tuple(model_contents, map(x -> (x..., s, t), prod_flows), 4)])) 
+            end
+            add_to_expression!(e_constraint_node_bal_eq[(n, s, t)], e_node_bal_eq_prod[(n, s, t)] - e_node_bal_eq_cons[(n, s, t)])
+        end
+    end
+
+    # state in/out/max/ in, etc
     if input_data.setup.contains_states
         v_state = model.obj_dict[:v_state]
+        pnbt = previous_balance_node_tuples(input_data)
+        for tup in state_node_tuples(input_data)
+            add_to_expression!(e_node_bal_eq_state_balance[tup], v_state[Predicer.validate_tuple(model_contents, tup, 2)])
+            if tup[3] == input_data.temporals.t[1] #first timestep
+                add_to_expression!(e_node_bal_eq_state_balance[tup], - input_data.nodes[tup[1]].state.initial_state)
+                add_to_expression!(e_node_bal_eq_state_losses[tup], input_data.nodes[tup[1]].state.state_loss_proportional*input_data.temporals(tup[3])*input_data.nodes[tup[1]].state.initial_state)
+            else
+                add_to_expression!(e_node_bal_eq_state_balance[tup], -v_state[Predicer.validate_tuple(model_contents, pnbt[tup], 2)])
+                add_to_expression!(e_node_bal_eq_state_losses[tup], input_data.nodes[tup[1]].state.state_loss_proportional*input_data.temporals(tup[3])*v_state[Predicer.validate_tuple(model_contents, pnbt[tup], 2)])
+            end
+            add_to_expression!(e_constraint_node_bal_eq[tup], -e_node_bal_eq_state_balance[tup] - e_node_bal_eq_state_losses[tup])
+        end
     end
+
+    # v_res_real
     if input_data.setup.contains_reserves
         v_res_real = model_contents["expression"]["v_res_real"]
-        node_res = node_reserves(input_data)
+        for tup in constraint_indices
+            if tup in node_reserves(input_data)
+                add_to_expression!(e_node_bal_eq_res_real[tup], -v_res_real[tup])
+            end
+            add_to_expression!(e_constraint_node_bal_eq[tup], e_node_bal_eq_res_real[tup])
+        end
     end
 
-    
-
+    # vq_state_dw and vq_state_up
     if input_data.setup.use_node_dummy_variables
         vq_state_up = model.obj_dict[:vq_state_up]
         vq_state_dw = model.obj_dict[:vq_state_dw]
+        for ci in constraint_indices
+            add_to_expression!(e_constraint_node_bal_eq[ci], - vq_state_dw[Predicer.validate_tuple(model_contents, ci, 2)])
+            add_to_expression!(e_constraint_node_bal_eq[ci], vq_state_up[Predicer.validate_tuple(model_contents, ci, 2)])
+        end
     end
-    temporals = input_data.temporals  
-    nodes = input_data.nodes
 
-
-    #######
-    ## Setup inflow expression
-    inflow_expr =  model_contents["expression"]["inflow_expr"] = OrderedDict()
-    for n in collect(keys(nodes))
-        for s in scenarios(input_data), t in temporals.t
-            inflow_expr[(n, s, t)] = AffExpr(0.0)
-            if nodes[n].is_inflow
-                add_to_expression!(inflow_expr[(n, s, t)], nodes[n].inflow(s, t))
-            end
-            for b_tup in filter(x -> x[2] == n && x[3] == s && x[4] == t, block_tuples) # get tuples with blocks
-                v_tup = (b_tup[1], b_tup[2], Predicer.validate_tuple(model_contents,(b_tup[3],input_data.inflow_blocks[b_tup[1]].start_time),1)[1])
-                add_to_expression!(inflow_expr[(n, s, t)], input_data.inflow_blocks[b_tup[1]].data(s,t) * v_block[v_tup])
-            end
-            if nodes[n].is_state
-                if nodes[n].state.is_temp
-                    inflow_expr[(n, s, t)] = inflow_expr[(n, s, t)] * nodes[n].state.T_E_conversion
+    # inflow expression
+    for n in unique(map(nbt -> nbt[1], balance_node_tuples(input_data)))
+        if input_data.nodes[n].is_inflow
+            for s in scenarios(input_data), t in input_data.temporals.t
+                inflow_val = input_data.nodes[n].inflow(s, t)
+                if input_data.nodes[n].is_state
+                    if input_data.nodes[n].state.is_temp
+                        inflow_val = inflow_val * input_data.nodes[n].state.t_e_conversion
+                    end
                 end
+                add_to_expression!(e_node_bal_eq_inflow_expr[(n, s, t)], inflow_val)
+                add_to_expression!(e_constraint_node_bal_eq[(n, s, t)],  e_node_bal_eq_inflow_expr[(n, s, t)])
             end
         end
     end
 
-    e_node_diff = model_contents["expression"]["e_node_diff"] = OrderedDict()
-    e_node_delay = model_contents["expression"]["e_node_delay"] = OrderedDict()
-    e_node_history = model_contents["expression"]["e_node_history"] = OrderedDict()
-    e_prod = model_contents["expression"]["e_prod"] = OrderedDict()
-    e_cons = model_contents["expression"]["e_cons"] = OrderedDict()
-    e_state = model_contents["expression"]["e_state"] = OrderedDict()
-    for tup in node_balance_tuple
-        e_node_diff[tup] = AffExpr(0.0)
-        e_node_delay[tup] = AffExpr(0.0)
-        e_node_history[tup] = AffExpr(0.0)
-        e_prod[tup] = AffExpr(0.0)
-        e_cons[tup] = AffExpr(0.0)
-        e_state[tup] = AffExpr(0.0)
+    # inflow blocks
+    if !isempty(input_data.inflow_blocks)
+        v_block = model.obj_dict[:v_block]
+        for tup in constraint_indices
+            n = tup[1]
+            s = tup[2]
+            t = tup[3]
+            for b_tup in filter(x -> x[2] == n && x[3] == s && x[4] == t, block_tuples(input_data)) # get tuples with blocks
+                v_tup = (b_tup[1], b_tup[2], Predicer.validate_tuple(model_contents,(b_tup[3],input_data.inflow_blocks[b_tup[1]].start_time),1)[1])
+                add_to_expression!(e_node_bal_eq_inflow_block_expr[(n, s, t)], v_block[v_tup])
+            end
+            if input_data.nodes[tup[1]].is_state
+                if input_data.nodes[tup[1]].state.is_temp
+                    e_node_bal_eq_inflow_block_expr[(n, s, t)] = e_node_bal_eq_inflow_block_expr[(n, s, t)] * input_data.nodes[tup[1]].state.t_e_conversion
+                end
+            end
+            add_to_expression!(e_constraint_node_bal_eq[(n, s, t)],  e_node_bal_eq_inflow_block_expr[(n, s, t)])
+        end
+    end
+    for tup in constraint_indices
+        add_to_expression!(e_constraint_node_bal_eq[tup], e_node_bal_eq_inflow_block_expr[tup])
     end
 
     #setup diffusion expression
-    if input_data.setup.contains_diffusion
-        for d_tup in node_diffusion_tuple(input_data)
-            d_node = d_tup[1]
-            s = d_tup[2]
-            t = d_tup[3]
-
-            d_node_state = v_state[validate_tuple(model_contents, d_tup, 2)]
-            if !nodes[d_node].state.is_temp
-                d_node_state /= nodes[d_node].state.T_E_conversion
-            end
-
+    if input_data.setup.contains_diffusion && input_data.setup.contains_states
+        v_state = model.obj_dict[:v_state]
+        for d_node in unique(map(x -> x[1], node_diffusion_tuple(input_data)))
             from_diff = filter(x -> x.node1 == d_node, input_data.node_diffusion)
             to_diff = filter(x -> x.node2 == d_node, input_data.node_diffusion)
-
-            for from_node in from_diff
-                c = from_node.coefficient(s, t)
-                n_ = from_node.node2
-                n_node_state = v_state[validate_tuple(model_contents, (n_, s, t), 2)]
-                if !nodes[n_].state.is_temp
-                    n_node_state /= nodes[n_].state.T_E_conversion
+            for s in scenarios(input_data), t in input_data.temporals.t
+                d_tup = (d_node, s, t)
+                d_node_state = v_state[validate_tuple(model_contents, d_tup, 2)]
+                if !input_data.nodes[d_node].state.is_temp
+                    d_node_state /= input_data.nodes[d_node].state.t_e_conversion
                 end
-                add_to_expression!(e_node_diff[d_tup], - c * (d_node_state - n_node_state))
-            end
-            for to_node in to_diff
-                c = to_node.coefficient(s, t)
-                n_ = to_node.node1
-                n_node_state = v_state[validate_tuple(model_contents, (n_, s, t), 2)]
-                if !nodes[n_].state.is_temp
-                    n_node_state /= nodes[n_].state.T_E_conversion
+                for from_node in from_diff
+                    c = from_node.coefficient(s, t)
+                    n_ = from_node.node2
+                    n_node_state = v_state[validate_tuple(model_contents, (n_, s, t), 2)]
+                    if !input_data.nodes[n_].state.is_temp
+                        n_node_state /= input_data.nodes[n_].state.t_e_conversion
+                    end
+                    add_to_expression!(e_node_bal_eq_diffusion[d_tup], -c * (d_node_state - n_node_state))
                 end
-                add_to_expression!(e_node_diff[d_tup], c * (n_node_state - d_node_state))
+                for to_node in to_diff
+                    c = to_node.coefficient(s, t)
+                    n_ = to_node.node1
+                    n_node_state = v_state[validate_tuple(model_contents, (n_, s, t), 2)]
+                    if !input_data.nodes[n_].state.is_temp
+                        n_node_state /= input_data.nodes[n_].state.t_e_conversion
+                    end
+                    add_to_expression!(e_node_bal_eq_diffusion[d_tup], c * (n_node_state - d_node_state))
+                end
             end
+        end
+        for tup in constraint_indices
+            add_to_expression!(e_constraint_node_bal_eq[tup], e_node_bal_eq_diffusion[tup])
         end
     end
 
     # setup delay expression
     if input_data.setup.contains_delay
         v_node_delay = model.obj_dict[:v_node_delay]
-        delay_tups = node_delay_tuple(input_data)
-        for tup in node_balance_tuple
+        delay_tups = node_delay_tuple(input_data) #(n1, n2, s, t_at_n1, t_at_n2)
+        for tup in balance_node_tuples(input_data)
             cons_delays = filter(x -> x[1] == tup[1] && x[3] == tup[2] && x[4] == tup[3], delay_tups) # Get delay flows "out" of node
             prod_delays = filter(x -> x[2] == tup[1] && x[3] == tup[2] && x[5] == tup[3], delay_tups) # Get delay flows "in" to node
             for d in cons_delays
                 # consuming flows as negative
-                add_to_expression!(e_node_delay[tup], -1, v_node_delay[d])
+                add_to_expression!(e_node_bal_eq_delay[tup], -1, v_node_delay[d])
             end
             for d in prod_delays
                 # producing flows as positive
-                add_to_expression!(e_node_delay[tup], v_node_delay[d])
+                add_to_expression!(e_node_bal_eq_delay[tup], v_node_delay[d])
             end
+            add_to_expression!(e_constraint_node_bal_eq[tup], e_node_bal_eq_delay[tup])
         end
     end
 
@@ -163,79 +215,19 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
     for n in collect(keys(input_data.node_histories))
         for ts_data in input_data.node_histories[n].steps.ts_data
             for ts in ts_data.series
-                add_to_expression!(e_node_history[(n, ts_data.scenario, ts[1])], ts[2])
+                add_to_expression!(e_node_bal_eq_history[(n, ts_data.scenario, ts[1])], ts[2])
             end
         end
     end
+    e_node_bal_eq_state_balance
 
+    con_node_bal_eq = @constraint(model, con_node_bal_eq[ci in constraint_indices], e_constraint_node_bal_eq[ci] == 0)
+    con_node_state_max_up = @constraint(model, con_node_state_max_up[tup in state_node_tuples(input_data)], e_node_bal_eq_state_balance[tup] <= input_data.nodes[tup[1]].state.in_max * input_data.temporals(tup[3]))
+    con_node_state_max_dw = @constraint(model, con_node_state_max_dw[tup in state_node_tuples(input_data)], -e_node_bal_eq_state_balance[tup] <= input_data.nodes[tup[1]].state.out_max * input_data.temporals(tup[3]))
 
-    # Balance constraints
-    # gather data in dicts, e_prod, etc, now point to a Dict()
-    e_prod = model_contents["expression"]["e_prod"] = OrderedDict()
-    e_cons = model_contents["expression"]["e_cons"] = OrderedDict()
-    e_state = model_contents["expression"]["e_state"] = OrderedDict()
-    e_state_losses = model_contents["expression"]["e_state_losses"] = OrderedDict()
-
-    proc_tup_reduced = unique(map(x -> (x[1:3]), process_tuple))
-    for n in unique(map(x -> x[1], node_balance_tuple))
-
-        # n of form (node)
-        # process tuple of form (process_name, source, sink)
-        cons_procs = unique(filter(x -> x[2] == n, proc_tup_reduced))
-        prod_procs = unique(filter(x -> x[3] == n, proc_tup_reduced))
-
-        for s in scenarios(input_data), t in temporals.t
-            tu = (n, s, t)
-            cons_procs_with_s_and_t = map(x -> (x[1], x[2], x[3], s, t), cons_procs)
-            prod_procs_with_s_and_t = map(x -> (x[1], x[2], x[3], s, t), prod_procs)
-
-            e_prod[tu] = AffExpr(0.0)
-            e_cons[tu] = AffExpr(0.0)
-            e_state[tu] = AffExpr(0.0)
-            e_state_losses[tu] = AffExpr(0.0)
-
-            if input_data.setup.use_node_dummy_variables
-                add_to_expression!(e_cons[tu], -vq_state_dw[validate_tuple(model_contents, tu, 2)])
-                add_to_expression!(e_prod[tu], vq_state_up[validate_tuple(model_contents, tu, 2)])
-            end
-            add_to_expression!(e_cons[tu], inflow_expr[tu])
-            add_to_expression!(e_prod[tu], e_node_diff[tu])
-            add_to_expression!(e_prod[tu], e_node_delay[tu])
-            add_to_expression!(e_prod[tu], e_node_history[tu])
-            if input_data.setup.contains_reserves && tu in node_res
-                add_to_expression!(e_cons[tu], -v_res_real[tu])
-            end
-    
-            if !isempty(cons_procs_with_s_and_t)
-                add_to_expression!(e_cons[tu], -sum(v_flow[validate_tuple(model_contents, cons_procs_with_s_and_t, 4)]))
-            end
-            if !isempty(prod_procs_with_s_and_t)
-                add_to_expression!(e_prod[tu], sum(v_flow[validate_tuple(model_contents, prod_procs_with_s_and_t, 4)]))
-            end
-    
-            if nodes[tu[1]].is_state
-                add_to_expression!(e_state[tu], v_state[validate_tuple(model_contents, tu, 2)])
-                if tu[3] == temporals.t[1]
-                    add_to_expression!(e_state[tu], - nodes[tu[1]].state.initial_state)
-                    add_to_expression!(e_state_losses[tu], nodes[tu[1]].state.state_loss_proportional*temporals(tu[3])*nodes[tu[1]].state.initial_state)
-                else
-                    add_to_expression!(e_state[tu], - v_state[validate_tuple(model_contents, previous_node_balance_tuple[tu], 2)])
-                    add_to_expression!(e_state_losses[tu], nodes[tu[1]].state.state_loss_proportional*temporals(tu[3])*v_state[validate_tuple(model_contents, previous_node_balance_tuple[tu], 2)])
-                end
-                if nodes[tu[1]].state.is_temp
-                    e_state[tu] = e_state[tu] * nodes[tu[1]].state.T_E_conversion
-                    e_state_losses[tu] = e_state_losses[tu] * nodes[tu[1]].state.T_E_conversion
-                end
-            end
-        end
-    end
-
-    node_bal_eq = @constraint(model, node_bal_eq[tup in node_balance_tuple], temporals(tup[3]) * (e_prod[tup] + e_cons[tup]) == e_state[tup] + e_state_losses[tup])
-    node_state_max_up = @constraint(model, node_state_max_up[tup in node_state_tuple], e_state[tup] <= nodes[tup[1]].state.in_max * temporals(tup[3]))
-    node_state_max_dw = @constraint(model, node_state_max_dw[tup in node_state_tuple], -e_state[tup] <= nodes[tup[1]].state.out_max * temporals(tup[3]))  
-    for tu in node_state_tuple
-        set_upper_bound(v_state[validate_tuple(model_contents, tu, 2)], nodes[tu[1]].state.state_max)
-        set_lower_bound(v_state[validate_tuple(model_contents, tu, 2)], nodes[tu[1]].state.state_min)
+    for tu in state_node_tuples(input_data)
+        set_upper_bound(v_state[validate_tuple(model_contents, tu, 2)], input_data.nodes[tu[1]].state.state_max)
+        set_lower_bound(v_state[validate_tuple(model_contents, tu, 2)], input_data.nodes[tu[1]].state.state_min)
     end
 end
 
@@ -1015,13 +1007,13 @@ function setup_fixed_values(model_contents::OrderedDict, input_data::Predicer.In
             temps = map(x->x[1],markets[m].fixed)
             fix_vec = map(x->x[2],markets[m].fixed)
 
-            if markets[m].type == "energy"
+            if markets[m].m_type == "energy"
                 for (t, fix_val) in zip(temps, fix_vec)
                     for s in scenarios
                         fix_expr[(m, s, t)] = @expression(model,v_bid[(m,s,t)]-fix_val)
                     end
                 end
-            elseif markets[m].type == "reserve" && input_data.setup.contains_reserves
+            elseif markets[m].m_type == "reserve" && input_data.setup.contains_reserves
                 for (t, fix_val) in zip(temps, fix_vec)
                     for s in scenarios
                         fix(v_res_final[validate_tuple(model_contents, (m, s, t), 2)], fix_val; force=true)
@@ -1060,11 +1052,11 @@ function setup_bidding_curve_constraints(model_contents::OrderedDict, input_data
     for tup in bid_scen_tuple
         v_bid[tup] = AffExpr(0.0)
         e_bid_slot[tup] = AffExpr(0.0)
-        if markets[tup[1]].type == "energy"
-            add_to_expression!(v_bid[tup],v_flow[filter(x->x[3]==tup[1] && x[5]==tup[3] && x[4]==tup[2],process_tuple)[1]],1.0)
-            add_to_expression!(v_bid[tup],v_flow_bal[filter(x->x[1]==tup[1] && x[2]=="up" && x[4]==tup[3] && x[3]==tup[2],balance_process_tuple)[1]],1.0)
-            add_to_expression!(v_bid[tup],v_flow[filter(x->x[2]==tup[1] && x[5]==tup[3] && x[4]==tup[2],process_tuple)[1]],-1.0)
-            add_to_expression!(v_bid[tup],v_flow_bal[filter(x->x[1]==tup[1] && x[2]=="dw" && x[4]==tup[3] && x[3]==tup[2],balance_process_tuple)[1]],-1.0)
+        if markets[tup[1]].m_type == "energy"
+            add_to_expression!(v_bid[tup],v_flow[Predicer.validate_tuple(model_contents, filter(x->x[3]==tup[1] && x[5]==tup[3] && x[4]==tup[2],process_tuple)[1], 4)],1.0)
+            add_to_expression!(v_bid[tup],v_flow_bal[Predicer.validate_tuple(model_contents, filter(x->x[1]==tup[1] && x[2]=="up" && x[4]==tup[3] && x[3]==tup[2],balance_process_tuple)[1], 3)],1.0)
+            add_to_expression!(v_bid[tup],v_flow[Predicer.validate_tuple(model_contents, filter(x->x[2]==tup[1] && x[5]==tup[3] && x[4]==tup[2],process_tuple)[1], 4)],-1.0)
+            add_to_expression!(v_bid[tup],v_flow_bal[Predicer.validate_tuple(model_contents, filter(x->x[1]==tup[1] && x[2]=="dw" && x[4]==tup[3] && x[3]==tup[2],balance_process_tuple)[1], 3)],-1.0)
         else
             add_to_expression!(v_bid[tup],v_res_final[tup],1.0)
         end
@@ -1097,7 +1089,7 @@ function setup_bidding_volume_constraints(model_contents::OrderedDict, input_dat
         for t in b_slots[m].time_steps
             for (i,s) in enumerate(b_slots[m].slots)
                 if i == 1
-                    if markets[m].type == "reserve"
+                    if markets[m].m_type == "reserve"
                         @constraint(model,v_bid_vol[(m,s,t)] >= 0.0)
                     end
                 else
@@ -1140,7 +1132,7 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
             sizehint!(pcols, length(scenarios))
             for s in scenarios
                 push!(pcols, values(markets[m].price(s).series))
-                if markets[m].type == "energy"
+                if markets[m].m_type == "energy"
                     for t in temporals.t
                         v_bid[(markets[m].name,s,t)] = AffExpr(0.0)
                         add_to_expression!(v_bid[(markets[m].name,s,t)],
@@ -1153,7 +1145,7 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
                                 v_flow_bal[validate_tuple(model_contents, filter(x->x[1]==markets[m].name && x[2]=="dw" && x[4]==t && x[3]==s,balance_process_tuple)[1], 3)],-1.0)
                     end
                 end
-                if markets[m].type=="reserve"
+                if markets[m].m_type=="reserve"
                     for t in temporals.t
                         if markets[m].price(s)(t) == 0
                             fix(v_res_final[validate_tuple(model_contents, (m, s, t), 2)], 0.0; force=true)
@@ -1173,14 +1165,14 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
     for m in keys(markets)
         markets[m].is_bid || continue
         for (i,t) in enumerate(temporals.t)
-            if markets[m].type == "energy"
+            if markets[m].m_type == "energy"
                 #XXX Is this ever different from m?
                 mn = markets[m].name
                 for (sns, eq) in scen_pairs(price_matr[m][i,:])
                     vars = [v_bid[(mn, s, t)] for s in sns]
                     cons[m, t, sns...] = (vars[2] - vars[1], eq)
                 end
-            elseif markets[m].type == "reserve" && input_data.setup.contains_reserves
+            elseif markets[m].m_type == "reserve" && input_data.setup.contains_reserves
                 for (sns, eq) in scen_pairs(price_matr[m][i,:])
                     vars = [v_res_final[validate_tuple(model_contents, (m, s, t), 2)] for s in sns]
                     cons[m, t, sns...] = (vars[2] - vars[1], eq)
@@ -1313,7 +1305,7 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
         relevant_ts = filter(t -> t in gen_const_ts, temporals.t)
         facs = gen_constraints[c].factors
         consta = gen_constraints[c].constant
-        eq_dir = gen_constraints[c].type
+        eq_dir = gen_constraints[c].gc_type
         if !gen_constraints[c].is_setpoint
             const_ts[c] = relevant_ts
             const_set[c] = (eq_dir == "eq" ? MOI.EqualTo(0)
@@ -1402,9 +1394,9 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
                         d_upper = d_setpoint / d_max
                         d_lower = 0.0
                     end
-                    JuMP.set_upper_bound(v_set_up[(c, s, t)], (1.0 - d_upper) * d_max)
-                    JuMP.set_upper_bound(v_set_down[(c, s, t)], d_lower * d_max)
-                    JuMP.set_upper_bound(v_setpoint[(c, s, t)], (d_upper - d_lower) * d_max)
+                    JuMP.set_upper_bound(v_set_up[Predicer.validate_tuple(model_contents, (c, s, t), 2)], (1.0 - d_upper) * d_max)
+                    JuMP.set_upper_bound(v_set_down[Predicer.validate_tuple(model_contents, (c, s, t), 2)], d_lower * d_max)
+                    JuMP.set_upper_bound(v_setpoint[Predicer.validate_tuple(model_contents, (c, s, t), 2)], (d_upper - d_lower) * d_max)
                     add_to_expression!(setpoint_expr_rhs[(c, s, t)], d_lower * d_max + v_setpoint[validate_tuple(model_contents, (c, s, t), 2)] + v_set_up[validate_tuple(model_contents, (c, s, t), 2)] - v_set_down[validate_tuple(model_contents, (c, s, t), 2)])                        
                 end
             end
@@ -1498,7 +1490,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     for s in scenarios
         vom_costs[s] = AffExpr(0.0)
         for tup in unique(map(x->(x[1],x[2],x[3]),process_tuple))
-            vom = filter(x->x.source == tup[2] && x.sink == tup[3], processes[tup[1]].topos)[1].VOM_cost
+            vom = filter(x->x.source == tup[2] && x.sink == tup[3], processes[tup[1]].topos)[1].vom_cost
             if vom != 0
                 flows = filter(x -> x[1:3] == tup && x[4] == s, process_tuple)
                 for f in flows
