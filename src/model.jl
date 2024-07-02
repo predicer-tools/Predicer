@@ -106,7 +106,7 @@ function get_node_balance(model_contents::OrderedDict, input_data::InputData, no
     # diffusion
     if nodename in diffusion_nodes(input_data)
         node_diff_tups = filter(x -> x[1] == nodename && x[2] == scenario, node_diffusion_tuple(input_data))
-        node_diff_e = model_contents["expression"]["e_node_diff"]
+        node_diff_e = model_contents["model"].obj_dict[:e_node_bal_eq_diffusion]
         node_diff_vals = map(x -> JuMP.value.(node_diff_e[x]), node_diff_tups)
     else
         node_diff_vals = zeros(length(input_data.temporals.t))
@@ -420,17 +420,17 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
         end
     elseif e_type == "v_node_diffusion" # only returns an expression with node diff info, no variable. 
         if input_data.setup.contains_diffusion
-            node_diffs = model_contents["expression"]["e_node_diff"]
+            node_diffs = model_contents["model"].obj_dict[:e_node_bal_eq_diffusion]
             if isempty(name)
-                nodenames = unique(map(y -> y[1], collect(keys(node_diffs))))
+                nodenames = unique(map(y -> y[1], map(x -> x.I[1], collect(keys(node_diffs)))))
             else
-                nodenames = unique(map(y -> y[1], filter(x -> x[1] == name, collect(keys(node_diffs)))))
+                nodenames = unique(map(y -> y[1], filter(x -> x[1] == name, map(x -> x.I[1], collect(keys(node_diffs))))))
             end
             for n in nodenames, s in scenarios
                 diffs = []
                 colname = n * "_" * s
                 for t in input_data.temporals.t
-                    diff_k = filter(x -> x == (n, s, t),  collect(keys(node_diffs)))[1]
+                    diff_k = filter(x -> x == (n, s, t),  map(x -> x.I[1], collect(keys(node_diffs))))[1]
                     push!(diffs, value.(node_diffs[diff_k]))
                 end
                 if !isempty(diffs)
