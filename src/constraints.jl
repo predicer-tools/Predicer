@@ -91,6 +91,9 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
                 add_to_expression!(e_node_bal_eq_state_balance[tup], -v_state[Predicer.validate_tuple(model_contents, pnbt[tup], 2)])
                 add_to_expression!(e_node_bal_eq_state_losses[tup], input_data.nodes[tup[1]].state.state_loss_proportional*input_data.temporals(tup[3])*v_state[Predicer.validate_tuple(model_contents, pnbt[tup], 2)])
             end
+            if input_data.nodes[tup[1]].state.is_temp
+                e_node_bal_eq_state_balance[tup] *= input_data.nodes[tup[1]].state.t_e_conversion
+            end
             add_to_expression!(e_constraint_node_bal_eq[tup], -e_node_bal_eq_state_balance[tup] - e_node_bal_eq_state_losses[tup])
         end
     end
