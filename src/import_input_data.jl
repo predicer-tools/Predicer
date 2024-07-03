@@ -148,7 +148,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
             end
         end
         if Bool(n.is_state)
-            Predicer.add_state(nodes[n.node], Predicer.State(n.in_max, n.out_max, n.state_loss_proportional, n.state_max, n.state_min, n.initial_state, n.scenario_independent_state, n.is_temp, n.T_E_conversion, n.residual_value))
+            Predicer.add_state(nodes[n.node], Predicer.State(n.in_max, n.out_max, n.state_loss_proportional, n.state_max, n.state_min, n.initial_state, n.scenario_independent_state, n.is_temp, n.t_e_conversion, n.residual_value))
         end
         if Bool(n.is_res)
             Predicer.add_node_to_reserve(nodes[n.node])
@@ -208,9 +208,9 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
             pt = system_data["process_topology"][j, :]
             if pt.process == p.process
                 if pt.source_sink == "source"
-                    push!(sources, (pt.node, pt.capacity, pt.VOM_cost, pt.ramp_up, pt.ramp_down, pt.initial_load, pt.initial_flow))
+                    push!(sources, (pt.node, pt.capacity, pt.vom_cost, pt.ramp_up, pt.ramp_down, pt.initial_load, pt.initial_flow))
                 elseif pt.source_sink == "sink"
-                    push!(sinks, (pt.node, pt.capacity, pt.VOM_cost, pt.ramp_up, pt.ramp_down, pt.initial_load, pt.initial_flow))
+                    push!(sinks, (pt.node, pt.capacity, pt.vom_cost, pt.ramp_up, pt.ramp_down, pt.initial_load, pt.initial_flow))
                 end
             end
         end
@@ -254,7 +254,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
 
     for i in 1:nrow(system_data["groups"])
         d_row = system_data["groups"][i, :]
-        gtype = d_row.type
+        gtype = d_row.group_type
         gname = d_row.group
         if gtype == "node" || gtype == "Node" || gtype == "NODE" || gtype == "n"
             if !(gname in collect(keys(groups)))
@@ -306,18 +306,17 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
     # node history
     if length(names(system_data["node_history"])) > 1
         ns = names(system_data["node_history"])[2:end]
-        ns_with_all = filter(x -> occursin("ALL", x) || !occursin("ALL", x) || !occursin("ALL", x), ns)
-        ns_without_all = filter(x -> !occursin("ALL", x) || !occursin("ALL", x) || !occursin("ALL", x), ns)
+        ns_with_all = filter(x -> occursin("ALL", x), ns)
+        ns_without_all = filter(x -> !occursin("ALL", x), ns)
         unique_nodenames_without_all = unique(map(x -> x[1], map(n -> map(x -> strip(x), split(n, ",")), ns_without_all)))
         unique_nodenames_with_all = unique(map(x -> x[1], map(n -> map(x -> strip(x), split(n, ",")), ns_with_all)))
         unique_scenarios_without_all = unique(map(x -> x[end], map(n -> map(x -> strip(x), split(n, ",")), ns_without_all)))
 
-        for n in unique_nodenames_with_all
+        for n in unique_nodenames_with_all, s in unique_scenarios_without_all
             node_history[n] = NodeHistory(n)
-            cols = filter(x -> n == strip(split(x, ",")[1]), ns)
-
+            cols = filter(x -> n == strip(split(x, ",")[1]) && s == strip(split(x, ",")[end]), ns)
             if length(cols) != 2
-                return Error("Invalid amount of columns for node: ", n, " and scenario: ", s, "!")
+                return error("Invalid amount of columns for node: ", n, " and scenario: ", s, "!")
             else
                 ts = []
                 vals = []
@@ -330,7 +329,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                     end
                 end
                 if isempty(ts) || isempty(vals) || length(ts) != length(vals)
-                    return Error("Invalid node history column lengths for node: ", n, " and scenario: ", s, ".")
+                    return error("Invalid node history column lengths for node: ", n, " and scenario: ", s, ".")
                 else
                     for s in collect(keys(scens))
                         t_series = TimeSeries(s, ts, vals)
@@ -344,7 +343,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
             for s in unique_scenarios_without_all
                 cols = filter(x -> n == strip(split(x, ",")[1]) &&  s == strip(split(x, ",")[end]), ns)
                 if length(cols) != 2
-                    return Error("Invalid amount of columns for node: ", n, " and scenario: ", s, "!")
+                    return error("Invalid amount of columns for node: ", n, " and scenario: ", s, "!")
                 else
                     ts = []
                     vals = []
@@ -357,7 +356,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                         end
                     end
                     if isempty(ts) || isempty(vals) || length(ts) != length(vals)
-                        return Error("Invalid node history column lengths for node: ", n, " and scenario: ", s, ".")
+                        return error("Invalid node history column lengths for node: ", n, " and scenario: ", s, ".")
                     else
                         t_series = TimeSeries(s, ts, vals)
                         push!(node_history[n].steps, t_series)
@@ -382,7 +381,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                 s_col = collect(skipmissing(system_data["inflow_blocks"][!,inflow_blocks[b].name*","*s]))
                 if length(t_col) != length(s_col)
                     msg = "The data columns of the inflow block " * String(b) * " are not the same length!"
-                    throw(ErrorException(msg))
+                    throw(errorException(msg))
                 end
                 series = TimeSeries(
                     s, string.(ZonedDateTime.(t_col, tz"UTC")), s_col)
@@ -404,14 +403,14 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
 
     for i in 1:nrow(system_data["reserve_type"])
         tt = system_data["reserve_type"][i,:]
-        reserve_type[tt.type] = tt.ramp_factor
+        reserve_type[tt.reserve_type] = tt.ramp_factor
     end
 
     #-----------------------------------------------
    
     for i in 1:nrow(system_data["markets"])
         mm = system_data["markets"][i, :]
-        markets[mm.market] = Predicer.Market(mm.market, mm.type, mm.node, mm.processgroup, mm.direction, mm.reserve_type, mm.is_bid, mm.is_limited, mm.min_bid, mm.max_bid, mm.fee)
+        markets[mm.market] = Predicer.Market(mm.market, mm.market_type, mm.node, mm.processgroup, mm.direction, mm.reserve_type, mm.is_bid, mm.is_limited, mm.min_bid, mm.max_bid, mm.fee)
         #
         for s in keys(scens)
             timesteps = timeseries_data["scenarios"][s]["market_prices"].t
@@ -429,7 +428,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                 end
             end
         end
-        if mm.type == "energy" && mm.is_bid == true
+        if mm.market_type == "energy" && mm.is_bid == true
             for s in keys(scens)
                 timesteps = timeseries_data["scenarios"][s]["balance_prices"]["up"].t
                 up_data = timeseries_data["scenarios"][s]["balance_prices"]["up"][!, mm.market]
@@ -440,7 +439,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                 push!(markets[mm.market].up_price, up_ts)
                 push!(markets[mm.market].down_price, down_ts)
             end
-        elseif mm.type == "reserve"
+        elseif mm.market_type == "reserve"
             for s in keys(scens)
                 timesteps = timeseries_data["scenarios"][s]["reserve_realisation"].t
                 rrs = timeseries_data["scenarios"][s]["reserve_realisation"][!, mm.market]

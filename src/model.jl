@@ -90,7 +90,7 @@ function get_node_balance(model_contents::OrderedDict, input_data::InputData, no
     # state
     if input_data.nodes[nodename].is_state
         node_tups = filter(x -> x[1] == nodename && x[2] == scenario, state_node_tuples(input_data))
-        state_vals = JuMP.value.(model_contents["variable"]["v_state"][node_tups]).data
+        state_vals = JuMP.value.(model.obj_dict[:v_state][node_tups]).data
         state_diff_vals = []
         for (i, sv) in enumerate(state_vals)
             if i == 1
@@ -106,7 +106,7 @@ function get_node_balance(model_contents::OrderedDict, input_data::InputData, no
     # diffusion
     if nodename in diffusion_nodes(input_data)
         node_diff_tups = filter(x -> x[1] == nodename && x[2] == scenario, node_diffusion_tuple(input_data))
-        node_diff_e = model_contents["expression"]["e_node_diff"]
+        node_diff_e = model_contents["model"].obj_dict[:e_node_bal_eq_diffusion]
         node_diff_vals = map(x -> JuMP.value.(node_diff_e[x]), node_diff_tups)
     else
         node_diff_vals = zeros(length(input_data.temporals.t))
@@ -126,14 +126,14 @@ function get_node_balance(model_contents::OrderedDict, input_data::InputData, no
     for pt in prod_tups
         colname = pt[1] * "_" * pt[2] * "_" * pt[3]
         tups = filter(x -> x[1:4] == pt, process_topology_tuples(input_data))
-        df[!, colname] = JuMP.value.(model_contents["variable"]["v_flow"][tups]).data
+        df[!, colname] = JuMP.value.(model.obj_dict[:v_flow][tups]).data
     end
     # consumer processes
     cons_tups = unique(map(y -> y[1:4], filter(x -> x[2] == nodename && x[4] == scenario, process_topology_tuples(input_data))))
     for ct in cons_tups
         colname = ct[1] * "_" * ct[2] * "_" * ct[3]
         tups = filter(x -> x[1:4] == ct, process_topology_tuples(input_data))
-        df[!, colname] = -1 .* JuMP.value.(model_contents["variable"]["v_flow"][tups]).data
+        df[!, colname] = -1 .* JuMP.value.(model.obj_dict[:v_flow][tups]).data
     end
     return df
 end
@@ -158,7 +158,7 @@ function get_process_balance(model_contents::OrderedDict, input_data::InputData,
     for pf in prod_flows
         colname = pf[1] * "_" * pf[2] * "_" * pf[3]
         tups = filter(x -> x[1:4] == pf, process_topology_tuples(input_data))
-        df[!, colname] = JuMP.value.(model_contents["variable"]["v_flow"][tups]).data
+        df[!, colname] = JuMP.value.(model.obj_dict[:v_flow][tups]).data
     end
 
     # consuming flows
@@ -166,7 +166,7 @@ function get_process_balance(model_contents::OrderedDict, input_data::InputData,
     for cf in cons_flows
         colname = cf[1] * "_" * cf[2] * "_" * cf[3]
         tups = filter(x -> x[1:4] == cf, process_topology_tuples(input_data))
-        df[!, colname] = -1.0 .*JuMP.value.(model_contents["variable"]["v_flow"][tups]).data
+        df[!, colname] = -1.0 .*JuMP.value.(model.obj_dict[:v_flow][tups]).data
     end
 
     # efficiency losses are incoming - outcoming
@@ -187,19 +187,19 @@ Returns a dataframe containing specific information for a variable in the model.
 - `name::String`: The name of the entity (process, node, block,) connected to the variable. If left empty, return all relevant values. 
 - `scenario::String`: The name of the scenario for which the value is to be shown. If left empty, return all relevant values. 
 """
-function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.InputData, type::String="", name::String="",scenario::String="")
+function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.InputData, e_type::String="", name::String="",scenario::String="")
+    model = model_contents["model"]
     tuples = Predicer.create_tuples(input_data)
     temporals = input_data.temporals.t
     df = DataFrame(t = temporals)
-    vars = model_contents["variable"]
     expr = model_contents["expression"]
     if !isempty(scenario)
         scenarios = [scenario]
     else
         scenarios = collect(keys(input_data.scenarios))
     end
-    if type == "v_flow"
-        v_flow = vars[type]
+    if e_type == "v_flow"
+        v_flow = model.obj_dict[Symbol(e_type)]
         if !isempty(name)
             tups = unique(map(x->(x[1],x[2],x[3]),filter(x->x[1]==name, tuples["process_tuple"])))
         else
@@ -212,9 +212,9 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 df[!, colname] = value.(v_flow[validate_tuples(model_contents, col_tup, 4)].data)
             end
         end
-    elseif type == "v_load"
+    elseif e_type == "v_load"
         if input_data.setup.contains_reserves
-            v_load = vars[type]
+            v_load = model.obj_dict[Symbol(e_type)]
             if !isempty(name)
                 tups = unique(map(x->(x[1],x[2],x[3]),filter(x->x[1]==name, unique(map(x -> (x[3:end]), tuples["res_potential_tuple"])))))
             else
@@ -228,9 +228,9 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 end
             end
         end
-    elseif type == "v_reserve"
+    elseif e_type == "v_reserve"
         if input_data.setup.contains_reserves
-            v_res = vars[type]
+            v_res = model.obj_dict[Symbol(e_type)]
             if !isempty(name)
                 tups = unique(map(x->(x[1],x[2],x[3],x[5]),filter(x->x[3]==name, tuples["res_potential_tuple"])))
             else
@@ -244,9 +244,9 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 end
             end
         end
-    elseif type == "v_res_final"
+    elseif e_type == "v_res_final"
         if input_data.setup.contains_reserves
-            v_res = vars[type]
+            v_res = model.obj_dict[Symbol(e_type)]
             ress = unique(map(x->x[1],tuples["res_final_tuple"]))
             for r in ress, s in scenarios
                 colname = r * "_" * s
@@ -256,9 +256,9 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 end
             end
         end
-    elseif type == "v_online" || type == "v_start" || type == "v_stop"
+    elseif e_type == "v_online" || e_type == "v_start" || e_type == "v_stop"
         if input_data.setup.contains_online
-            v_bin = vars[type]
+            v_bin = model.obj_dict[Symbol(e_type)]
             if !isempty(name)
                 procs = unique(map(x->x[1],filter(y ->y[1] == name, tuples["process_tuple"])))
             else
@@ -272,9 +272,9 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 end
             end
         end
-    elseif type == "v_state"
+    elseif e_type == "v_state"
         if input_data.setup.contains_states
-            v_state = vars[type]
+            v_state = model.obj_dict[Symbol(e_type)]
             if !isempty(name)
                 nods = map(y -> y[1], filter(x->x[1]==name, tuples["node_state_tuple"]))
             else
@@ -288,9 +288,9 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 end
             end
         end
-    elseif type == "vq_state_up" || type == "vq_state_dw"
+    elseif e_type == "vq_state_up" || e_type == "vq_state_dw"
         if input_data.setup.use_node_dummy_variables
-            v_state = vars[type]
+            v_state = model.obj_dict[Symbol(e_type)]
             if !isempty(name)
                 nods = unique(map(x->x[1],filter(y -> y[1] == name, tuples["node_balance_tuple"])))
             else
@@ -304,9 +304,9 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 end
             end
         end
-    elseif type == "vq_ramp_up" || type == "vq_ramp_dw"
+    elseif e_type == "vq_ramp_up" || e_type == "vq_ramp_dw"
         if input_data.setup.use_ramp_dummy_variables
-            v_ramp = vars[type]
+            v_ramp = model.obj_dict[Symbol(e_type)]
             if !isempty(name)
                 procs = unique(map(x->(x[1:3]),filter(y -> y[1] == name, tuples["ramp_tuple"])))
             else
@@ -320,8 +320,8 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 end
             end
         end
-    elseif type == "v_bid"
-        v_bid = expr[type]
+    elseif e_type == "v_bid"
+        v_bid = expr[e_type]
         if !isempty(name)
             bid_tups = unique(map(x->(x[1]),filter(x->x[1]==name,tuples["balance_market_tuple"])))
         else
@@ -338,8 +338,8 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 df[!,colname] = dat_vec
             end
         end
-    elseif type == "v_bid_volume"
-        v_bid_vol = vars[type]
+    elseif e_type == "v_bid_volume"
+        v_bid_vol = model.obj_dict[Symbol(e_type)]
         if !isempty(name)
             bid_vol_tups = unique(map(x -> (x[1], x[2]), filter(y -> y[1] == name, tuples["bid_slot_tuple"])))
         else
@@ -354,8 +354,8 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             end
             df[!,colname] = dat_vec
         end
-    elseif type == "v_flow_bal"
-        v_bal = vars[type]
+    elseif e_type == "v_flow_bal"
+        v_bal = model.obj_dict[Symbol(e_type)]
         if !isempty(name)
             nods = unique(map(y -> y[1], filter(x->x[1]==name, tuples["balance_market_tuple"])))
         else
@@ -369,9 +369,9 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 df[!,colname] = value.(v_bal[validate_tuples(model_contents, col_tup, 3)].data)
             end
         end
-    elseif type == "v_block"
+    elseif e_type == "v_block"
         df = DataFrame()
-        v_block = vars[type]
+        v_block = model.obj_dict[Symbol(e_type)]
         if !isempty(name)
             blocks = unique(map(y -> (y[1], y[2], y[3]), filter(x -> x[1] == name, tuples["block_tuples"])))
         else
@@ -382,8 +382,8 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             b_tup = (block..., input_data.inflow_blocks[block[1]].start_time)
             df[!, colname] = [JuMP.value.(v_block[validate_tuples(model_contents, b_tup, 3)[begin:3]])]
         end
-    elseif type == "v_setpoint" || type == "v_set_up" || type == "v_set_down"
-        v_var = vars[type]
+    elseif e_type == "v_setpoint" || e_type == "v_set_up" || e_type == "v_set_down"
+        v_var = model.obj_dict[Symbol(e_type)]
         if !isempty(name)
             setpoints = unique(map(x -> x[1], filter(y -> y[1] == name, tuples["setpoint_tuples"])))
         else
@@ -391,20 +391,20 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
         end
         for sp in setpoints, s in scenarios
             col_tup = filter(x -> x[1] == sp && x[2] == s, tuples["setpoint_tuples"])
-            if type == "v_set_up"
+            if e_type == "v_set_up"
                 colname = "up_" * sp * "_" * s
-            elseif type == "v_set_down"
+            elseif e_type == "v_set_down"
                 colname = "down_" *  sp * "_" * s
-            elseif type == "v_setpoint"
+            elseif e_type == "v_setpoint"
                 colname = sp * "_" * s
             end
             if !isempty(col_tup)
                 df[!,colname] = value.(v_var[validate_tuples(model_contents, col_tup, 2)].data)
             end
         end
-    elseif type == "v_reserve_online"
+    elseif e_type == "v_reserve_online"
         if input_data.setup.contains_reserves
-            v_reserve_online = vars[type]
+            v_reserve_online = model.obj_dict[Symbol(e_type)]
             if !isempty(name)
                 ress = unique(map(y -> y[1], filter(x -> x[1] == name, tuples["reserve_limits"])))
             else
@@ -418,19 +418,19 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 end
             end
         end
-    elseif type == "v_node_diffusion" # only returns an expression with node diff info, no variable. 
+    elseif e_type == "v_node_diffusion" # only returns an expression with node diff info, no variable. 
         if input_data.setup.contains_diffusion
-            node_diffs = model_contents["expression"]["e_node_diff"]
+            node_diffs = model_contents["model"].obj_dict[:e_node_bal_eq_diffusion]
             if isempty(name)
-                nodenames = unique(map(y -> y[1], collect(keys(node_diffs))))
+                nodenames = unique(map(y -> y[1], map(x -> x.I[1], collect(keys(node_diffs)))))
             else
-                nodenames = unique(map(y -> y[1], filter(x -> x[1] == name, collect(keys(node_diffs)))))
+                nodenames = unique(map(y -> y[1], filter(x -> x[1] == name, map(x -> x.I[1], collect(keys(node_diffs))))))
             end
             for n in nodenames, s in scenarios
                 diffs = []
                 colname = n * "_" * s
                 for t in input_data.temporals.t
-                    diff_k = filter(x -> x == (n, s, t),  collect(keys(node_diffs)))[1]
+                    diff_k = filter(x -> x == (n, s, t),  map(x -> x.I[1], collect(keys(node_diffs))))[1]
                     push!(diffs, value.(node_diffs[diff_k]))
                 end
                 if !isempty(diffs)
@@ -438,9 +438,9 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 end
             end
         end
-    elseif type == "v_node_delay"
+    elseif e_type == "v_node_delay"
         if input_data.setup.contains_delay
-            v_node_delays = model_contents["variable"]["v_node_delay"]
+            v_node_delays = model.obj_dict[:v_node_delay]
             if isempty(name)
                 conn_names = unique(map(x -> (x[1], x[2]), node_delay_tuple(input_data)))
             else
@@ -450,7 +450,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 d_conn = filter(x -> x[1] == c[1] && x[2] == c[2] && x[3] == s, node_delay_tuple(input_data))
                 colname = c[1] * "_" * c[2] * "_" * s
                 if !isempty(d_conn)
-                    df[!, colname] = value.(v_node_delays[validate_tuples(model_contents, d_conn, 4)].data)
+                    df[!, colname] = value.(v_node_delays[d_conn].data)
                 end
             end
         end
@@ -467,10 +467,10 @@ Collect all of the available variable results into DataFrames collected in a dic
 """
 function get_all_result_dataframes(model_contents::OrderedDict, input_data::InputData, scenario="", name="")
     dfs = Dict()
-    types = ["v_flow", "v_load", "v_reserve", "v_res_final", "v_online", "v_start", "v_stop", "v_state", "vq_state_up", "vq_state_dw", "v_bid", "v_bid_volume",
+    e_types = ["v_flow", "v_load", "v_reserve", "v_res_final", "v_online", "v_start", "v_stop", "v_state", "vq_state_up", "vq_state_dw", "v_bid", "v_bid_volume",
         "vq_ramp_up", "vq_ramp_dw", "v_flow_bal", "v_block", "v_setpoint", "v_set_up", "v_set_down", "v_reserve_online", "v_node_diffusion", "v_node_delay"]
-    for type in types
-        dfs[type] = Predicer.get_result_dataframe(model_contents, input_data, type, name, scenario)
+    for e_type in e_types
+        dfs[e_type] = Predicer.get_result_dataframe(model_contents, input_data, e_type, name, scenario)
     end
     return dfs
 end
@@ -487,10 +487,10 @@ Outputs the bid matrix generated by the model. The matrix is output into an exce
 """
 function write_bid_matrix(model_contents::OrderedDict, input_data::Predicer.InputData)
     println("Writing bid matrix...")
-    vars = model_contents["variable"]
+    vars = model_contents["model"].obj_dict
     v_bid = model_contents["expression"]["v_bid"]
     if input_data.setup.contains_reserves
-        v_res_final = vars["v_res_final"]
+        v_res_final = vars[Symbol("v_res_final")]
     end
 
     tuples = Predicer.create_tuples(input_data)
@@ -587,7 +587,7 @@ Function to construct market nodes based on the input data
 function resolve_market_nodes(input_data::InputData)
     markets = input_data.markets
     for m in collect(keys(markets))
-        if markets[m].type == "energy"
+        if markets[m].m_type == "energy"
             node_name = m
             input_data.nodes[node_name] = Predicer.Node(node_name, false, true)
             pname = markets[m].node * "_" * m * "_trade_process"
@@ -637,9 +637,7 @@ function predicer_graph(input_data::InputData)
         end
     end
     graph["connections"] = unique(filter(x -> x[1] != x[2], connections))
-
-    map(x -> x[1:2], input_data.node_diffusion)
-    graph["diffusion"] = unique(filter(x -> x[1] != x[2], map(y -> y[1:2], input_data.node_diffusion)))
+    graph["diffusion"] = unique(filter(x -> x[1] != x[2], map(y -> [y.node1, y.node2], input_data.node_diffusion)))
     graph["delay"] = unique(filter(x -> x[1] != x[2], map(y -> y[1:2], input_data.node_delay)))
     return graph
 end

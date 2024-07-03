@@ -28,9 +28,7 @@ end
 
 function build_model_contents_dict(input_data::Predicer.InputData)
     model_contents = OrderedDict()
-    model_contents["constraint"] = OrderedDict() #constraints
     model_contents["expression"] = OrderedDict() #expressions?
-    model_contents["variable"] = OrderedDict() #variables?
     model_contents["gen_constraint"] = OrderedDict() #GenericConstraints
     model_contents["gen_expression"] = OrderedDict() #GenericConstraints
     model_contents["validation_dict"] = create_validation_dict(input_data)
