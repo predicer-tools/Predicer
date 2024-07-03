@@ -56,7 +56,7 @@ end
 
 Helper function used to correct generated index tuples in cases when the start of the optimization horizon is the same for all scenarios.
 """
-function validate_tuple(mc::OrderedDict, tuple::NTuple{N, String} where N, s_index::Int)
+function validate_tuple(mc::OrderedDict, tuple::NTuple{N, AbstractString} where N, s_index::Int)
     if !isempty(mc["validation_dict"])
         if s_index + 1 < length(tuple)
             return (tuple[1:s_index-1]..., mc["validation_dict"][tuple[s_index:s_index+1]]..., tuple[s_index+2:end]...)
@@ -93,7 +93,7 @@ function reserve_nodes(input_data::InputData) # original name: create_res_nodes_
     if input_data.setup.contains_reserves
         markets = input_data.markets
         for m in collect(keys(markets))
-            if markets[m].type == "reserve"
+            if markets[m].m_type == "reserve"
                 for n in unique(map(y -> y[3], filter(x -> x[2] == markets[m].node, create_group_tuples(input_data))))
                     if input_data.nodes[n].is_res
                         push!(reserve_nodes, n)
@@ -139,7 +139,7 @@ function reserve_market_directional_tuples(input_data::InputData) # original nam
         end
         unique!(res_dir)
         for m in values(markets)
-            if m.type == "reserve"
+            if m.m_type == "reserve"
                 if m.direction in res_dir
                     for s in scenarios, t in temporals.t
                         push!(reserve_market_directional_tuples, (m.name, m.node, m.direction, s, t))
@@ -235,7 +235,7 @@ function reserve_groups(input_data::InputData)
         groups = input_data.groups
         reserve_groups = NTuple{5, String}[]
         for m in collect(keys(markets))
-            if markets[m].type == "reserve"
+            if markets[m].m_type == "reserve"
                 d = markets[m].direction
                 for p in groups[markets[m].processgroup].members, n in groups[markets[m].node].members
                     if d == "up/down" || d == "up/dw" || d == "up/dn" ||d == "up_down" || d == "up_dw" || d == "up_dn"
@@ -627,7 +627,7 @@ function reserve_market_tuples(input_data::InputData) # orignal name: create_res
         scenarios = collect(keys(input_data.scenarios))
         temporals = input_data.temporals
         for m in values(markets)
-            if m.type == "reserve"
+            if m.m_type == "reserve"
                 for s in scenarios, t in temporals.t
                     push!(reserve_market_tuples, (m.name, s, t))
                 end
@@ -651,7 +651,7 @@ function fixed_market_tuples(input_data::InputData) # original name: create_fixe
     markets = input_data.markets
     scenarios = collect(keys(input_data.scenarios))
     for m in values(markets)
-        if !isempty(m.fixed) && m.type == "energy"
+        if !isempty(m.fixed) && m.m_type == "energy"
             temps = map(x->x[1], m.fixed)
             for s in scenarios, t in temps
                 push!(fixed_market_tuples, (m.name, s, t))
@@ -701,7 +701,7 @@ function create_balance_market_tuple(input_data::Predicer.InputData)
     scenarios = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
     for m in keys(markets)
-        if markets[m].type == "energy" && markets[m].is_bid == true
+        if markets[m].m_type == "energy" && markets[m].is_bid == true
             for d in dir, s in scenarios, t in temporals.t
                 push!(bal_tuples, (markets[m].name, d, s, t))
             end
@@ -720,7 +720,7 @@ function create_market_tuple(input_data::Predicer.InputData)
     mnt = []
     for k in collect(keys(input_data.markets))
         m = input_data.markets[k]
-        push!(mnt, (k, m.type, m.node, m.processgroup))
+        push!(mnt, (k, m.m_type, m.node, m.processgroup))
     end
     return mnt
 end
@@ -786,7 +786,7 @@ function create_reserve_limits(input_data::InputData)
         scenarios = collect(keys(input_data.scenarios))
         temporals = input_data.temporals
         for m in keys(markets)
-            if markets[m].type == "reserve" && markets[m].is_limited
+            if markets[m].m_type == "reserve" && markets[m].is_limited
                 for s in scenarios, t in temporals.t
                     push!(reserve_limits,(markets[m].name,s,t))
                 end
@@ -845,7 +845,7 @@ function create_group_tuples(input_data::InputData)
     group_tuples = NTuple{3, String}[]
     for gn in collect(keys(groups))
         for gm in groups[gn].members
-            push!(group_tuples, (groups[gn].type, gn, gm))
+            push!(group_tuples, (groups[gn].g_type, gn, gm))
         end
     end
     return group_tuples

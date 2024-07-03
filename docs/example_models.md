@@ -52,7 +52,7 @@ The unit of the heat transfer coefficient ***c*** in this model case would be *k
 
 In the example Excel file, this is done on the *node_diffusion* sheet, where data is defined for each scenario and timestep for both diffusion relations. 
 
-| t	                  | interiorair,buildingenvelope,s1 | interiorair,buildingenvelope,s1 |
+| t	                  | interiorair,buildingenvelope,s1 | buildingenvelope,outside,s1 |
 |---------------------|---------------------------------|---------------------------------|
 | 2022-01-05T08:00:00 | 0.25                            | 0.2                             |
 | 2022-01-05T08:15:00 | 0.25                            | 0.2                             |

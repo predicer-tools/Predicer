@@ -259,17 +259,17 @@ function validate_node_diffusion(error_log::OrderedDict, input_data::Predicer.In
 
     for n in collect(keys(nodes))
         if nodes[n].is_state
-            if nodes[n].state.T_E_conversion <= 0.0
-                # Check that the T_E_conversion coefficient is larger than 0
-                push!(error_log["errors"], "The T_E_conversion coefficient of Node: (" * n * ") must be larger than 0.\n")
+            if nodes[n].state.t_e_conversion <= 0.0
+                # Check that the t_e_conversion coefficient is larger than 0
+                push!(error_log["errors"], "The t_e_conversion coefficient of Node: (" * n * ") must be larger than 0.\n")
                 is_valid = false 
             end
         end
     end
     for node_conn in input_data.node_diffusion
-        if minimum(node_conn.coefficient) <= 0 
+        if minimum(node_conn.coefficient) < 0 
             # Check that the node diffusion coeff is larger than 0
-            push!(error_log["errors"], "The node diffusion coefficient of Node diffusion coefficient: (" * (node_conn.node1, node_conn.node2) * ") must be larger than 0.\n")
+            push!(error_log["errors"], "The node diffusion coefficient of Node diffusion coefficient: (" * (node_conn.node1, node_conn.node2) * ") must be equal to or larger than 0.\n")
             is_valid = false 
         end
         if !(node_conn.node1 in collect(keys(nodes)))
@@ -354,13 +354,13 @@ function validate_groups(error_log::OrderedDict, input_data::Predicer.InputData)
         end
         # check that node groups have nodes and process groups have processes
         for m in groups[g].members
-            if groups[g].type == "node"
+            if groups[g].g_type == "node"
                 # check that node groups have nodes and process groups have processes
                 if !(m in collect(keys(nodes))  )
                     push!(error_log["errors"], "Nodegroups (" * g * ") can only have Nodes as members!\n")
                     is_valid = false 
                 end
-            elseif groups[g].type == "process"
+            elseif groups[g].g_type == "process"
                 # check that node groups have nodes and process groups have processes
                 if !(m in collect(keys(processes)))
                     push!(error_log["errors"], "Processgroups (" * g * ") can only have Processes as members!\n")
@@ -390,7 +390,7 @@ function validate_groups(error_log::OrderedDict, input_data::Predicer.InputData)
     # check that each process and each node is part of a group of the correct type..
     for n in collect(keys(nodes))
         for ng in nodes[n].groups
-            if !(groups[ng].type == "node")
+            if !(groups[ng].g_type == "node")
                 push!(error_log["errors"], "Nodes (" * n * ") can only be members of Nodegroups, not Processgroups!\n")
                 is_valid = false 
             end
@@ -398,7 +398,7 @@ function validate_groups(error_log::OrderedDict, input_data::Predicer.InputData)
     end
     for p in collect(keys(processes))
         for pg in processes[p].groups
-            if !(groups[pg].type == "process")
+            if !(groups[pg].g_type == "process")
                 push!(error_log["errors"], "Processes (" * p * ") can only be members of Processgroups, not Nodegroups!\n")
                 is_valid = false 
             end
@@ -415,8 +415,8 @@ function validate_gen_constraints(error_log::OrderedDict, input_data::Predicer.I
 
     for gc in collect(keys(gcs))
         # Check that the given operators are valid.
-        if !(gcs[gc].type in ["gt", "eq", "st"])
-            push!(error_log["errors"], "The operator '" * gcs[gc].type * "' is not valid for the gen_constraint '" * gc *"'.\n")
+        if !(gcs[gc].gc_type in ["gt", "eq", "st"])
+            push!(error_log["errors"], "The operator '" * gcs[gc].gc_type * "' is not valid for the gen_constraint '" * gc *"'.\n")
             is_valid = false 
         end
 
