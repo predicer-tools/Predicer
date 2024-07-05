@@ -44,7 +44,7 @@ include("../make-graph.jl")
     @test (write_graph(of, get_input(bn)); true)
 end
 
-@testset "Predicer on $bn" for (bn, obj) in cases
+@testset "Predicer on $bn" for (bn, known_obj) in cases
     m = Model(Optimizer)
     #set_silent(m)
     mc = Predicer.generate_model(m, get_input(bn))
@@ -56,8 +56,8 @@ end
     if rgap < 1e-8 || !isfinite(rgap)
         rgap = 1e-8
     end
-    if !isnan(obj)
-        @test objective_value(m) ≈ obj rtol=rgap
+    if !isnan(known_obj)
+        @test objective_value(m) ≈ known_obj rtol=rgap
     end
-    @show objective_value(m) obj relative_gap(m)
+    @show objective_value(m) known_obj relative_gap(m)
 end
