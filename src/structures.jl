@@ -1,6 +1,34 @@
 using DataStructures
 using TimeZones
 
+
+"""
+    struct PredicerUserError <: Exception 
+        error_msgs::Any
+    end
+
+Custom exception for errors caused by wrong input values to the Predicer model. 
+"""
+# custom exception for data validation mistakes
+struct PredicerUserError <: Exception 
+    error_msgs::Any
+end
+
+
+"""
+    print_PUE(io::IO, e::PredicerUserError)
+    Base.showerror(io::IO, e::PredicerUserError) = print_PUE(io, e)
+
+Extending the base function to show exceptions to handle errors caused by wrong input data values by the user. 
+"""
+function print_PUE(io::IO, e::PredicerUserError)
+    println(io, "Predicer user error. Check input data file for errors described below:")
+    for e_m in e.error_msgs
+        println(strip(e_m))
+    end
+end
+Base.showerror(io::IO, e::PredicerUserError) = print_PUE(io, e)
+
 """
     mutable struct Temporals
         t::Vector{String}

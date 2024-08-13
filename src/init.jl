@@ -66,7 +66,7 @@ function tweak_input!(input_data :: InputData) :: InputData
     # Check input_data
     validation_result = Predicer.validate_data(input_data)
     if !validation_result["is_valid"]
-        return validation_result["errors"]
+        throw(Predicer.PredicerUserError(validation_result["errors"]))
     end
     # Build market structures
     return Predicer.resolve_market_nodes(input_data)
