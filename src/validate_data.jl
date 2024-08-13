@@ -269,7 +269,7 @@ function validate_node_diffusion(error_log::OrderedDict, input_data::Predicer.In
     for node_conn in input_data.node_diffusion
         if minimum(node_conn.coefficient) < 0 
             # Check that the node diffusion coeff is larger than 0
-            push!(error_log["errors"], "The node diffusion coefficient of Node diffusion coefficient: (" * (node_conn.node1, node_conn.node2) * ") must be equal to or larger than 0.\n")
+            push!(error_log["errors"], "The node diffusion coefficient of Node diffusion coefficient: (" * node_conn.node1 * ", " * node_conn.node2 * ") must be equal to or larger than 0.\n")
             is_valid = false 
         end
         if !(node_conn.node1 in collect(keys(nodes)))
@@ -673,10 +673,22 @@ Checks that the time data in the model is valid.
 function validate_temporals(error_log::OrderedDict, input_data::Predicer.InputData)
     is_valid = error_log["is_valid"]
     temporals = input_data.temporals
+    if length(temporals.t) != length(unique(temporals.t))
+        push!(error_log["errors"], "Invalid timeseries. All timesteps must be unique.\n")
+        is_valid = false
+    end
     for i in 1:length(temporals.t)-1
         if ZonedDateTime(temporals.t[i+1], temporals.ts_format) - ZonedDateTime(temporals.t[i], temporals.ts_format) <= Dates.Minute(0)
             push!(error_log["errors"], "Invalid timeseries. Timesteps not in chronological order.\n")
             is_valid = false
+        end
+    end
+    if temporals.is_variable_dt
+        for tp in temporals.variable_dt
+            if tp[2] <= 0
+                push!(error_log["errors"], "Invalid timeseries. Time length between timesteps must be positive: " * tp[1] * "\n")
+                is_valid = false
+            end
         end
     end
     error_log["is_valid"] = is_valid
