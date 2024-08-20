@@ -43,13 +43,13 @@ Struct used for storing information about the timesteps in the model.
 - `t::Vector{String}`: Vector containing the timesteps. 
 - `dtf::Float64`: The length between timesteps compared to one hour, if the length of the timesteps don't vary. dt = (t2-t1)/(1 hour)
 - `is_variable_dt::Bool`: FLag indicating whether the timesteps vary in length. Default false. 
-- `variable_dt::Vector{Tuple{String, Float64}}`: Vector containing the length between timesteps compared to one hour. The first element is the length between t_1 and t_2.
+- `variable_dt::OrderedDict{String, Float64}`: Vector containing the length between timesteps compared to one hour. The first element is the length between t_1 and t_2.
 """
 mutable struct Temporals
     t::Vector{String}
     dtf::Float64
     is_variable_dt::Bool
-    variable_dt::Vector{Tuple{String, Float64}}
+    variable_dt::OrderedDict{String, Float64}
     ts_format::String
 end
 
@@ -60,18 +60,21 @@ end
 Constructor for the Temporals struct.
 """
 function Temporals(ts::Vector{String}, ts_format="yyyy-mm-ddTHH:MM:SSzzzz")
-    dts = []
+    #dts = []
+    dts = OrderedDict{String, Float64}()
     zdt_ts = map(x -> ZonedDateTime(x, ts_format), ts)
     for i in 1:(length(zdt_ts))
         if i < length(zdt_ts)
-            push!(dts, (ts[i], Dates.Minute(zdt_ts[i+1] - zdt_ts[i])/Dates.Minute(60)))
+            dts[ts[i]] = Dates.Minute(zdt_ts[i+1] - zdt_ts[i])/Dates.Minute(60)
+            #push!(dts, (ts[i], Dates.Minute(zdt_ts[i+1] - zdt_ts[i])/Dates.Minute(60)))
         else
-            push!(push!(dts, (ts[i], dts[end][2])))
+            dts[ts[i]] = collect(values(dts))[end]
+            #push!(push!(dts, (ts[i], dts[end][2])))
         end
     end
-    if length(unique(map(t -> t[2], dts))) == 1
-        return Temporals(ts, dts[1][2], false, [], ts_format)
-    elseif length(unique(map(t -> t[2], dts))) > 1
+    if length(unique(collect(values(dts)))) == 1
+        return Temporals(ts, collect(values(dts))[1], false, OrderedDict{String, Float64}(), ts_format)
+    elseif length(unique(collect(values(dts)))) > 1
         return Temporals(ts, 0.0, true, dts, ts_format)
     end
 end
@@ -97,7 +100,7 @@ Returns the length of the timesteps between t and t+1 compared to one hour.
 """
 function (t::Temporals)(ts::String)
     if t.is_variable_dt
-        return filter(x -> x[1] == ts, t.variable_dt)[1][2]
+        return t.variable_dt[ts]
     else
         return t.dtf
     end

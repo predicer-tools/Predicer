@@ -287,15 +287,17 @@ function node_reserves(input_data::InputData)
     if !input_data.setup.contains_reserves
         return NTuple{3, String}[]
     else
-        res_nodes = NTuple{3, String}[]
-        scenarios = collect(keys(input_data.scenarios))
+        scens = collect(keys(input_data.scenarios))
         temporals = input_data.temporals
-        for n in reserve_nodes(input_data)
-            for s in scenarios, t in temporals.t
+        rns = reserve_nodes(input_data)
+        res_nodes = NTuple{3, String}[]
+        sizehint!(res_nodes, length(rns) * length(scens) * length(temporals.t))
+        for n in rns
+            for s in scens, t in temporals.t
                 push!(res_nodes, (n, s, t))
             end
         end
-        return unique(res_nodes)
+        return res_nodes
     end
 end
 
@@ -954,11 +956,11 @@ Function to create bid scenario tuples linked to bid slots. Form (m,s,t)
 """
 function bid_scenario_tuples(input_data::InputData)
     b_slots = input_data.bid_slots
-    bid_scen_tup = NTuple{3, String}[]
+    scens = collect(keys(input_data.scenarios))
     markets = keys(b_slots)
-    scenarios = collect(keys(input_data.scenarios))
+    bid_scen_tup = NTuple{3, String}[]
     for m in markets
-        for s in scenarios
+        for s in scens
             for t in b_slots[m].time_steps
                 push!(bid_scen_tup,(m,s,t))
             end
