@@ -80,15 +80,15 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
     # state in/out/max/ in, etc
     if input_data.setup.contains_states
         v_state = model.obj_dict[:v_state]
-        pnbt = previous_balance_node_tuples(input_data)
+        psbt = previous_state_node_tuples(input_data)
         for tup in state_node_tuples(input_data)
             add_to_expression!(e_node_bal_eq_state_balance[tup], v_state[Predicer.validate_tuple(model_contents, tup, 2)])
             if tup[3] == input_data.temporals.t[1] #first timestep
                 add_to_expression!(e_node_bal_eq_state_balance[tup], - input_data.nodes[tup[1]].state.initial_state)
                 add_to_expression!(e_node_bal_eq_state_losses[tup], input_data.nodes[tup[1]].state.state_loss_proportional*input_data.temporals(tup[3])*input_data.nodes[tup[1]].state.initial_state)
             else
-                add_to_expression!(e_node_bal_eq_state_balance[tup], -v_state[Predicer.validate_tuple(model_contents, pnbt[tup], 2)])
-                add_to_expression!(e_node_bal_eq_state_losses[tup], input_data.nodes[tup[1]].state.state_loss_proportional*input_data.temporals(tup[3])*v_state[Predicer.validate_tuple(model_contents, pnbt[tup], 2)])
+                add_to_expression!(e_node_bal_eq_state_balance[tup], -v_state[Predicer.validate_tuple(model_contents, psbt[tup], 2)])
+                add_to_expression!(e_node_bal_eq_state_losses[tup], input_data.nodes[tup[1]].state.state_loss_proportional*input_data.temporals(tup[3])*v_state[Predicer.validate_tuple(model_contents, psbt[tup], 2)])
             end
             if input_data.nodes[tup[1]].state.is_temp
                 e_node_bal_eq_state_balance[tup] *= input_data.nodes[tup[1]].state.t_e_conversion
