@@ -439,6 +439,7 @@ function setup_process_balance(model_contents::OrderedDict, input_data::Predicer
         proc_op_mappings = OrderedDict()
         for tup in proc_op_tuple
             proc_op_mappings[tup] = []
+            sizehint!(proc_op_mappings, length(proc_op_tuple) * length(input_data.processes[tup[1]].eff_ops))
             for op in input_data.processes[tup[1]].eff_ops
                 push!(proc_op_mappings[tup], (tup..., op))
             end
@@ -650,7 +651,6 @@ function setup_reserve_realisation(model_contents::OrderedDict, input_data::Pred
         res_market_dir_tups = reserve_market_directional_tuples(input_data)
         res_market_tuples = reserve_market_tuples(input_data)
         nodegroup_res = nodegroup_reserves(input_data)
-        node_res = node_reserves(input_data)
         
         res_process_tuples = reserve_process_tuples(input_data)
         process_tuples = process_topology_tuples(input_data)
