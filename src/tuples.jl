@@ -118,9 +118,9 @@ function reserve_market_directional_tuples(input_data::InputData) # original nam
     if !input_data.setup.contains_reserves
         return NTuple{5, String}[]
     else
-        reserve_market_directional_tuples = NTuple{5, String}[]
-        markets = input_data.markets
-        scenarios = collect(keys(input_data.scenarios))
+        rmdt = NTuple{5, String}[]
+        res_markets = filter(x -> x.m_type == "reserve", collect(values(input_data.markets)))
+        scens = scenarios(input_data)
         temporals = input_data.temporals
         input_data_dirs = unique(map(m -> m.direction, collect(values(input_data.markets))))
         res_dir = []
@@ -138,20 +138,19 @@ function reserve_market_directional_tuples(input_data::InputData) # original nam
             end
         end
         unique!(res_dir)
-        for m in values(markets)
-            if m.m_type == "reserve"
-                if m.direction in res_dir
-                    for s in scenarios, t in temporals.t
-                        push!(reserve_market_directional_tuples, (m.name, m.node, m.direction, s, t))
-                    end
-                else
-                    for d in res_dir, s in scenarios, t in temporals.t
-                        push!(reserve_market_directional_tuples, (m.name, m.node, d, s, t))
-                    end
+        sizehint!(rmdt, length(res_dir) * length(res_markets) * length(scens) * length(temporals.t))
+        for m in res_markets
+            if m.direction in res_dir
+                for s in scens, t in temporals.t
+                    push!(rmdt, (m.name, m.node, m.direction, s, t))
+                end
+            else
+                for d in res_dir, s in scens, t in temporals.t
+                    push!(rmdt, (m.name, m.node, d, s, t))
                 end
             end
         end
-        return reserve_market_directional_tuples
+        return rmdt
     end
 end
 
@@ -162,20 +161,22 @@ end
 Return tuples identifying each process topology (flow) for each time step and scenario. Form: (p, so, si, s, t).
 """
 function process_topology_tuples(input_data::InputData) # original name: create_process_tuple()
-    process_topology_tuples = NTuple{5, String}[]
+    ptt = NTuple{5, String}[]
     processes = input_data.processes
-    scenarios = collect(keys(input_data.scenarios))
+    scens = scenarios(input_data)
     temporals = input_data.temporals
+    n_topos = sum(map(x -> length(x.topos), collect(values(processes))))
+    sizehint!(ptt, n_topos * length(scens) * length(temporals.t))
     for p in values(processes)
-        for s in scenarios
-            for topo in p.topos
+        for topo in p.topos
+            for s in scens
                 for t in temporals.t
-                    push!(process_topology_tuples, (p.name, topo.source, topo.sink, s, t))
+                    push!(ptt, (p.name, topo.source, topo.sink, s, t))
                 end
             end
         end
     end
-    return process_topology_tuples
+    return ptt
 end
 
 
@@ -188,7 +189,7 @@ function previous_process_topology_tuples(input_data::InputData)
     pptt = OrderedDict()
     process_tuples = process_topology_tuples(input_data)
     temporals = input_data.temporals.t
-
+    sizehint!(pptt, length(process_tuples))
     for (i, tup) in enumerate(process_tuples)
         if tup[5] != temporals[1]
             pptt[tup] = process_tuples[i-1]
@@ -207,18 +208,18 @@ function online_process_tuples(input_data::InputData) # original name: create_pr
     if !input_data.setup.contains_online
         return NTuple{3, String}[]
     else
-        online_process_tuples = NTuple{3, String}[]
-        processes = input_data.processes
-        scenarios = collect(keys(input_data.scenarios))
+        opt = NTuple{3, String}[]
+        scens = scenarios(input_data)
         temporals = input_data.temporals
-        for p in values(processes)
+        sizehint!(opt, length(input_data.processes) * length(scens) * length(temporals.t))
+        for p in values(input_data.processes)
             if p.is_online
-                for s in scenarios, t in temporals.t
-                    push!(online_process_tuples, (p.name, s, t))
+                for s in scens, t in temporals.t
+                    push!(opt, (p.name, s, t))
                 end
             end
         end
-        return online_process_tuples
+        return opt
     end
 end
 
@@ -266,15 +267,19 @@ function nodegroup_reserves(input_data::InputData)
         return NTuple{3, String}[]
     else
         res_nodegroups = NTuple{3, String}[]
-        scenarios = collect(keys(input_data.scenarios))
+        scens = scenarios(input_data)
         temporals = input_data.temporals
         markets = input_data.markets
-        for res_m in unique(map(x -> x[3], reserve_groups(input_data)))
-            for s in scenarios, t in temporals.t
-                push!(res_nodegroups, (markets[res_m].node, s, t))
+        res_markets =  unique(map(x -> x[3], reserve_groups(input_data)))
+        sizehint!(res_nodegroups, length(res_markets) * length(scens) * length(temporals.t))
+
+        relevant_nodes = unique(map(x -> markets[x].node, res_markets))
+        for n in relevant_nodes
+            for s in scens, t in temporals.t
+                push!(res_nodegroups, (n, s, t))
             end
         end
-        return unique(res_nodegroups)
+        return res_nodegroups
     end
 end
 
@@ -287,7 +292,7 @@ function node_reserves(input_data::InputData)
     if !input_data.setup.contains_reserves
         return NTuple{3, String}[]
     else
-        scens = collect(keys(input_data.scenarios))
+        scens = scenarios(input_data)
         temporals = input_data.temporals
         rns = reserve_nodes(input_data)
         res_nodes = NTuple{3, String}[]
@@ -348,26 +353,26 @@ function reserve_process_tuples(input_data::InputData) # original name: create_r
     if !input_data.setup.contains_reserves
         return NTuple{7, String}[]
     else
-        reserve_process_tuples = NTuple{7, String}[]
-        processes = input_data.processes
-        scenarios = collect(keys(input_data.scenarios))
+        rpt = NTuple{7, String}[]
+        res_processes = filter(x -> input_data.processes[x].is_res, collect(keys(input_data.processes)))
+        scens = scenarios(input_data)
         temporals = input_data.temporals
         res_groups = reserve_groups(input_data)
-        for p in collect(keys(processes))
-            if processes[p].is_res
-                res_cons = filter(x -> x[5] == p, res_groups)
-                for rc in res_cons
-                    for topo in processes[p].topos
-                        if (topo.source == rc[4]|| topo.sink == rc[4])
-                            for s in scenarios, t in temporals.t
-                                push!(reserve_process_tuples, (rc[1], rc[2], p, topo.source, topo.sink, s, t))
-                            end
+        n_res = length(unique(map(x -> x[1:2], res_groups)))
+        sizehint!(rpt, n_res * length(res_processes) * length(scens) * length(temporals.t))
+        for p in res_processes
+            res_cons = filter(x -> x[5] == p, res_groups)
+            for rc in res_cons
+                for topo in input_data.processes[p].topos
+                    if (topo.source == rc[4]|| topo.sink == rc[4])
+                        for s in scens, t in temporals.t
+                            push!(rpt, (rc[1], rc[2], p, topo.source, topo.sink, s, t))
                         end
                     end
                 end
             end
         end
-        return unique(reserve_process_tuples)
+        return rpt
     end
 end
 
@@ -378,20 +383,19 @@ end
 Return tuples for each node with a state (storage) for every time step and scenario. Form: (n, s, t).
 """
 function state_node_tuples(input_data::InputData) # original name: create_node_state_tuple()
-    state_node_tuples = NTuple{3, String}[]
+    snt = NTuple{3, String}[]
     if input_data.setup.contains_states
-        nodes = input_data.nodes
-        scenarios = collect(keys(input_data.scenarios))
+        state_nodes = filter(x -> x.is_state, collect(values(input_data.nodes)))
+        scens = scenarios(input_data)
         temporals = input_data.temporals
-        for n in values(nodes)
-            if n.is_state
-                for s in scenarios, t in temporals.t
-                    push!(state_node_tuples, (n.name, s, t))
-                end
+        sizehint!(snt, length(state_nodes) * length(scens) * length(temporals.t))
+        for n in state_nodes
+            for s in scens, t in temporals.t
+                push!(snt, (n.name, s, t))
             end
         end
     end
-    return state_node_tuples
+    return snt
 end
 
 
@@ -401,34 +405,34 @@ end
 Return tuples for each node over which balance should be maintained for every time step and scenario. Form: (n s, t).
 """
 function balance_node_tuples(input_data::InputData) # original name: create_node_balance_tuple()
-    balance_node_tuples = NTuple{3, String}[]
-    nodes = input_data.nodes
-    scenarios = collect(keys(input_data.scenarios))
+    bnt = NTuple{3, String}[]
+    nodes = filter(x -> !x.is_commodity && !x.is_market, collect(values(input_data.nodes)))
+    scens = scenarios(input_data)
     temporals = input_data.temporals
-    for n in values(nodes)
-        if !(n.is_commodity) & !(n.is_market)
-            for s in scenarios, t in temporals.t
-                push!(balance_node_tuples, (n.name, s, t))
-            end
+    sizehint!(bnt, length(nodes) * length(scens) * length(temporals.t))
+    for n in nodes
+        for s in scens, t in temporals.t
+            push!(bnt, (n.name, s, t))
         end
     end
-    return balance_node_tuples
+    return bnt
 end
 
 """
-    previous_balance_node_tuples(input_data::InputData)
+    previous_state_node_tuples(input_data::InputData)
 
-Function to gather the node balance tuple for the previous timestep. Returns a Dict() with the node_bal_tup as key and the previous tup as value. 
+Function to gather the node state tuple for the previous timestep. Returns a Dict() with the node_state_tup as key and the previous tup as value. 
 """
-function previous_balance_node_tuples(input_data::InputData)
-    pbnt = OrderedDict()
-    node_bal_tups = balance_node_tuples(input_data)
-    for (i, n) in enumerate(node_bal_tups)
+function previous_state_node_tuples(input_data::InputData)
+    psnt = OrderedDict()
+    node_state_tups = state_node_tuples(input_data)
+    sizehint!(psnt, length(node_state_tups))
+    for (i, n) in enumerate(node_state_tups)
         if n[3] != input_data.temporals.t[1]
-            pbnt[n] = node_bal_tups[i-1]
+            psnt[n] = node_state_tups[i-1]
         end
     end
-    return pbnt
+    return psnt
 end
 
 """
@@ -437,20 +441,19 @@ end
 Return tuples for each process over which balance is to be maintained for every time step and scenario. Form: (p, s, t).
 """
 function balance_process_tuples(input_data::InputData) # orignal name: create_proc_balance_tuple()
-    balance_process_tuples = NTuple{3, String}[]
-    processes = input_data.processes
-    scenarios = collect(keys(input_data.scenarios))
+    bpt = NTuple{3, String}[]
+    bal_processes = filter(x -> !x.is_cf && x.conversion == 1, collect(values(input_data.processes)))
+    scens = scenarios(input_data)
     temporals = input_data.temporals
-    for p in values(processes)
-        if p.conversion == 1 && !p.is_cf
-            if isempty(p.eff_fun)
-                for s in scenarios, t in temporals.t
-                    push!(balance_process_tuples, (p.name, s, t))
-                end
+    sizehint!(bpt, length(bal_processes) * length(scens) * length(temporals.t))
+    for p in bal_processes
+        if isempty(p.eff_fun)
+            for s in scens, t in temporals.t
+                push!(bpt, (p.name, s, t))
             end
         end
     end
-    return balance_process_tuples
+    return bpt
 end
 
 
@@ -463,20 +466,18 @@ function operative_slot_process_tuples(input_data::InputData) # original name: c
     if !input_data.setup.contains_piecewise_eff
         return NTuple{4, String}[]
     else
-        operative_slot_process_tuples = NTuple{4, String}[]
-        processes = input_data.processes
-        scenarios = collect(keys(input_data.scenarios))
+        ospt = NTuple{4, String}[]
+        op_processes = filter(x -> !x.is_cf && x.conversion == 1 && !isempty(x.eff_fun), collect(values(input_data.processes)))
+        n_ops = sum(map(x -> length(x.eff_ops), op_processes))
+        scens = scenarios(input_data)
         temporals = input_data.temporals
-        for p in values(processes)
-            if p.conversion == 1 && !p.is_cf
-                if !isempty(p.eff_fun)
-                    for s in scenarios, t in temporals.t, o in p.eff_ops
-                        push!(operative_slot_process_tuples, (p.name, s, t, o))
-                    end
-                end
+        sizehint!(ospt, n_ops * length(op_processes) * length(scens) * length(temporals.t))
+        for p in op_processes
+            for s in scens, t in temporals.t, o in p.eff_ops
+                push!(ospt, (p.name, s, t, o))
             end
         end
-        return operative_slot_process_tuples
+        return ospt
     end
 end
 
@@ -490,20 +491,17 @@ function piecewise_efficiency_process_tuples(input_data::InputData) # original n
     if !input_data.setup.contains_piecewise_eff
         return NTuple{3, String}[]
     else
-        piecewise_efficiency_process_tuples = NTuple{3, String}[]
-        processes = input_data.processes
-        scenarios = collect(keys(input_data.scenarios))
+        pept = NTuple{3, String}[]
+        op_processes = filter(x -> !x.is_cf && x.conversion == 1 && !isempty(x.eff_fun), collect(values(input_data.processes)))
+        scens = scenarios(input_data)
         temporals = input_data.temporals
-        for p in values(processes)
-            if p.conversion == 1 && !p.is_cf
-                if !isempty(p.eff_fun)
-                    for s in scenarios, t in temporals.t
-                        push!(piecewise_efficiency_process_tuples, (p.name, s, t))
-                    end
-                end
+        sizehint!(pept, length(op_processes) * length(scens) * length(temporals.t))
+        for p in op_processes
+            for s in scens, t in temporals.t
+                push!(pept, (p.name, s, t))
             end
         end
-        return piecewise_efficiency_process_tuples
+        return pept
     end
 end
 
@@ -514,15 +512,21 @@ end
 Return tuples identifying process topologies with a capacity factor for every time step and scenario. Form: (p, so, si, s, t).
 """
 function cf_process_topology_tuples(input_data::InputData) # original name: create_cf_balance_tuple()
-    cf_process_topology_tuples = NTuple{5, String}[]
-    processes = input_data.processes
-    process_tuples = process_topology_tuples(input_data)
-    for p in values(processes)
-        if p.is_cf
-            push!(cf_process_topology_tuples, filter(x -> (x[1] == p.name), process_tuples)...)
+    cf_ptt = NTuple{5, String}[]
+    cf_processes = filter(x -> x.is_cf, collect(values(input_data.processes)))
+    reduced_process_tuples = unique(map(x -> x[1:3], process_topology_tuples(input_data)))
+    scens = scenarios(input_data)
+    temporals = input_data.temporals
+    sizehint!(cf_ptt, length(cf_processes) * length(scens) * length(temporals.t))
+    for p in cf_processes
+        p_tups = filter(x -> x[1] == p.name, reduced_process_tuples)
+        for p_tup in p_tups
+            for s in scens, t in temporals.t
+                push!(cf_ptt, (p_tup..., s, t))
+            end
         end
     end
-    return cf_process_topology_tuples
+    return cf_ptt
 end
 
 """
@@ -531,16 +535,18 @@ end
 Return tuples containing information on process topologies with fixed limit on flow capacity. Form: (p, so, si, s, t).
 """
 function fixed_limit_process_topology_tuples( input_data::InputData) # original name: create_lim_tuple()
-    fixed_limit_process_topology_tuples = NTuple{5, String}[]
-    processes = input_data.processes
-    process_tuples = process_topology_tuples(input_data)
-    res_nodes = reserve_nodes(input_data)
-    for p in values(processes)
-        if !p.is_cf && (p.conversion == 1)
-            push!(fixed_limit_process_topology_tuples, filter(x -> x[1] == p.name, process_tuples)...)
+    flptt = NTuple{5, String}[]
+    fixed_processes = filter(x -> !x.is_cf && x.conversion == 1, collect(values(input_data.processes)))
+    scens = scenarios(input_data)
+    sizehint!(flptt, length(fixed_processes) * length(scens) * length(input_data.temporals.t))
+    for p in fixed_processes
+        for topo in p.topos
+            for s in scens, t in input_data.temporals.t
+                push!(flptt, (p.name, topo.source, topo.sink, s, t))
+            end
         end
     end
-    return fixed_limit_process_topology_tuples
+    return flptt
 end
 
 
@@ -550,15 +556,18 @@ end
 Return tuples identifying transport process topologies for each time step and scenario. Form: (p, so, si, s, t).
 """
 function transport_process_topology_tuples(input_data::InputData) # original name. create_trans_tuple()
-    transport_process_topology_tuples = NTuple{5, String}[]
-    processes = input_data.processes
-    process_tuples = process_topology_tuples(input_data)
-    for p in values(processes)
-        if !p.is_cf && p.conversion == 2
-            push!(transport_process_topology_tuples, filter(x -> x[1] == p.name, process_tuples)...)
+    tptt = NTuple{5, String}[]
+    trans_processes = filter(x -> !x.is_cf && x.conversion == 2, collect(values(input_data.processes)))
+    scens = scenarios(input_data)
+    sizehint!(tptt, length(trans_processes) * length(scens) * length(input_data.temporals.t))
+    for p in trans_processes
+        for topo in p.topos
+            for s in scens, t in input_data.temporals.t
+                push!(tptt, (p.name, topo.source, topo.sink, s, t))
+            end
         end
     end
-    return transport_process_topology_tuples
+    return tptt
 end
 
 
@@ -571,13 +580,14 @@ function reserve_nodegroup_tuples(input_data::InputData) # original name: create
     if !input_data.setup.contains_reserves
         return NTuple{4, String}[]
     else
-        reserve_node_tuples = NTuple{4, String}[]
+        rnt = NTuple{4, String}[]
         res_nodegroup = nodegroup_reserves(input_data)
         res_typ = collect(keys(input_data.reserve_type))
+        sizehint!(rnt, length(res_nodegroup) * length(res_typ))
         for ng_tup in res_nodegroup, rt in res_typ
-            push!(reserve_node_tuples, (ng_tup[1], rt, ng_tup[2], ng_tup[3]))
+            push!(rnt, (ng_tup[1], rt, ng_tup[2], ng_tup[3]))
         end
-        return reserve_node_tuples
+        return rnt
     end
 end
 
@@ -596,13 +606,13 @@ function up_down_reserve_market_tuples(input_data::InputData) # original name: c
     else
         up_down_reserve_market_tuples = NTuple{3, String}[]
         markets = input_data.markets
-        scenarios = collect(keys(input_data.scenarios))
+        scens = scenarios(input_data)
         temporals = input_data.temporals
         res_ms = unique(map(x -> x[1], reserve_market_tuples(input_data)))
         for rm in res_ms
             d = markets[rm].direction
             if d == "up/down" || d == "up/dw" || d == "up/dn" ||d == "up_down" || d == "up_dw" || d == "up_dn"
-                for s in scenarios, t in temporals.t
+                for s in scens, t in temporals.t
                     push!(up_down_reserve_market_tuples, (rm, s, t))
                 end
             end 
@@ -624,18 +634,17 @@ function reserve_market_tuples(input_data::InputData) # orignal name: create_res
     if !input_data.setup.contains_reserves
         return NTuple{3, String}[]
     else
-        reserve_market_tuples = NTuple{3, String}[]
-        markets = input_data.markets
-        scenarios = collect(keys(input_data.scenarios))
+        rmt = NTuple{3, String}[]
+        res_markets = filter(x -> x.m_type == "reserve", collect(values(input_data.markets)))
+        scens = scenarios(input_data)
         temporals = input_data.temporals
-        for m in values(markets)
-            if m.m_type == "reserve"
-                for s in scenarios, t in temporals.t
-                    push!(reserve_market_tuples, (m.name, s, t))
-                end
+        sizehint!(rmt, length(res_markets) * length(scens) * length(temporals.t))
+        for m in res_markets
+            for s in scens, t in temporals.t
+                push!(rmt, (m.name, s, t))
             end
         end
-        return reserve_market_tuples
+        return rmt
     end
 end
 
@@ -651,11 +660,11 @@ Return tuples containing time steps for energy markets when the market state is 
 function fixed_market_tuples(input_data::InputData) # original name: create_fixed_value_tuple()
     fixed_market_tuples = NTuple{3, String}[]
     markets = input_data.markets
-    scenarios = collect(keys(input_data.scenarios))
+    scens = scenarios(input_data)
     for m in values(markets)
         if !isempty(m.fixed) && m.m_type == "energy"
             temps = map(x->x[1], m.fixed)
-            for s in scenarios, t in temps
+            for s in scens, t in temps
                 push!(fixed_market_tuples, (m.name, s, t))
             end
         end
@@ -670,15 +679,20 @@ end
 Return tuples containing time steps with ramp possibility for each process topology and scenario. Form: (p, so, si, s, t).
 """
 function process_topology_ramp_times_tuples(input_data::InputData) # orignal name: create_ramp_tuple()
-    ramp_times_process_topology_tuple = NTuple{5, String}[]
-    processes = input_data.processes
-    process_tuples = process_topology_tuples(input_data)
-    for (name, source, sink, s, t) in process_tuples
-        if processes[name].conversion == 1 && !processes[name].is_cf
-            push!(ramp_times_process_topology_tuple, (name, source, sink, s, t))
+    rtptt = NTuple{5, String}[]
+    ramp_procs = filter(x -> x.conversion == 1 && !x.is_cf, collect(values(input_data.processes)))
+    n_topos = sum(map(x -> length(x.topos), ramp_procs))
+    scens = scenarios(input_data)
+    temps = input_data.temporals
+    sizehint!(rtptt, n_topos * length(scens) * length(temps.t))
+    for p in ramp_procs
+        for topo in p.topos
+            for s in scens, t in temps.t
+                push!(rtptt, (p.name, topo.source, topo.sink, s, t))
+            end
         end
     end
-    return ramp_times_process_topology_tuple
+    return rtptt
 end
 
 """
@@ -687,8 +701,8 @@ end
 Return scenarios. Form: (s).
 """
 function scenarios(input_data::InputData) # original name: create_risk_tuple()
-    scenarios = collect(keys(input_data.scenarios))
-    return scenarios
+    scens = collect(keys(input_data.scenarios))
+    return scens
 end
 
 """ 
@@ -698,15 +712,14 @@ Returns array of tuples containing balance market. Form: (m, dir, s, t).
 """
 function create_balance_market_tuple(input_data::Predicer.InputData)
     bal_tuples = NTuple{4, String}[]
-    markets = input_data.markets
+    energy_markets = filter(x -> x.m_type == "energy" && x.is_bid, collect(values(input_data.markets)))
     dir = ["up","dw"]
-    scenarios = collect(keys(input_data.scenarios))
-    temporals = input_data.temporals
-    for m in keys(markets)
-        if markets[m].m_type == "energy" && markets[m].is_bid == true
-            for d in dir, s in scenarios, t in temporals.t
-                push!(bal_tuples, (markets[m].name, d, s, t))
-            end
+    scens = scenarios(input_data)
+    temps = input_data.temporals
+    sizehint!(bal_tuples, length(energy_markets) * length(dir) * length(scens) * length(temps.t))
+    for m in energy_markets
+        for d in dir, s in scens, t in temps.t
+            push!(bal_tuples, (m.name, d, s, t))
         end
     end
     return bal_tuples
@@ -737,14 +750,54 @@ form: (sto_node, res_dir, res_type, p, so, si, s, t)
 function state_reserves(input_data::InputData)
     state_reserves = NTuple{8, String}[]
     if input_data.setup.contains_reserves && input_data.setup.contains_states
+        state_res_nodes = filter(x -> x.is_state && x.is_res, collect(values(input_data.nodes)))
+        if !isempty(state_res_nodes)
+            processes = input_data.processes
+            res_nodes_tuple = reserve_nodes(input_data)
+            res_potential_tuple = reserve_process_tuples(input_data)
+            reduced_res_potential_tuple = unique(map(x -> x[1:5], res_potential_tuple))
+            process_tuple = process_topology_tuples(input_data)
+            for n in res_nodes_tuple
+                res_node_in_processes = unique(map(x -> (x[3], x[4], x[5]), filter(tup -> tup[5] == n, reduced_res_potential_tuple)))
+                res_node_out_processes = unique(map(x -> (x[3], x[4], x[5]), filter(tup -> tup[4] == n, reduced_res_potential_tuple)))
+                for p_in in res_node_in_processes, p_out in res_node_out_processes
+                    # Get topos for p_in and p_out. Create tuple from the values
+                    p_in_topos = map(topo -> (p_in[1], topo.source, topo.sink), processes[p_in[1]].topos)
+                    p_out_topos = map(topo -> (p_out[1], topo.source, topo.sink), processes[p_out[1]].topos)
+    
+                    # Get the TOPOS not going into the reserve node
+                    not_res_topos_p_in = filter(x -> !(x in res_node_in_processes), p_in_topos)
+                    not_res_topos_p_out = filter(x -> !(x in res_node_out_processes), p_out_topos)
+    
+                    # The length of these topos should be 1.
+                    if length(not_res_topos_p_in)==1 && length(not_res_topos_p_out)==1
+                        # Check that one of their source/sink is the same. 
+                        if (not_res_topos_p_in[1][2] == not_res_topos_p_out[1][3])
+                            s_node = not_res_topos_p_in[1][2]
+                            if input_data.nodes[s_node].is_state
+                                s_node_ps = unique(map(x -> x[1], filter(tup -> (tup[3] == s_node || tup[2] == s_node), process_tuple)))
+                                if length(s_node_ps) == 2# if extra node only has 2 processes
+                                    append!(state_reserves, map(x -> (s_node, x...), filter(tup -> tup[3] == p_in[1], res_potential_tuple)))
+                                    append!(state_reserves, map(x -> (s_node, x...), filter(tup -> tup[3] == p_out[1], res_potential_tuple)))
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+
+        end
+    end
+    """    
+    if input_data.setup.contains_reserves && input_data.setup.contains_states
         processes = input_data.processes
-        nodes = input_data.nodes
+        state_nodes = filter(x -> x.is_state && x.is_res, collect(values(input_data.nodes)))
         res_nodes_tuple = reserve_nodes(input_data)
         res_potential_tuple = reserve_process_tuples(input_data)
         process_tuple = process_topology_tuples(input_data)
         for n in res_nodes_tuple
-            res_node_in_processes = unique(map(x -> (x[3], x[4], x[5]), filter(tup -> tup[5] == n, res_potential_tuple)))
-            res_node_out_processes = unique(map(x -> (x[3], x[4], x[5]), filter(tup -> tup[4] == n, res_potential_tuple)))
+            res_node_in_processes = unique(map(x -> (x[3], x[4], x[5]), filter(tup -> tup[5] == n, reduced_res_potential_tuple)))
+            res_node_out_processes = unique(map(x -> (x[3], x[4], x[5]), filter(tup -> tup[4] == n, reduced_res_potential_tuple)))
             for p_in in res_node_in_processes, p_out in res_node_out_processes
                 # Get topos for p_in and p_out. Create tuple from the values
                 p_in_topos = map(topo -> (p_in[1], topo.source, topo.sink), processes[p_in[1]].topos)
@@ -759,7 +812,7 @@ function state_reserves(input_data::InputData)
                     # Check that one of their source/sink is the same. 
                     if (not_res_topos_p_in[1][2] == not_res_topos_p_out[1][3])
                         s_node = not_res_topos_p_in[1][2]
-                        if nodes[s_node].is_state
+                        if input_data.nodes[s_node].is_state
                             s_node_ps = unique(map(x -> x[1], filter(tup -> (tup[3] == s_node || tup[2] == s_node), process_tuple)))
                             if length(s_node_ps) == 2# if extra node only has 2 processes
                                 append!(state_reserves, map(x -> (s_node, x...), filter(tup -> tup[3] == p_in[1], res_potential_tuple)))
@@ -771,7 +824,7 @@ function state_reserves(input_data::InputData)
             end
         end
     end
-
+    """ 
     return state_reserves
 end
 
@@ -784,14 +837,13 @@ form: (market, s, t)
 function create_reserve_limits(input_data::InputData)
     reserve_limits = NTuple{3, String}[]
     if input_data.setup.contains_reserves
-        markets = input_data.markets
-        scenarios = collect(keys(input_data.scenarios))
+        res_markets = filter(x -> x.m_type == "reserve" && x.is_limited, collect(values(input_data.markets)))
+        scens = scenarios(input_data)
         temporals = input_data.temporals
-        for m in keys(markets)
-            if markets[m].m_type == "reserve" && markets[m].is_limited
-                for s in scenarios, t in temporals.t
-                    push!(reserve_limits,(markets[m].name,s,t))
-                end
+        sizehint!(reserve_limits, length(res_markets) * length(scens) * length(temporals.t))
+        for m in res_markets
+            for s in scens, t in temporals.t
+                push!(reserve_limits,(m.name,s,t))
             end
         end
     end
@@ -805,17 +857,17 @@ Function to create tuples for general constraints with setpoints. Form (c, s, t)
 c is the name of the general constraint. 
 """
 function setpoint_tuples(input_data::InputData)
-    setpoint_tuples = NTuple{3, String}[]
-    scenarios = collect(keys(input_data.scenarios))
+    st = NTuple{3, String}[]
+    scens = scenarios(input_data)
     temporals = input_data.temporals.t
-    for c in collect(keys(input_data.gen_constraints))
-        if input_data.gen_constraints[c].is_setpoint
-            for s in scenarios, t in temporals
-                push!(setpoint_tuples, (c, s, t))
-            end
+    setpoint_cons = filter(x -> x.is_setpoint, collect(values(input_data.gen_constraints)))
+    sizehint!(st, length(setpoint_cons) * length(scens) * length(temporals))
+    for c in setpoint_cons
+        for s in scens, t in temporals
+            push!(st, (c.name, s, t))
         end
     end
-    return setpoint_tuples
+    return st
 end
 
 """
@@ -862,10 +914,11 @@ Function to create tuples for "source" nodes with a diffusion functionality. For
 function node_diffusion_tuple(input_data::InputData)
     node_diffusion_tup = NTuple{3, String}[]
     if input_data.setup.contains_diffusion
-        scenarios = collect(keys(input_data.scenarios))
+        scens = scenarios(input_data)
         temporals = input_data.temporals.t
         nodes = diffusion_nodes(input_data)
-        for n in nodes, s in scenarios, t in temporals
+        sizehint!(node_diffusion_tup, length(nodes) * length(scens) * length(temporals))
+        for n in nodes, s in scens, t in temporals
             push!(node_diffusion_tup, (n, s, t))
         end
     end
@@ -881,18 +934,19 @@ Function to create tuples for node delay functionality. Form (node1, node2, scen
 function node_delay_tuple(input_data::InputData)
     node_delay_tup = NTuple{5, String}[]
     if input_data.setup.contains_delay && !input_data.temporals.is_variable_dt # ensure the dt length is constant. Need to change in the future if it isn't...
+        scens = scenarios(input_data)
+        sizehint!(node_delay_tup, length(input_data.node_delay) * length(scens) * length(input_data.temporals.t))
         for tup in input_data.node_delay
             n1 = tup[1]
             n2 = tup[2]
             delay = tup[3]
-            l_t = length(input_data.temporals.t)
             for (i, t) in enumerate(input_data.temporals.t[begin:end])
-                if (l_t - i) <= delay
+                if (length(input_data.temporals.t) - i) <= delay
                     t2 = ZonedDateTime(t, input_data.temporals.ts_format) +  TimeZones.Hour(delay) * input_data.temporals.dtf
                 else
                     t2 = input_data.temporals.t[i+delay]
                 end
-                for s in scenarios(input_data)
+                for s in scens
                     push!(node_delay_tup, (n1, n2, s, string(t), string(t2)))
                 end
             end
@@ -956,7 +1010,7 @@ Function to create bid scenario tuples linked to bid slots. Form (m,s,t)
 """
 function bid_scenario_tuples(input_data::InputData)
     b_slots = input_data.bid_slots
-    scens = collect(keys(input_data.scenarios))
+    scens = scenarios(input_data)
     markets = keys(b_slots)
     bid_scen_tup = NTuple{3, String}[]
     for m in markets
