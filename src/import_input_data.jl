@@ -372,7 +372,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
         colnames = map(n -> map(x -> strip(x), split(n, ",")), ns)
         blocknames = filter(x->!(x[2] in collect(keys(scens))),colnames)
         for bn in blocknames
-            inflow_blocks[String(bn[1])] = InflowBlock(String(bn[1]), String(bn[2]))
+            inflow_blocks[String(bn[1])] = Predicer.InflowBlock(String(bn[1]), String(bn[2]))
         end
         for b in collect(keys(inflow_blocks))
             t_col = collect(skipmissing(system_data["inflow_blocks"][!,inflow_blocks[b].name*","*inflow_blocks[b].node]))
@@ -473,10 +473,10 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
             price_dict = OrderedDict()
             alloc_dict = OrderedDict()
             slot_names = unique(map(x->x[2],filter(x->x[1]==m,map(n -> map(x -> strip(x), split(n, ",")), ns))))
-            for s in slot_names
+            for sn in slot_names
                 for (i,t) in enumerate(time_steps)
-                    tup = (t,string(s))
-                    price_dict[tup]=system_data["bid_slots"][i,string(m*","*s)]
+                    tup = (t,string(sn))
+                    price_dict[tup]=system_data["bid_slots"][i,string(m*","*sn)]
                 end
             end
             prices = markets[m].price
