@@ -100,8 +100,9 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
     # v_res_real
     if input_data.setup.contains_reserves
         v_res_real = model_contents["expression"]["v_res_real"]
+        res_ns = reserve_nodes(input_data)
         for tup in constraint_indices
-            if tup[1] in reserve_nodes(input_data)
+            if tup[1] in res_ns
                 add_to_expression!(e_node_bal_eq_res_real[tup], -v_res_real[tup] * input_data.temporals(tup[3]))
             end
             add_to_expression!(e_constraint_node_bal_eq[tup], e_node_bal_eq_res_real[tup])
@@ -439,7 +440,7 @@ function setup_process_balance(model_contents::OrderedDict, input_data::Predicer
         proc_op_mappings = OrderedDict()
         for tup in proc_op_tuple
             proc_op_mappings[tup] = []
-            sizehint!(proc_op_mappings, length(proc_op_tuple) * length(input_data.processes[tup[1]].eff_ops))
+            sizehint!(proc_op_mappings[tup], length(input_data.processes[tup[1]].eff_ops))
             for op in input_data.processes[tup[1]].eff_ops
                 push!(proc_op_mappings[tup], (tup..., op))
             end
@@ -537,7 +538,7 @@ function setup_process_limits(model_contents::OrderedDict, input_data::Predicer.
     e_lim_min = model_contents["expression"]["e_lim_min"] = OrderedDict()
     e_lim_res_max = model_contents["expression"]["e_lim_res_max"] = OrderedDict()
     e_lim_res_min = model_contents["expression"]["e_lim_res_min"] = OrderedDict()
-    
+
     for tup in lim_tuple
         e_lim_max[tup] = AffExpr(0.0)
         e_lim_min[tup] = AffExpr(0.0)
@@ -647,7 +648,7 @@ function setup_reserve_realisation(model_contents::OrderedDict, input_data::Pred
         v_res_real_node = model_contents["expression"]["v_res_real_node"] = OrderedDict()
         v_res_real_flow = model_contents["expression"]["v_res_real_flow"] = OrderedDict()
         v_res_real_flow_tot = model_contents["expression"]["v_res_real_flow_tot"] = OrderedDict()
-    
+
         res_market_dir_tups = reserve_market_directional_tuples(input_data)
         res_market_tuples = reserve_market_tuples(input_data)
         nodegroup_res = nodegroup_reserves(input_data)
@@ -1013,9 +1014,11 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
         e_ramp_v_flow[tup] = AffExpr(0.0)
         if tup[5] == input_data.temporals.t[1]
             topo = filter(x -> tup[2] == x.source && tup[3] == x.sink, input_data.processes[tup[1]].topos)[1]
-            add_to_expression!(e_ramp_v_flow[tup], v_flow[validate_tuple(model_contents, tup, 4)] - (topo.initial_flow * topo.capacity))
+            add_to_expression!(e_ramp_v_flow[tup], v_flow[validate_tuple(model_contents, tup, 4)])
+            add_to_expression!(e_ramp_v_flow[tup], - (topo.initial_flow * topo.capacity))
         else
-            add_to_expression!(e_ramp_v_flow[tup], v_flow[validate_tuple(model_contents, tup, 4)] - v_flow[validate_tuple(model_contents, previous_proc_tups[tup], 4)])
+            add_to_expression!(e_ramp_v_flow[tup], v_flow[validate_tuple(model_contents, tup, 4)])
+            add_to_expression!(e_ramp_v_flow[tup], - v_flow[validate_tuple(model_contents, previous_proc_tups[tup], 4)])
         end
     end
 
