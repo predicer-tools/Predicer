@@ -92,9 +92,10 @@ function reserve_nodes(input_data::InputData) # original name: create_res_nodes_
     reserve_nodes = String[]
     if input_data.setup.contains_reserves
         markets = input_data.markets
+        group_tups = create_group_tuples(input_data)
         for m in collect(keys(markets))
             if markets[m].m_type == "reserve"
-                for n in unique(map(y -> y[3], filter(x -> x[2] == markets[m].node, create_group_tuples(input_data))))
+                for n in unique(map(y -> y[3], filter(x -> x[2] == markets[m].node, group_tups)))
                     if input_data.nodes[n].is_res
                         push!(reserve_nodes, n)
                     end
@@ -104,7 +105,6 @@ function reserve_nodes(input_data::InputData) # original name: create_res_nodes_
     end
     return unique(reserve_nodes)
 end
-
 
 """
     reserve_market_directional_tuples(input_data::InputData)
