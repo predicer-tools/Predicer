@@ -154,7 +154,6 @@ function create_vq_ramp(model_contents::OrderedDict, input_data::InputData)
     model = model_contents["model"]
     if input_data.setup.use_ramp_dummy_variables
         ramp_tups = unique(Predicer.validate_tuple(model_contents, process_topology_ramp_times_tuples(input_data), 4))
-        # Slack variables for node_states
         vq_ramp_up = @variable(model, vq_ramp_up[tup in ramp_tups] >= 0)
         vq_ramp_dw = @variable(model, vq_ramp_dw[tup in ramp_tups] >= 0)
     end
