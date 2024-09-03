@@ -58,10 +58,14 @@ Helper function used to correct generated index tuples in cases when the start o
 """
 function validate_tuple(mc::OrderedDict, tuple::NTuple{N, AbstractString} where N, s_index::Int)
     if !isempty(mc["validation_dict"])
-        if s_index + 1 < length(tuple)
-            return (tuple[1:s_index-1]..., mc["validation_dict"][tuple[s_index:s_index+1]]..., tuple[s_index+2:end]...)
+        if tuple[s_index+1] in mc["common_timesteps"]
+            if s_index + 1 < length(tuple)
+                (tuple[1:s_index-1]..., mc["validation_dict"][tuple[s_index:s_index+1]]..., tuple[s_index+2:end]...)
+            else
+                return (tuple[1:s_index-1]..., mc["validation_dict"][tuple[s_index:s_index+1]]...)
+            end
         else
-            return (tuple[1:s_index-1]..., mc["validation_dict"][tuple[s_index:s_index+1]]...)
+            return tuple
         end
     else
         return tuple
@@ -70,18 +74,54 @@ end
 
 
 """
+    validate_tuple(val_dict::OrderedDict, cts::Vector{String}, tuple::NTuple{N, AbstractString} where N, s_index::Int)
+
+Helper function used to correct generated index tuples in cases when the start of the optimization horizon is the same for all scenarios.
+This version is faster when validating larger tuples.
+"""
+function validate_tuple(val_dict::OrderedDict, cts::Union{Vector{String}, Vector{Any}}, tuple::NTuple{N, AbstractString} where N, s_index::Int)
+    if !isempty(val_dict)
+        if tuple[s_index+1] in cts
+            if s_index + 1 < length(tuple)
+                (tuple[1:s_index-1]..., val_dict[tuple[s_index:s_index+1]]..., tuple[s_index+2:end]...)
+            else
+                return (tuple[1:s_index-1]..., val_dict[tuple[s_index:s_index+1]]...)
+            end
+        else
+            return tuple
+        end
+    else
+        return tuple
+    end
+end
+
+"""
     validate_tuple(mc::OrderedDict, tuple::Vector{T} where T, s_index::Int)
 
 Helper function used to correct generated index tuples in cases when the start of the optimization horizon is the same for all scenarios.
 """
 function validate_tuple(mc::OrderedDict, tuple::Vector{T} where T, s_index::Int)
     if !isempty(mc["validation_dict"])
-        return map(x -> Predicer.validate_tuple(mc, x, s_index), tuple)
+        val_dict = mc["validation_dict"]
+        cts =  mc["common_timesteps"]
+        return map(x -> Predicer.validate_tuple(val_dict, cts, x, s_index), tuple)
     else
         return tuple
     end
 end
 
+"""
+    validate_tuple(mc::OrderedDict, tuple::Vector{T} where T, s_index::Int)
+
+Helper function used to correct generated index tuples in cases when the start of the optimization horizon is the same for all scenarios.
+"""
+function validate_tuple(val_dict::OrderedDict, cts::Union{Vector{String}, Vector{Any}}, tuple::Vector{T} where T, s_index::Int)
+    if !isempty(val_dict)
+        return map(x -> Predicer.validate_tuple(val_dict, cts, x, s_index), tuple)
+    else
+        return tuple
+    end
+end
 
 """
     reserve_nodes(input_data::InputData)
@@ -876,16 +916,18 @@ end
 Function to create tuples for inflow blocks. Form (blockname, node, s, t).
 """
 function block_tuples(input_data::InputData)
-    blocks = input_data.inflow_blocks
-    block_tuples = NTuple{4, String}[]
-    for b in collect(keys(blocks))
-        for t_series in blocks[b].data.ts_data
+    blocks = collect(values(input_data.inflow_blocks))
+    bt = NTuple{4, String}[]
+    bt_len = sum(map(x -> sum(map(y -> length(y.series), x.data.ts_data)), blocks))
+    sizehint!(bt, bt_len)
+    for b in blocks
+        for t_series in b.data.ts_data
             for t in t_series.series
-                push!(block_tuples, (b, blocks[b].node, t_series.scenario, t[1]))
+                push!(bt, (b.name, b.node, t_series.scenario, t[1]))
             end
         end
     end
-    return block_tuples
+    return bt
 end
 
 

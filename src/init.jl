@@ -15,12 +15,9 @@ end
 function create_validation_dict(input_data::InputData)
     val_dict = OrderedDict()
     if input_data.setup.common_timesteps > 0
-        temps = input_data.temporals.t
+        temps = input_data.temporals.t[1:input_data.setup.common_timesteps]
         for s in Predicer.scenarios(input_data), i in 1:1:input_data.setup.common_timesteps
             val_dict[(s, temps[i])] = (input_data.setup.common_scenario_name, temps[i])
-        end
-        for s in Predicer.scenarios(input_data), i in input_data.setup.common_timesteps+1:1:length(input_data.temporals.t)
-            val_dict[(s, temps[i])] = (s, temps[i])
         end
     end
     return val_dict
@@ -32,6 +29,11 @@ function build_model_contents_dict(input_data::Predicer.InputData)
     model_contents["gen_constraint"] = OrderedDict() #GenericConstraints
     model_contents["gen_expression"] = OrderedDict() #GenericConstraints
     model_contents["validation_dict"] = create_validation_dict(input_data)
+    if input_data.setup.common_timesteps > 0
+        model_contents["common_timesteps"] = input_data.temporals.t[1:input_data.setup.common_timesteps]
+    else
+        model_contents["common_timesteps"] = []
+    end
     input_data_dirs = unique(map(m -> m.direction, collect(values(input_data.markets))))
     res_dir = []
     for d in input_data_dirs
