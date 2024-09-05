@@ -47,7 +47,8 @@ end
 @testset "Predicer on $bn" for (bn, known_obj) in cases
     m = Model(Optimizer)
     #set_silent(m)
-    mc = Predicer.generate_model(m, get_input(bn))
+    inp = get_input(bn)
+    mc = Predicer.generate_model(m, inp)
     @test m == mc["model"]
     Predicer.solve_model(mc)
     @test termination_status(m) == MOI.OPTIMAL
@@ -60,4 +61,5 @@ end
         @test objective_value(m) ≈ known_obj rtol=rgap
     end
     @show objective_value(m) known_obj relative_gap(m)
+    @test !isempty(Predicer.get_all_result_dataframes(mc, inp))
 end

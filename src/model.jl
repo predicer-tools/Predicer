@@ -346,11 +346,12 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             bid_vol_tups = unique(map(x ->(x[1], x[2]), tuples["bid_slot_tuple"]))
         end
         for bvt in bid_vol_tups
-            col_tup = filter(x -> x[2] == bvt[2] && x[1] == bvt[1], tuples["bid_slot_tuple"])
             dat_vec = []
             colname = bvt[1] * ", " * bvt[2]
-            for tup in col_tup
-                push!(dat_vec, JuMP.value.(v_bid_vol[tup]))
+            for tup in tuples["bid_slot_tuple"]
+                if tup[2] == bvt[2] && tup[1] == bvt[1]
+                    push!(dat_vec, JuMP.value.(v_bid_vol[tup]))
+                end
             end
             df[!,colname] = dat_vec
         end
@@ -380,7 +381,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
         for block in blocks
             colname = block[1] * "_" * block[2] * "_" * block[3]
             b_tup = (block..., input_data.inflow_blocks[block[1]].start_time)
-            df[!, colname] = [JuMP.value.(v_block[validate_tuples(model_contents, b_tup, 3)[begin:3]])]
+            df[!, colname] = [JuMP.value.(v_block[validate_tuple(model_contents, b_tup, 3)[begin:3]])]
         end
     elseif e_type == "v_setpoint" || e_type == "v_set_up" || e_type == "v_set_down"
         v_var = model.obj_dict[Symbol(e_type)]
