@@ -39,9 +39,9 @@ function testrunner(cases)
             if rgap < 1e-8 || !isfinite(rgap)
                 rgap = 1e-8
             end
-            push!(test_results[_filename], (true, JuMP.objective_value(mc["model"]), rgap))
+            push!(test_results[_filename], (true, JuMP.objective_value(mc["model"]), rgap, !isempty(Predicer.get_all_result_dataframes(mc, id))))
         else
-            push!(test_results[_filename], (false, JuMP.termination_status(mc["model"]), ""))
+            push!(test_results[_filename], (false, JuMP.termination_status(mc["model"]), "", false))
         end
     end
     return test_results
@@ -56,4 +56,11 @@ test_results = testrunner(cases)
     expected_val = obj
     rgap = test_results[bn][1][3]
     @show model_obj_val expected_val rgap
+    @test test_results[bn][1][4]
 end
+
+"""
+@test !isempty(get_all_result_dataframes(mc, input_data))
+
+
+"""
