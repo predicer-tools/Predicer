@@ -1533,6 +1533,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     val_dict = model_contents["validation_dict"]
     common_ts = model_contents["common_timesteps"]
     process_tuple = process_topology_tuples(input_data)
+    reduced_process_tuple = unique(map(x -> x[1:4], process_tuple))
     node_balance_tuple = balance_node_tuples(input_data)
     
     v_flow = model.obj_dict[:v_flow]
@@ -1554,11 +1555,14 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
         for n in keys(nodes)
             #Commodity costs:
             if nodes[n].is_commodity
-                flow_tups = filter(x -> x[2] == n && x[4] == s, process_tuple)
+                red_flow_tups = filter(x -> x[2] == n && x[4] == s, reduced_process_tuple)
                 cost_ts = nodes[n].cost(s)
                 # Add to expression for each t found in series
-                for tup in unique(validate_tuple(val_dict, common_ts, flow_tups, 4))
-                    add_to_expression!(commodity_costs[s], sum(v_flow[tup]), cost_ts(tup[5]) * temporals(tup[5]))
+                for t in input_data.temporals.t
+                    flow_tups = map(x -> (x[1:end]..., t), red_flow_tups)
+                    for tup in unique(validate_tuple(val_dict, common_ts, flow_tups, 4))
+                        add_to_expression!(commodity_costs[s], sum(v_flow[tup]), cost_ts(tup[5]) * temporals(tup[5]))
+                    end
                 end
             end
             # Spot-Market costs and profits
@@ -1602,7 +1606,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
         for tup in reduced_proc_tuple
             vom = filter(x->x.source == tup[2] && x.sink == tup[3], processes[tup[1]].topos)[1].vom_cost
             if vom != 0
-                flows = flows = [(tup[1:3]..., s, t) for t in input_data.temporals.t]
+                flows = [(tup[1:3]..., s, t) for t in input_data.temporals.t]
                 for f in flows
                     add_to_expression!(vom_costs[s], sum(v_flow[validate_tuple(val_dict, common_ts, f, 4)]), vom * temporals(f[5]))
                 end
