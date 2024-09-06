@@ -404,7 +404,7 @@ function setup_process_balance(model_contents::OrderedDict, input_data::Predicer
     processes = input_data.processes
 
     # Fixed efficiency case:
-    nod_eff = OrderedDict()
+    nod_eff = Dict()
     proc_bal_tup_reduced = unique(map(x -> x[1], proc_balance_tuple))
     proc_tuple_reduced = unique(map(x -> (x[1:3]), process_tuple))
     for p in proc_bal_tup_reduced
@@ -422,7 +422,15 @@ function setup_process_balance(model_contents::OrderedDict, input_data::Predicer
             tup = (p, s, t)
             sources_with_s_and_t = map(x -> (x[1], x[2], x[3], s, t), sources)
             sinks_with_s_and_t = map(x -> (x[1], x[2], x[3], s, t), sinks)
-            nod_eff[tup] = sum(v_flow[validate_tuples(val_dict, common_ts, sinks_with_s_and_t, 4)]) - (length(sources_with_s_and_t) > 0 ? eff * sum(v_flow[validate_tuples(val_dict, common_ts, sources_with_s_and_t, 4)]) : 0)
+            neff = nod_eff[tup] = AffExpr(0.0)
+            for vtup in validate_tuples(val_dict, common_ts,
+                                        sinks_with_s_and_t, 4)
+                add_to_expression!(neff, v_flow[vtup])
+            end
+            for vtup in validate_tuples(val_dict, common_ts,
+                                        sources_with_s_and_t, 4)
+                add_to_expression!(neff, v_flow[vtup], -eff)
+            end
         end
     end
 
@@ -549,18 +557,16 @@ function setup_process_limits(model_contents::OrderedDict, input_data::Predicer.
     cf_fix_bal_eq = @constraint(model, cf_fix_bal_eq[tup in collect(keys(cf_fac_fix))], cf_fac_fix[tup] == 0)
     cf_up_bal_eq = @constraint(model, cf_up_bal_eq[tup in collect(keys(cf_fac_up))], cf_fac_up[tup] <= 0)
 
-    # Base expressions as Dict:
-    e_lim_max = model_contents["expression"]["e_lim_max"] = OrderedDict()
-    e_lim_min = model_contents["expression"]["e_lim_min"] = OrderedDict()
-    e_lim_res_max = model_contents["expression"]["e_lim_res_max"] = OrderedDict()
-    e_lim_res_min = model_contents["expression"]["e_lim_res_min"] = OrderedDict()
-
-    for tup in lim_tuple
-        e_lim_max[tup] = AffExpr(0.0)
-        e_lim_min[tup] = AffExpr(0.0)
-        e_lim_res_max[tup] = AffExpr(0.0)
-        e_lim_res_min[tup] = AffExpr(0.0)
+    @expressions model begin
+        e_lim_max[tup = lim_tuple], AffExpr(0.0)
+        e_lim_min[tup = lim_tuple], AffExpr(0.0)
+        e_lim_res_max[tup = lim_tuple], AffExpr(0.0)
+        e_lim_res_min[tup = lim_tuple], AffExpr(0.0)
     end
+    model_contents["expression"]["e_lim_max"] = e_lim_max
+    model_contents["expression"]["e_lim_min"] = e_lim_min
+    model_contents["expression"]["e_lim_res_max"] = e_lim_res_max
+    model_contents["expression"]["e_lim_res_min"] = e_lim_res_min
 
     # online processes
     if input_data.setup.contains_online
@@ -630,18 +636,26 @@ function setup_process_limits(model_contents::OrderedDict, input_data::Predicer.
             end
         end
 
-        v_load_max_eq = @constraint(model, v_load_max_eq[tup in res_p_tuples], v_load[validate_tuple(val_dict, common_ts, tup, 4)] + e_lim_max[tup] + e_lim_res_max[tup] <= 0)
-        v_load_min_eq = @constraint(model, v_load_min_eq[tup in res_p_tuples], v_load[validate_tuple(val_dict, common_ts, tup, 4)] + e_lim_min[tup] + e_lim_res_min[tup] >= 0)
-    end 
+        @constraints model begin
+            v_load_max_eq[tup = res_p_tuples],
+            (v_load[validate_tuple(val_dict, common_ts, tup, 4)]
+             + e_lim_max[tup] + e_lim_res_max[tup]) <= 0
 
-    @constraint(
-        model, v_flow_max_eq[tup in keys(e_lim_max)],
-        v_flow[validate_tuple(val_dict, common_ts, tup, 4)]
-        + e_lim_max[tup] <= 0);
-    @constraint(
-        model, v_flow_min_eq[tup in keys(e_lim_min)],
-        v_flow[validate_tuple(val_dict, common_ts, tup, 4)]
-        + e_lim_min[tup] >= 0);
+            v_load_min_eq[tup = res_p_tuples],
+            (v_load[validate_tuple(val_dict, common_ts, tup, 4)]
+             + e_lim_min[tup] + e_lim_res_min[tup]) >= 0
+        end
+    end
+
+    @constraints model begin
+        v_flow_max_eq[tup = lim_tuple],
+        (v_flow[validate_tuple(val_dict, common_ts, tup, 4)]
+         + e_lim_max[tup]) <= 0
+
+        v_flow_min_eq[tup = lim_tuple],
+        (v_flow[validate_tuple(val_dict, common_ts, tup, 4)]
+         + e_lim_min[tup]) >= 0
+    end
 end
 
 
@@ -1040,9 +1054,9 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
         end
     end
 
-    e_ramp_v_flow = model_contents["expression"]["e_ramp_v_flow"] = OrderedDict()
+    model_contents["expression"]["e_ramp_v_flow"] = @expression(
+        model, e_ramp_v_flow[tup = ramp_tuple], AffExpr(0.0))
     for tup in ramp_tuple
-        e_ramp_v_flow[tup] = AffExpr(0.0)
         if tup[5] == input_data.temporals.t[1]
             topo = filter(x -> tup[2] == x.source && tup[3] == x.sink, input_data.processes[tup[1]].topos)[1]
             add_to_expression!(e_ramp_v_flow[tup], v_flow[validate_tuple(val_dict, common_ts, tup, 4)])
@@ -1053,15 +1067,23 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
         end
     end
 
-    if input_data.setup.contains_reserves
-        if !isempty(ramp_expr_res_up)
-            ramp_up_eq_v_load = @constraint(model, ramp_up_eq_v_load[tup in res_proc_tuples], e_ramp_v_load[tup] <= ramp_expr_up[tup] + ramp_expr_res_up[tup])
-            ramp_down_eq_v_load = @constraint(model, ramp_down_eq_v_load[tup in res_proc_tuples], e_ramp_v_load[tup] >= ramp_expr_down[tup] + ramp_expr_res_down[tup])
+    if input_data.setup.contains_reserves && !isempty(ramp_expr_res_up)
+        @constraints model begin
+            ramp_up_eq_v_load[tup = res_proc_tuples],
+            e_ramp_v_load[tup] <= ramp_expr_up[tup] + ramp_expr_res_up[tup]
+
+            ramp_down_eq_v_load[tup = res_proc_tuples],
+            e_ramp_v_load[tup] >= ramp_expr_down[tup] + ramp_expr_res_down[tup]
         end
     end
-        
-    ramp_up_eq_v_flow = @constraint(model, ramp_up_eq_v_flow[tup in ramp_tuple], e_ramp_v_flow[tup] <= ramp_expr_up[tup])
-    ramp_down_eq_v_flow = @constraint(model, ramp_down_eq_v_flow[tup in ramp_tuple], e_ramp_v_flow[tup] >= ramp_expr_down[tup])
+
+    @constraints model begin
+        ramp_up_eq_v_flow[tup = ramp_tuple],
+        e_ramp_v_flow[tup] <= ramp_expr_up[tup]
+
+        ramp_down_eq_v_flow[tup = ramp_tuple],
+        e_ramp_v_flow[tup] >= ramp_expr_down[tup]
+    end
 end
 
 
