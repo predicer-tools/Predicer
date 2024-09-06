@@ -413,7 +413,7 @@ function setup_process_balance(model_contents::OrderedDict, input_data::Predicer
     processes = input_data.processes
 
     # Fixed efficiency case:
-    nod_eff = OrderedDict()
+    nod_eff = Dict()
     proc_bal_tup_reduced = unique(map(x -> x[1], proc_balance_tuple))
     proc_tuple_reduced = unique(map(x -> (x[1:3]), process_tuple))
     for p in proc_bal_tup_reduced
@@ -431,7 +431,15 @@ function setup_process_balance(model_contents::OrderedDict, input_data::Predicer
             tup = (p, s, t)
             sources_with_s_and_t = map(x -> (x[1], x[2], x[3], s, t), sources)
             sinks_with_s_and_t = map(x -> (x[1], x[2], x[3], s, t), sinks)
-            nod_eff[tup] = sum(v_flow[validate_tuples(val_dict, common_ts, sinks_with_s_and_t, 4)]) - (length(sources_with_s_and_t) > 0 ? eff * sum(v_flow[validate_tuples(val_dict, common_ts, sources_with_s_and_t, 4)]) : 0)
+            neff = nod_eff[tup] = AffExpr(0.0)
+            for vtup in validate_tuples(val_dict, common_ts,
+                                        sinks_with_s_and_t, 4)
+                add_to_expression!(neff, v_flow[vtup])
+            end
+            for vtup in validate_tuples(val_dict, common_ts,
+                                        sources_with_s_and_t, 4)
+                add_to_expression!(neff, v_flow[vtup], -eff)
+            end
         end
     end
 
@@ -558,18 +566,16 @@ function setup_process_limits(model_contents::OrderedDict, input_data::Predicer.
     cf_fix_bal_eq = @constraint(model, cf_fix_bal_eq[tup in collect(keys(cf_fac_fix))], cf_fac_fix[tup] == 0)
     cf_up_bal_eq = @constraint(model, cf_up_bal_eq[tup in collect(keys(cf_fac_up))], cf_fac_up[tup] <= 0)
 
-    # Base expressions as Dict:
-    e_lim_max = model_contents["expression"]["e_lim_max"] = OrderedDict()
-    e_lim_min = model_contents["expression"]["e_lim_min"] = OrderedDict()
-    e_lim_res_max = model_contents["expression"]["e_lim_res_max"] = OrderedDict()
-    e_lim_res_min = model_contents["expression"]["e_lim_res_min"] = OrderedDict()
-
-    for tup in lim_tuple
-        e_lim_max[tup] = AffExpr(0.0)
-        e_lim_min[tup] = AffExpr(0.0)
-        e_lim_res_max[tup] = AffExpr(0.0)
-        e_lim_res_min[tup] = AffExpr(0.0)
+    @expressions model begin
+        e_lim_max[tup = lim_tuple], AffExpr(0.0)
+        e_lim_min[tup = lim_tuple], AffExpr(0.0)
+        e_lim_res_max[tup = lim_tuple], AffExpr(0.0)
+        e_lim_res_min[tup = lim_tuple], AffExpr(0.0)
     end
+    model_contents["expression"]["e_lim_max"] = e_lim_max
+    model_contents["expression"]["e_lim_min"] = e_lim_min
+    model_contents["expression"]["e_lim_res_max"] = e_lim_res_max
+    model_contents["expression"]["e_lim_res_min"] = e_lim_res_min
 
     # online processes
     if input_data.setup.contains_online
@@ -639,12 +645,26 @@ function setup_process_limits(model_contents::OrderedDict, input_data::Predicer.
             end
         end
 
-        v_load_max_eq = @constraint(model, v_load_max_eq[tup in res_p_tuples], v_load[validate_tuple(val_dict, common_ts, tup, 4)] + e_lim_max[tup] + e_lim_res_max[tup] <= 0)
-        v_load_min_eq = @constraint(model, v_load_min_eq[tup in res_p_tuples], v_load[validate_tuple(val_dict, common_ts, tup, 4)] + e_lim_min[tup] + e_lim_res_min[tup] >= 0)
-    end 
+        @constraints model begin
+            v_load_max_eq[tup = res_p_tuples],
+            (v_load[validate_tuple(val_dict, common_ts, tup, 4)]
+             + e_lim_max[tup] + e_lim_res_max[tup]) <= 0
 
-    v_flow_max_eq = @constraint(model, v_flow_max_eq[tup in collect(keys(e_lim_max))], v_flow[validate_tuple(val_dict, common_ts, tup, 4)] + e_lim_max[tup] <= 0);
-    v_flow_min_eq = @constraint(model, v_flow_min_eq[tup in collect(keys(e_lim_min))], v_flow[validate_tuple(val_dict, common_ts, tup, 4)] + e_lim_min[tup] >= 0);
+            v_load_min_eq[tup = res_p_tuples],
+            (v_load[validate_tuple(val_dict, common_ts, tup, 4)]
+             + e_lim_min[tup] + e_lim_res_min[tup]) >= 0
+        end
+    end
+
+    @constraints model begin
+        v_flow_max_eq[tup = lim_tuple],
+        (v_flow[validate_tuple(val_dict, common_ts, tup, 4)]
+         + e_lim_max[tup]) <= 0
+
+        v_flow_min_eq[tup = lim_tuple],
+        (v_flow[validate_tuple(val_dict, common_ts, tup, 4)]
+         + e_lim_min[tup]) >= 0
+    end
 end
 
 
@@ -965,8 +985,6 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
         vq_ramp_dw = model.obj_dict[:vq_ramp_dw]
     end
 
-    previous_ts = Predicer.get_previous_t(input_data.temporals)
-    previous_proc_tups = Predicer.previous_process_topology_tuples(input_data)
     reduced_ramp_tuple = unique(map(x -> (x[1:3]), ramp_tuple))
 
     for red_tup in reduced_ramp_tuple
@@ -1028,6 +1046,8 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
         end
     end
 
+    previous_ts = previous_times(input_data)
+    previous_proc_tup(tup) = (tup[1 : 4]..., previous_ts[tup[5]])
     if input_data.setup.contains_reserves
         e_ramp_v_load = model_contents["expression"]["e_ramp_v_load"] = OrderedDict()
         for tup in res_proc_tuples
@@ -1038,33 +1058,41 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
                 add_to_expression!(e_ramp_v_load[tup], - (topo.initial_flow * topo.capacity))
             else
                 add_to_expression!(e_ramp_v_load[tup], v_load[validate_tuple(val_dict, common_ts, tup, 4)])
-                add_to_expression!(e_ramp_v_load[tup], v_load[validate_tuple(val_dict, common_ts, previous_proc_tups[tup], 4)], -1)
+                add_to_expression!(e_ramp_v_load[tup], v_load[validate_tuple(val_dict, common_ts, previous_proc_tup(tup), 4)], -1)
             end
         end
     end
 
-    e_ramp_v_flow = model_contents["expression"]["e_ramp_v_flow"] = OrderedDict()
+    model_contents["expression"]["e_ramp_v_flow"] = @expression(
+        model, e_ramp_v_flow[tup = ramp_tuple], AffExpr(0.0))
     for tup in ramp_tuple
-        e_ramp_v_flow[tup] = AffExpr(0.0)
         if tup[5] == input_data.temporals.t[1]
             topo = filter(x -> tup[2] == x.source && tup[3] == x.sink, input_data.processes[tup[1]].topos)[1]
             add_to_expression!(e_ramp_v_flow[tup], v_flow[validate_tuple(val_dict, common_ts, tup, 4)])
             add_to_expression!(e_ramp_v_flow[tup], - (topo.initial_flow * topo.capacity))
         else
             add_to_expression!(e_ramp_v_flow[tup], v_flow[validate_tuple(val_dict, common_ts, tup, 4)])
-            add_to_expression!(e_ramp_v_flow[tup], v_flow[validate_tuple(val_dict, common_ts, previous_proc_tups[tup], 4)], -1)
+            add_to_expression!(e_ramp_v_flow[tup], v_flow[validate_tuple(val_dict, common_ts, previous_proc_tup(tup), 4)], -1)
         end
     end
 
-    if input_data.setup.contains_reserves
-        if !isempty(ramp_expr_res_up)
-            ramp_up_eq_v_load = @constraint(model, ramp_up_eq_v_load[tup in res_proc_tuples], e_ramp_v_load[tup] <= ramp_expr_up[tup] + ramp_expr_res_up[tup])
-            ramp_down_eq_v_load = @constraint(model, ramp_down_eq_v_load[tup in res_proc_tuples], e_ramp_v_load[tup] >= ramp_expr_down[tup] + ramp_expr_res_down[tup])
+    if input_data.setup.contains_reserves && !isempty(ramp_expr_res_up)
+        @constraints model begin
+            ramp_up_eq_v_load[tup = res_proc_tuples],
+            e_ramp_v_load[tup] <= ramp_expr_up[tup] + ramp_expr_res_up[tup]
+
+            ramp_down_eq_v_load[tup = res_proc_tuples],
+            e_ramp_v_load[tup] >= ramp_expr_down[tup] + ramp_expr_res_down[tup]
         end
     end
-        
-    ramp_up_eq_v_flow = @constraint(model, ramp_up_eq_v_flow[tup in ramp_tuple], e_ramp_v_flow[tup] <= ramp_expr_up[tup])
-    ramp_down_eq_v_flow = @constraint(model, ramp_down_eq_v_flow[tup in ramp_tuple], e_ramp_v_flow[tup] >= ramp_expr_down[tup])
+
+    @constraints model begin
+        ramp_up_eq_v_flow[tup = ramp_tuple],
+        e_ramp_v_flow[tup] <= ramp_expr_up[tup]
+
+        ramp_down_eq_v_flow[tup = ramp_tuple],
+        e_ramp_v_flow[tup] >= ramp_expr_down[tup]
+    end
 end
 
 
@@ -1731,41 +1759,50 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     end
 
     # Dummy variable costs
-    dummy_costs = model_contents["expression"]["dummy_costs"] = OrderedDict()
+    dummy_costs = model_contents["expression"]["dummy_costs"] = OrderedDict(
+        s => AffExpr(0.0) for s in scenarios)
     p_node = input_data.setup.node_dummy_variable_cost
     p_ramp = input_data.setup.ramp_dummy_variable_cost
 
     if input_data.setup.use_node_dummy_variables
-        vq_state_up = model.obj_dict[:vq_state_up]
-        vq_state_dw = model.obj_dict[:vq_state_dw]
-    end
-
-    if input_data.setup.use_ramp_dummy_variables
-        vq_ramp_up = model.obj_dict[:vq_ramp_up]
-        vq_ramp_dw = model.obj_dict[:vq_ramp_dw]
-    end
-    for s in scenarios
-        dummy_costs[s] = AffExpr(0.0) 
-        if input_data.setup.use_node_dummy_variables
-            for tup in filter(x->x[2]==s,node_balance_tuple)
-                add_to_expression!(dummy_costs[s], sum(vq_state_up[validate_tuple(val_dict, common_ts, tup, 2)]), p_node)
-                add_to_expression!(dummy_costs[s], sum(vq_state_dw[validate_tuple(val_dict, common_ts, tup, 2)]), p_node)
-            end
+        vq_state_up = model[:vq_state_up]
+        vq_state_dw = model[:vq_state_dw]
+        for tup in node_balance_tuple
+            s = tup[2]
+            add_to_expression!(
+                dummy_costs[s],
+                vq_state_up[validate_tuple(val_dict, common_ts, tup, 2)],
+                p_node)
+            add_to_expression!(
+                dummy_costs[s],
+                vq_state_dw[validate_tuple(val_dict, common_ts, tup, 2)],
+                p_node)
         end
-        if input_data.setup.use_ramp_dummy_variables
-            for tup in filter(x -> x[4] == s, process_topology_ramp_times_tuples(input_data))
-                add_to_expression!(dummy_costs[s], sum(vq_ramp_up[validate_tuple(val_dict, common_ts, tup, 4)]), p_ramp)
-                add_to_expression!(dummy_costs[s], sum(vq_ramp_dw[validate_tuple(val_dict, common_ts, tup, 4)]), p_ramp)
-            end
+    end
+    if input_data.setup.use_ramp_dummy_variables
+        vq_ramp_up = model[:vq_ramp_up]
+        vq_ramp_dw = model[:vq_ramp_dw]
+        for tup in process_topology_ramp_times_tuples(input_data)
+            s = tup[4]
+            add_to_expression!(
+                dummy_costs[s],
+                vq_ramp_up[validate_tuple(val_dict, common_ts, tup, 4)],
+                p_ramp)
+            add_to_expression!(
+                dummy_costs[s],
+                vq_ramp_dw[validate_tuple(val_dict, common_ts, tup, 4)],
+                p_ramp)
         end
     end
     
 
     # Total model costs
-    total_costs = model_contents["expression"]["total_costs"] = OrderedDict()
-    for s in scenarios
-        total_costs[s] = sum(commodity_costs[s]) + sum(market_costs[s]) + sum(vom_costs[s]) + sum(reserve_costs[s]) + sum(start_costs[s]) + sum(state_residue_costs[s]) + sum(reserve_fees[s]) + sum(setpoint_deviation_costs[s]) + sum(dummy_costs[s]) + sum(reserve_activation_costs[s])
-    end
+    model_contents["expression"]["total_costs"] = @expression(
+        model, total_costs[s = scenarios],
+        commodity_costs[s] + market_costs[s] + vom_costs[s]
+        + reserve_costs[s] + start_costs[s] + state_residue_costs[s]
+        + reserve_fees[s] + setpoint_deviation_costs[s] + dummy_costs[s]
+        + reserve_activation_costs[s])
 end
 
 
@@ -1801,12 +1838,13 @@ Sets up the objective function, which in this model aims to minimize the costs.
 function setup_objective_function(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
     total_costs = model_contents["expression"]["total_costs"]
-    scen_p = collect(values(input_data.scenarios))
+    @expression(model, exp_cost,
+                sum(p * total_costs[s] for (s, p) in input_data.scenarios))
     if input_data.setup.contains_risk
         beta = input_data.risk["beta"]
         cvar = model_contents["expression"]["cvar"]
-        @objective(model, Min, (1-beta)*sum(values(scen_p).*values(total_costs))+beta*cvar)
+        @objective(model, Min, (1 - beta) * exp_cost + beta * cvar)
     else
-        @objective(model, Min, sum(values(scen_p).*values(total_costs)))
+        @objective(model, Min, exp_cost)
     end
 end

@@ -108,22 +108,6 @@ end
 
 
 """
-    get_previous_t(t::Temporals)
-
-Function to get the previous timestep
-"""
-function get_previous_t(temporals::Temporals)
-    previous_ts = OrderedDict()
-    for (i, x) in enumerate(temporals.t)
-        if i > 1
-            previous_ts[x] = temporals.t[i-1]
-        end
-    end
-    return previous_ts
-end
-
-
-"""
     mutable struct State
         in_max::Float64
         out_max::Float64
