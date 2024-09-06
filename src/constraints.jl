@@ -634,8 +634,14 @@ function setup_process_limits(model_contents::OrderedDict, input_data::Predicer.
         v_load_min_eq = @constraint(model, v_load_min_eq[tup in res_p_tuples], v_load[validate_tuple(val_dict, common_ts, tup, 4)] + e_lim_min[tup] + e_lim_res_min[tup] >= 0)
     end 
 
-    v_flow_max_eq = @constraint(model, v_flow_max_eq[tup in collect(keys(e_lim_max))], v_flow[validate_tuple(val_dict, common_ts, tup, 4)] + e_lim_max[tup] <= 0);
-    v_flow_min_eq = @constraint(model, v_flow_min_eq[tup in collect(keys(e_lim_min))], v_flow[validate_tuple(val_dict, common_ts, tup, 4)] + e_lim_min[tup] >= 0);
+    @constraint(
+        model, v_flow_max_eq[tup in keys(e_lim_max)],
+        v_flow[validate_tuple(val_dict, common_ts, tup, 4)]
+        + e_lim_max[tup] <= 0);
+    @constraint(
+        model, v_flow_min_eq[tup in keys(e_lim_min)],
+        v_flow[validate_tuple(val_dict, common_ts, tup, 4)]
+        + e_lim_min[tup] >= 0);
 end
 
 
@@ -956,8 +962,6 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
         vq_ramp_dw = model.obj_dict[:vq_ramp_dw]
     end
 
-    previous_ts = Predicer.get_previous_t(input_data.temporals)
-    previous_proc_tups = Predicer.previous_process_topology_tuples(input_data)
     reduced_ramp_tuple = unique(map(x -> (x[1:3]), ramp_tuple))
 
     for red_tup in reduced_ramp_tuple
@@ -1019,6 +1023,8 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
         end
     end
 
+    previous_ts = previous_times(input_data)
+    previous_proc_tup(tup) = (tup[1 : 4]..., previous_ts[tup[5]])
     if input_data.setup.contains_reserves
         e_ramp_v_load = model_contents["expression"]["e_ramp_v_load"] = OrderedDict()
         for tup in res_proc_tuples
@@ -1029,7 +1035,7 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
                 add_to_expression!(e_ramp_v_load[tup], - (topo.initial_flow * topo.capacity))
             else
                 add_to_expression!(e_ramp_v_load[tup], v_load[validate_tuple(val_dict, common_ts, tup, 4)])
-                add_to_expression!(e_ramp_v_load[tup], v_load[validate_tuple(val_dict, common_ts, previous_proc_tups[tup], 4)], -1)
+                add_to_expression!(e_ramp_v_load[tup], v_load[validate_tuple(val_dict, common_ts, previous_proc_tup(tup), 4)], -1)
             end
         end
     end
@@ -1043,7 +1049,7 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
             add_to_expression!(e_ramp_v_flow[tup], - (topo.initial_flow * topo.capacity))
         else
             add_to_expression!(e_ramp_v_flow[tup], v_flow[validate_tuple(val_dict, common_ts, tup, 4)])
-            add_to_expression!(e_ramp_v_flow[tup], v_flow[validate_tuple(val_dict, common_ts, previous_proc_tups[tup], 4)], -1)
+            add_to_expression!(e_ramp_v_flow[tup], v_flow[validate_tuple(val_dict, common_ts, previous_proc_tup(tup), 4)], -1)
         end
     end
 
@@ -1711,41 +1717,50 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     end
 
     # Dummy variable costs
-    dummy_costs = model_contents["expression"]["dummy_costs"] = OrderedDict()
+    dummy_costs = model_contents["expression"]["dummy_costs"] = OrderedDict(
+        s => AffExpr(0.0) for s in scenarios)
     p_node = input_data.setup.node_dummy_variable_cost
     p_ramp = input_data.setup.ramp_dummy_variable_cost
 
     if input_data.setup.use_node_dummy_variables
-        vq_state_up = model.obj_dict[:vq_state_up]
-        vq_state_dw = model.obj_dict[:vq_state_dw]
-    end
-
-    if input_data.setup.use_ramp_dummy_variables
-        vq_ramp_up = model.obj_dict[:vq_ramp_up]
-        vq_ramp_dw = model.obj_dict[:vq_ramp_dw]
-    end
-    for s in scenarios
-        dummy_costs[s] = AffExpr(0.0) 
-        if input_data.setup.use_node_dummy_variables
-            for tup in filter(x->x[2]==s,node_balance_tuple)
-                add_to_expression!(dummy_costs[s], sum(vq_state_up[validate_tuple(val_dict, common_ts, tup, 2)]), p_node)
-                add_to_expression!(dummy_costs[s], sum(vq_state_dw[validate_tuple(val_dict, common_ts, tup, 2)]), p_node)
-            end
+        vq_state_up = model[:vq_state_up]
+        vq_state_dw = model[:vq_state_dw]
+        for tup in node_balance_tuple
+            s = tup[2]
+            add_to_expression!(
+                dummy_costs[s],
+                vq_state_up[validate_tuple(val_dict, common_ts, tup, 2)],
+                p_node)
+            add_to_expression!(
+                dummy_costs[s],
+                vq_state_dw[validate_tuple(val_dict, common_ts, tup, 2)],
+                p_node)
         end
-        if input_data.setup.use_ramp_dummy_variables
-            for tup in filter(x -> x[4] == s, process_topology_ramp_times_tuples(input_data))
-                add_to_expression!(dummy_costs[s], sum(vq_ramp_up[validate_tuple(val_dict, common_ts, tup, 4)]), p_ramp)
-                add_to_expression!(dummy_costs[s], sum(vq_ramp_dw[validate_tuple(val_dict, common_ts, tup, 4)]), p_ramp)
-            end
+    end
+    if input_data.setup.use_ramp_dummy_variables
+        vq_ramp_up = model[:vq_ramp_up]
+        vq_ramp_dw = model[:vq_ramp_dw]
+        for tup in process_topology_ramp_times_tuples(input_data)
+            s = tup[4]
+            add_to_expression!(
+                dummy_costs[s],
+                vq_ramp_up[validate_tuple(val_dict, common_ts, tup, 4)],
+                p_ramp)
+            add_to_expression!(
+                dummy_costs[s],
+                vq_ramp_dw[validate_tuple(val_dict, common_ts, tup, 4)],
+                p_ramp)
         end
     end
     
 
     # Total model costs
-    total_costs = model_contents["expression"]["total_costs"] = OrderedDict()
-    for s in scenarios
-        total_costs[s] = sum(commodity_costs[s]) + sum(market_costs[s]) + sum(vom_costs[s]) + sum(reserve_costs[s]) + sum(start_costs[s]) + sum(state_residue_costs[s]) + sum(reserve_fees[s]) + sum(setpoint_deviation_costs[s]) + sum(dummy_costs[s]) + sum(reserve_activation_costs[s])
-    end
+    model_contents["expression"]["total_costs"] = @expression(
+        model, total_costs[s = scenarios],
+        commodity_costs[s] + market_costs[s] + vom_costs[s]
+        + reserve_costs[s] + start_costs[s] + state_residue_costs[s]
+        + reserve_fees[s] + setpoint_deviation_costs[s] + dummy_costs[s]
+        + reserve_activation_costs[s])
 end
 
 
@@ -1781,12 +1796,13 @@ Sets up the objective function, which in this model aims to minimize the costs.
 function setup_objective_function(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
     total_costs = model_contents["expression"]["total_costs"]
-    scen_p = collect(values(input_data.scenarios))
+    @expression(model, exp_cost,
+                sum(p * total_costs[s] for (s, p) in input_data.scenarios))
     if input_data.setup.contains_risk
         beta = input_data.risk["beta"]
         cvar = model_contents["expression"]["cvar"]
-        @objective(model, Min, (1-beta)*sum(values(scen_p).*values(total_costs))+beta*cvar)
+        @objective(model, Min, (1 - beta) * exp_cost + beta * cvar)
     else
-        @objective(model, Min, sum(values(scen_p).*values(total_costs)))
+        @objective(model, Min, exp_cost)
     end
 end
