@@ -209,7 +209,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             colname = join(tup,"_") * "_" *s
             col_tup = filter(x->x[1:3]==tup && x[4]==s, tuples["process_tuple"])
             if !isempty(col_tup)
-                df[!, colname] = value.(v_flow[validate_tuple(model_contents, col_tup, 4)].data)
+                df[!, colname] = value.(v_flow[validate_tuples(model_contents, col_tup, 4)].data)
             end
         end
     elseif e_type == "v_load"
@@ -224,7 +224,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 colname = join(tup,"_") * "_" *s
                 col_tup = filter(x->x[1:3]==tup && x[4]==s, unique(map(x -> (x[3:end]), tuples["res_potential_tuple"])))
                 if !isempty(col_tup)
-                    df[!, colname] = value.(v_load[validate_tuple(model_contents, col_tup, 4)].data)
+                    df[!, colname] = value.(v_load[validate_tuples(model_contents, col_tup, 4)].data)
                 end
             end
         end
@@ -240,7 +240,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 col_name = join(tup,"_")  * "_" *s
                 col_tup = filter(x->(x[1],x[2],x[3],x[5])==tup && x[6]==s, tuples["res_potential_tuple"])
                 if !isempty(col_tup)
-                    df[!, col_name] = value.(v_res[validate_tuple(model_contents, col_tup, 6)].data)
+                    df[!, col_name] = value.(v_res[validate_tuples(model_contents, col_tup, 6)].data)
                 end
             end
         end
@@ -252,7 +252,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 colname = r * "_" * s
                 col_tup = filter(x->x[1]==r && x[2]==s, tuples["res_final_tuple"])
                 if !isempty(col_tup)
-                    df[!, colname] = value.(v_res[validate_tuple(model_contents, col_tup, 2)].data)
+                    df[!, colname] = value.(v_res[validate_tuples(model_contents, col_tup, 2)].data)
                 end
             end
         end
@@ -268,7 +268,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 col_tup = filter(x->x[1]==p && x[2]==s, tuples["proc_online_tuple"])
                 colname = p * "_" * s
                 if !isempty(col_tup)
-                    df[!, colname] = value.(v_bin[validate_tuple(model_contents, col_tup, 2)].data)
+                    df[!, colname] = value.(v_bin[validate_tuples(model_contents, col_tup, 2)].data)
                 end
             end
         end
@@ -284,7 +284,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 col_tup = filter(x -> x[1] == n && x[2] == s, tuples["node_state_tuple"])
                 colname = n * "_" * s
                 if !isempty(col_tup)
-                    df[!, colname] = value.(v_state[validate_tuple(model_contents, col_tup, 2)].data)
+                    df[!, colname] = value.(v_state[validate_tuples(model_contents, col_tup, 2)].data)
                 end
             end
         end
@@ -300,7 +300,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 col_tup = filter(x->x[1]==n && x[2]==s, tuples["node_balance_tuple"])
                 colname = n * "_" * s
                 if !isempty(col_tup)
-                    df[!, colname] = value.(v_state[validate_tuple(model_contents, col_tup, 2)].data)
+                    df[!, colname] = value.(v_state[validate_tuples(model_contents, col_tup, 2)].data)
                 end
             end
         end
@@ -316,7 +316,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 col_tup = filter(x->x[1:3] == p && x[4]==s, tuples["ramp_tuple"])
                 colname = p[1] * "_" * p[2] * "_" * p[3] * "_" * s
                 if !isempty(col_tup)
-                    df[!, colname] = value.(v_ramp[validate_tuple(model_contents, col_tup, 4)].data)
+                    df[!, colname] = value.(v_ramp[validate_tuples(model_contents, col_tup, 4)].data)
                 end
             end
         end
@@ -346,11 +346,12 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             bid_vol_tups = unique(map(x ->(x[1], x[2]), tuples["bid_slot_tuple"]))
         end
         for bvt in bid_vol_tups
-            col_tup = filter(x -> x[2] == bvt[2] && x[1] == bvt[1], tuples["bid_slot_tuple"])
             dat_vec = []
             colname = bvt[1] * ", " * bvt[2]
-            for tup in col_tup
-                push!(dat_vec, JuMP.value.(v_bid_vol[tup]))
+            for tup in tuples["bid_slot_tuple"]
+                if tup[2] == bvt[2] && tup[1] == bvt[1]
+                    push!(dat_vec, JuMP.value.(v_bid_vol[tup]))
+                end
             end
             df[!,colname] = dat_vec
         end
@@ -366,7 +367,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             col_tup = filter(x->x[1]==n && x[2]==d && x[3]==s, tuples["balance_market_tuple"])
             colname = n * "_" * d * "_" * s
             if !isempty(col_tup)
-                df[!,colname] = value.(v_bal[validate_tuple(model_contents, col_tup, 3)].data)
+                df[!,colname] = value.(v_bal[validate_tuples(model_contents, col_tup, 3)].data)
             end
         end
     elseif e_type == "v_block"
@@ -399,7 +400,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 colname = sp * "_" * s
             end
             if !isempty(col_tup)
-                df[!,colname] = value.(v_var[validate_tuple(model_contents, col_tup, 2)].data)
+                df[!,colname] = value.(v_var[validate_tuples(model_contents, col_tup, 2)].data)
             end
         end
     elseif e_type == "v_reserve_online"
@@ -414,7 +415,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 col_tup = filter(x -> x[1] == r && x[2] == s, tuples["reserve_limits"])
                 colname = r * "_" * s
                 if !isempty(col_tup)
-                    df[!,colname] = value.(v_reserve_online[validate_tuple(model_contents, col_tup, 2)].data)
+                    df[!,colname] = value.(v_reserve_online[validate_tuples(model_contents, col_tup, 2)].data)
                 end
             end
         end
@@ -546,7 +547,7 @@ Function to export a DataFrame to an xlsx file.
 - `fname::String`: Name of the xlsx file. (a suffix of date, time, and ".xlsx" are added automatically)
 """
 function dfs_to_xlsx(df::DataFrame, fpath::String, fname::String="")
-    output_path = joinpath(pwd(), fpath, fname * "_" * Dates.format(Dates.now(), "yyyy-mm-dd-HH-MM-SS")*".xlsx")
+    output_path = joinpath(fpath, fname * "_" * Dates.format(Dates.now(), "yyyy-mm-dd-HH-MM-SS")*".xlsx")
     XLSX.openxlsx(output_path, mode="w") do xf
         XLSX.addsheet!(xf, "df")
         XLSX.writetable!(xf[2], collect(eachcol(df)), names(df))
@@ -566,7 +567,7 @@ Function to export a dictionary containing DataFrames to an xlsx file.
 - `fname::String`: Name of the xlsx file. (a suffix of date, time, and ".xlsx" are added automatically)
 """
 function dfs_to_xlsx(dfs::Dict{Any, Any}, fpath::String, fname::String="")
-    output_path = joinpath(pwd(), fpath, fname * "_" * Dates.format(Dates.now(), "yyyy-mm-dd-HH-MM-SS")*".xlsx")
+    output_path = joinpath(fpath, fname * "_" * Dates.format(Dates.now(), "yyyy-mm-dd-HH-MM-SS")*".xlsx")
     XLSX.openxlsx(output_path, mode="w") do xf
         for (i, sn) in enumerate(collect(keys(dfs)))
             XLSX.addsheet!(xf, sn)

@@ -49,7 +49,6 @@ module Predicer
     add_group
 
     export create_tuples,
-    validate_tuple,
     reserve_nodes,
     reserve_market_directional_tuples,
     process_topology_tuples,
@@ -85,7 +84,6 @@ module Predicer
     node_diffusion_tuple,
     diffusion_nodes,
     node_delay_tuple,
-    previous_state_node_tuples,
     previous_process_topology_tuples,
     bid_slot_tuples
 

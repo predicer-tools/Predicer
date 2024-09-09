@@ -100,13 +100,13 @@ end
 
 Helper function used to correct generated index tuples in cases when the start of the optimization horizon is the same for all scenarios.
 """
-function validate_tuple(mc::OrderedDict, tuple::Vector{T} where T, s_index::Int)
+function validate_tuples(mc::OrderedDict, tuples::Vector{T} where T, s_index::Int)
     if !isempty(mc["validation_dict"])
         val_dict = mc["validation_dict"]
         cts =  mc["common_timesteps"]
-        return map(x -> Predicer.validate_tuple(val_dict, cts, x, s_index), tuple)
+        return map(x -> Predicer.validate_tuple(val_dict, cts, x, s_index), tuples)
     else
-        return tuple
+        return tuples
     end
 end
 
@@ -115,11 +115,11 @@ end
 
 Helper function used to correct generated index tuples in cases when the start of the optimization horizon is the same for all scenarios.
 """
-function validate_tuple(val_dict::OrderedDict, cts::Union{Vector{String}, Vector{Any}}, tuple::Vector{T} where T, s_index::Int)
+function validate_tuples(val_dict::OrderedDict, cts::Union{Vector{String}, Vector{Any}}, tuples::Vector{T} where T, s_index::Int)
     if !isempty(val_dict)
-        return map(x -> Predicer.validate_tuple(val_dict, cts, x, s_index), tuple)
+        return map(x -> Predicer.validate_tuple(val_dict, cts, x, s_index), tuples)
     else
-        return tuple
+        return tuples
     end
 end
 
@@ -129,21 +129,13 @@ end
 Return nodes which have a reserve. Form: (n).
 """
 function reserve_nodes(input_data::InputData) # original name: create_res_nodes_tuple()
-    reserve_nodes = String[]
     if input_data.setup.contains_reserves
-        markets = input_data.markets
-        group_tups = create_group_tuples(input_data)
-        for m in collect(keys(markets))
-            if markets[m].m_type == "reserve"
-                for n in unique(map(y -> y[3], filter(x -> x[2] == markets[m].node, group_tups)))
-                    if input_data.nodes[n].is_res
-                        push!(reserve_nodes, n)
-                    end
-                end
-            end
-        end
+        unique(n for m in values(input_data.markets) if m.m_type == "reserve"
+                 for n in input_data.groups[m.node].members
+                 if input_data.nodes[n].is_res)
+    else
+        String[]
     end
-    return unique(reserve_nodes)
 end
 
 """
@@ -445,34 +437,19 @@ end
 Return tuples for each node over which balance should be maintained for every time step and scenario. Form: (n s, t).
 """
 function balance_node_tuples(input_data::InputData) # original name: create_node_balance_tuple()
-    bnt = NTuple{3, String}[]
-    nodes = filter(x -> !x.is_commodity && !x.is_market, collect(values(input_data.nodes)))
-    scens = scenarios(input_data)
-    temporals = input_data.temporals
-    sizehint!(bnt, length(nodes) * length(scens) * length(temporals.t))
-    for n in nodes
-        for s in scens, t in temporals.t
-            push!(bnt, (n.name, s, t))
-        end
-    end
-    return bnt
+    [(n.name, s, t)
+     for n in values(input_data.nodes) if !n.is_commodity && !n.is_market
+     for s in keys(input_data.scenarios) for t in input_data.temporals.t]
 end
 
 """
-    previous_state_node_tuples(input_data::InputData)
+    previous_times(inp::InputData)
 
-Function to gather the node state tuple for the previous timestep. Returns a Dict() with the node_state_tup as key and the previous tup as value. 
+Return a Dict mapping time steps to the previous time step.
 """
-function previous_state_node_tuples(input_data::InputData)
-    psnt = OrderedDict()
-    node_state_tups = state_node_tuples(input_data)
-    sizehint!(psnt, length(node_state_tups))
-    for (i, n) in enumerate(node_state_tups)
-        if n[3] != input_data.temporals.t[1]
-            psnt[n] = node_state_tups[i-1]
-        end
-    end
-    return psnt
+function previous_times(inp::InputData)
+    ts = inp.temporals.t
+    return Dict(ts[i] => ts[i - 1] for i in 2 : length(ts))
 end
 
 """
@@ -916,18 +893,9 @@ end
 Function to create tuples for inflow blocks. Form (blockname, node, s, t).
 """
 function block_tuples(input_data::InputData)
-    blocks = collect(values(input_data.inflow_blocks))
-    bt = NTuple{4, String}[]
-    bt_len = sum(map(x -> sum(map(y -> length(y.series), x.data.ts_data)), blocks))
-    sizehint!(bt, bt_len)
-    for b in blocks
-        for t_series in b.data.ts_data
-            for t in t_series.series
-                push!(bt, (b.name, b.node, t_series.scenario, t[1]))
-            end
-        end
-    end
-    return bt
+    [(bn, b.node, ts.scenario, t)
+     for (bn, b) in input_data.inflow_blocks
+     for ts in b.data.ts_data for t in keys(ts.series)]
 end
 
 
@@ -937,14 +905,7 @@ end
 Function to create tuples for groups and their members. Form (group_type, groupname, member_name)
 """
 function create_group_tuples(input_data::InputData)
-    groups = input_data.groups
-    group_tuples = NTuple{3, String}[]
-    for gn in collect(keys(groups))
-        for gm in groups[gn].members
-            push!(group_tuples, (groups[gn].g_type, gn, gm))
-        end
-    end
-    return group_tuples
+    [(g.g_type, gn, gm) for (gn, g) in input_data.groups for gm in g.members]
 end
 
 """
@@ -1005,7 +966,8 @@ Function to obtain the nodes that are part of a diffusion relation. form (n)
 """
 function diffusion_nodes(input_data::InputData)
     if input_data.setup.contains_diffusion
-        return unique(vcat(map(x -> x.node1, input_data.node_diffusion), map(y -> y.node2, input_data.node_diffusion)))
+        return unique(hcat(([x.node1, x.node2]
+                            for x in input_data.node_diffusion)...))
     else
         return String[]
     end
@@ -1018,7 +980,7 @@ Function to obtain the nodes that are part of a delay relation. form (n)
 """
 function delay_nodes(input_data::InputData)
     if input_data.setup.contains_delay
-        return unique(vcat(map(x -> x[1], input_data.node_delay), map(x -> x[2], input_data.node_delay)))
+        return unique(x[i] for i in 1 : 2 for x in input_data.node_delay)
     else
         return String[]
     end
@@ -1031,19 +993,9 @@ end
 Function to create bid slot tuples. Form (m,slot,t)
 """
 function bid_slot_tuples(input_data::InputData)
-    b_slots = input_data.bid_slots
-    bid_slot_tup = NTuple{3, String}[]
-    markets = keys(b_slots)
-    for m in markets
-        for s in b_slots[m].slots
-            for t in b_slots[m].time_steps
-                push!(bid_slot_tup,(m,s,t))
-            end
-        end
-    end
-    return bid_slot_tup
+    ((m, s, t) for (m, bs) in input_data.bid_slots
+               for s in bs.slots for t in bs.time_steps)
 end
-
 
 """
     bid_scenario_tuples(input_data::InputData)
@@ -1051,16 +1003,6 @@ end
 Function to create bid scenario tuples linked to bid slots. Form (m,s,t)
 """
 function bid_scenario_tuples(input_data::InputData)
-    b_slots = input_data.bid_slots
-    scens = scenarios(input_data)
-    markets = keys(b_slots)
-    bid_scen_tup = NTuple{3, String}[]
-    for m in markets
-        for s in scens
-            for t in b_slots[m].time_steps
-                push!(bid_scen_tup,(m,s,t))
-            end
-        end
-    end
-    return bid_scen_tup
+    ((m, s, t) for (m, bs) in input_data.bid_slots
+               for s in keys(input_data.scenarios) for t in bs.time_steps)
 end

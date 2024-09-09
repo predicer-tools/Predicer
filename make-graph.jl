@@ -34,11 +34,15 @@ function write_graph(fname :: String,
                 println(f, "  $edges [class=$cls, arrowhead=$head]")
             end
         end
+        isempty(inp.node_delay) || println(f)
         for (s, t, _...) in inp.node_delay
             println(f, "  $s -> $t [class=delay, style=dashed, arrowhead=vee]")
         end
-        for (s, t, _...) in inp.node_diffusion
-            println(f, "  $s -> $t [class=diffusion, style=dashed]")
+        isempty(inp.node_diffusion) || println(f)
+        for nd in inp.node_diffusion
+            (s, t) = (nd.node1, nd.node2)
+            println(f, "  $s -> $t [class=diffusion, style=dashed,"
+                    * " arrowhead=odot]")
         end
         println(f, "}")
     end
@@ -47,7 +51,7 @@ end
 if abspath(PROGRAM_FILE) == @__FILE__
     aps = ArgParseSettings(
         description="Plot graphs (dot) of Predicer input")
-    @add_arg_table aps begin
+    @add_arg_table! aps begin
         "file"
         help = "input files (xlsx)"
         nargs = '+'

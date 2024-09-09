@@ -28,39 +28,38 @@ cases = [
     "two_stage_dh_model.xlsx" => 9508.652488524222
 ]
 
-function testrunner(cases)
-    test_results = Dict()
-    for _filename in map(x -> x[1], cases)
-        test_results[_filename] = []
-        mc, id = Predicer.generate_model(joinpath(pwd(), "..", "input_data", _filename));
-        Predicer.solve_model(mc)
-        if JuMP.termination_status(mc["model"]) == MOI.OPTIMAL
-            rgap = relative_gap(mc["model"])
-            if rgap < 1e-8 || !isfinite(rgap)
-                rgap = 1e-8
-            end
-            push!(test_results[_filename], (true, JuMP.objective_value(mc["model"]), rgap, !isempty(Predicer.get_all_result_dataframes(mc, id))))
-        else
-            push!(test_results[_filename], (false, JuMP.termination_status(mc["model"]), "", false))
-        end
+inputs = Dict{String, Predicer.InputData}()
+
+get_input(bn) = get!(inputs, bn) do
+    inp = Predicer.get_data(joinpath("..", "input_data", bn))
+    Predicer.tweak_input!(inp)
+end
+
+include("../make-graph.jl")
+
+@testset "make-graph on $bn" for (bn, _) in cases
+    of = joinpath("..", "input_data",
+                  replace(bn, r"[.][^.]*$" => "") * ".dot")
+    println("$bn |-> $of")
+    @test (write_graph(of, get_input(bn)); true)
+end
+
+@testset "Predicer on $bn" for (bn, known_obj) in cases
+    m = Model(Optimizer)
+    #set_silent(m)
+    inp = get_input(bn)
+    mc = Predicer.generate_model(m, inp)
+    @test m == mc["model"]
+    Predicer.solve_model(mc)
+    @test termination_status(m) == MOI.OPTIMAL
+    rgap = relative_gap(m)
+    # Apparently infinite for LP
+    if rgap < 1e-8 || !isfinite(rgap)
+        rgap = 1e-8
     end
-    return test_results
+    if !isnan(known_obj)
+        @test objective_value(m) ≈ known_obj rtol=rgap
+    end
+    @show objective_value(m) known_obj relative_gap(m)
+    @test !isempty(Predicer.get_all_result_dataframes(mc, inp))
 end
-
-test_results = testrunner(cases)
-
-@testset "Predicer on $bn" for (bn, obj) in cases
-    @test test_results[bn][1][1]
-    @test test_results[bn][1][2] ≈ obj rtol=(test_results[bn][1][3])
-    model_obj_val = test_results[bn][1][2]
-    expected_val = obj
-    rgap = test_results[bn][1][3]
-    @show model_obj_val expected_val rgap
-    @test test_results[bn][1][4]
-end
-
-"""
-@test !isempty(get_all_result_dataframes(mc, input_data))
-
-
-"""
