@@ -689,6 +689,10 @@ function fixed_market_tuples(input_data::InputData) # original name: create_fixe
     return fixed_market_tuples
 end
 
+process_topology_ramp_tuples(inp::InputData) =
+    ((p.name, tp.source, tp.sink)
+     for p in values(inp.processes) if p.conversion == 1 && !p.is_cf
+     for tp in p.topos)
 
 """
     process_topology_ramp_times_tuples(input_data::InputData)
@@ -696,20 +700,9 @@ end
 Return tuples containing time steps with ramp possibility for each process topology and scenario. Form: (p, so, si, s, t).
 """
 function process_topology_ramp_times_tuples(input_data::InputData) # orignal name: create_ramp_tuple()
-    rtptt = NTuple{5, String}[]
-    ramp_procs = filter(x -> x.conversion == 1 && !x.is_cf, collect(values(input_data.processes)))
-    n_topos = sum(map(x -> length(x.topos), ramp_procs))
-    scens = scenarios(input_data)
-    temps = input_data.temporals
-    sizehint!(rtptt, n_topos * length(scens) * length(temps.t))
-    for p in ramp_procs
-        for topo in p.topos
-            for s in scens, t in temps.t
-                push!(rtptt, (p.name, topo.source, topo.sink, s, t))
-            end
-        end
-    end
-    return rtptt
+    [(pss..., s, t)
+     for pss in process_topology_ramp_tuples(input_data)
+     for s in scenarios(input_data) for t in input_data.temporals.t]
 end
 
 """
