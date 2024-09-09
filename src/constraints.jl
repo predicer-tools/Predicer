@@ -944,26 +944,31 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
     model = model_contents["model"]
     val_dict = model_contents["validation_dict"]
     common_ts = model_contents["common_timesteps"]
-    ramp_tuple = Predicer.process_topology_ramp_times_tuples(input_data)
     v_flow = model.obj_dict[:v_flow]
 
     processes = input_data.processes
+    scens = scenarios(input_data)
     temporals = input_data.temporals
-
-    ramp_expr_up = model_contents["expression"]["ramp_expr_up"] = OrderedDict()
-    ramp_expr_down = model_contents["expression"]["ramp_expr_down"] = OrderedDict()
+    times = temporals.t
+    reduced_ramp_tuple = process_topology_ramp_tuples(input_data)
 
     if input_data.setup.contains_reserves
         v_load = model.obj_dict[:v_load]
-        res_proc_tuples =  unique(map(y -> y[3:end], Predicer.reserve_process_tuples(input_data)))
+        reduced_res_proc_tuple =  unique(map(y -> y[3:5], Predicer.reserve_process_tuples(input_data)))
         res_nodes_tuple = Predicer.reserve_nodes(input_data)
         res_potential_tuple = Predicer.reserve_process_tuples(input_data)
         v_reserve = model.obj_dict[:v_reserve]
         reserve_types = input_data.reserve_type
-        ramp_expr_res_up = model_contents["expression"]["ramp_expr_res_up"] = OrderedDict()
-        ramp_expr_res_down = model_contents["expression"]["ramp_expr_res_down"] = OrderedDict()
+        @expressions model begin
+            ramp_expr_res_up[rrt = reduced_ramp_tuple, s = scens, t = times],
+            AffExpr(0.0)
+
+            ramp_expr_res_down[rrt = reduced_ramp_tuple, s = scens, t = times],
+            AffExpr(0.0)
+        end
+        model_contents["expression"]["ramp_expr_res_up"] = ramp_expr_res_up
+        model_contents["expression"]["ramp_expr_res_down"] = ramp_expr_res_up
         reduced_res_pot_tuple = unique(map(x -> (x[1:5]), res_potential_tuple))
-        reduced_res_proc_tuple = unique(map(x -> (x[1:3]), res_proc_tuples))
     end
 
     if input_data.setup.contains_online
@@ -976,7 +981,15 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
         vq_ramp_dw = model.obj_dict[:vq_ramp_dw]
     end
 
-    reduced_ramp_tuple = unique(map(x -> (x[1:3]), ramp_tuple))
+    @expressions model begin
+        ramp_expr_up[rrt = reduced_ramp_tuple, s = scens, t = times],
+        AffExpr(0.0)
+
+        ramp_expr_down[rrt = reduced_ramp_tuple, s = scens, t = times],
+        AffExpr(0.0)
+    end
+    model_contents["expression"]["ramp_expr_up"] = ramp_expr_up
+    model_contents["expression"]["ramp_expr_down"] = ramp_expr_down
 
     for red_tup in reduced_ramp_tuple
         if processes[red_tup[1]].conversion == 1 && !processes[red_tup[1]].is_cf
@@ -986,50 +999,61 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
                 res_tup_up = filter(x->x[1]=="res_up" && x[3:end]==red_tup, reduced_res_pot_tuple)
                 res_tup_down = filter(x->x[1]=="res_down" && x[3:end]==red_tup, reduced_res_pot_tuple)
             end
-            for s in scenarios(input_data), t in input_data.temporals.t
+            for s in scens, t in times
                 tup = (red_tup[1], red_tup[2], red_tup[3], s, t)
-                ramp_expr_up[tup] = AffExpr(0.0)
-                ramp_expr_down[tup] = AffExpr(0.0)
-                ramp_up_cap = topo.ramp_up * topo.capacity * temporals(tup[5])
-                ramp_dw_cap = topo.ramp_down * topo.capacity * temporals(tup[5])
+                ntup = (red_tup, s, t)
+                ramp_up_cap = topo.ramp_up * topo.capacity * temporals(t)
+                ramp_dw_cap = topo.ramp_down * topo.capacity * temporals(t)
 
                 # add ramp rate limit
-                add_to_expression!(ramp_expr_up[tup], ramp_up_cap) 
-                add_to_expression!(ramp_expr_down[tup], ramp_dw_cap, -1)
+                add_to_expression!(ramp_expr_up[ntup...], ramp_up_cap) 
+                add_to_expression!(ramp_expr_down[ntup...], ramp_dw_cap, -1)
 
                 # add ramp dummys if they are used
                 if input_data.setup.use_ramp_dummy_variables
-                    add_to_expression!(ramp_expr_up[tup], vq_ramp_up[validate_tuple(val_dict, common_ts, tup, 4)])
-                    add_to_expression!(ramp_expr_down[tup], vq_ramp_dw[validate_tuple(val_dict, common_ts, tup, 4)], -1)
+                    vtup = validate_tuple(val_dict, common_ts, tup, 4)
+                    add_to_expression!(ramp_expr_up[ntup...], vq_ramp_up[vtup])
+                    add_to_expression!(ramp_expr_down[ntup...], vq_ramp_dw[vtup], -1)
                 end
 
                 # if online process
                 if processes[tup[1]].is_online
                     start_cap = max(0,processes[tup[1]].load_min-topo.ramp_up)*topo.capacity
                     stop_cap = max(0,processes[tup[1]].load_min-topo.ramp_down)*topo.capacity
-                    add_to_expression!(ramp_expr_up[tup], v_start[validate_tuple(val_dict, common_ts, (tup[1], tup[4], tup[5]), 2)], start_cap) 
-                    add_to_expression!(ramp_expr_down[tup], v_stop[validate_tuple(val_dict, common_ts, (tup[1], tup[4], tup[5]), 2)], - stop_cap)
+                    vtup = validate_tuple(val_dict, common_ts, (tup[1], tup[4], tup[5]), 2)
+                    add_to_expression!(ramp_expr_up[ntup...], v_start[vtup], start_cap) 
+                    add_to_expression!(ramp_expr_down[ntup...], v_stop[vtup], -stop_cap)
                 end
 
                 # if reserve process
                 if processes[tup[1]].is_res && input_data.setup.contains_reserves && red_tup in reduced_res_proc_tuple
-                    ramp_expr_res_up[tup] = AffExpr(0.0)
-                    ramp_expr_res_down[tup] = AffExpr(0.0)
                     res_tup_up_with_s_and_t = map(x -> (x[1], x[2], x[3], x[4], x[5], s, t), res_tup_up)
                     res_tup_down_with_s_and_t = map(x -> (x[1], x[2], x[3], x[4], x[5], s, t), res_tup_down)
                     if red_tup[2] in res_nodes_tuple #consumer from node
                         for rtd in res_tup_down_with_s_and_t
-                            add_to_expression!(ramp_expr_res_up[tup], v_reserve[validate_tuple(val_dict, common_ts, rtd, 6)], -1 * reserve_types[rtd[2]])
+                            add_to_expression!(
+                                ramp_expr_res_up[ntup...],
+                                v_reserve[validate_tuple(val_dict, common_ts, rtd, 6)],
+                                -reserve_types[rtd[2]])
                         end
                         for rtu in res_tup_up_with_s_and_t
-                            add_to_expression!(ramp_expr_res_down[tup], v_reserve[validate_tuple(val_dict, common_ts, rtu, 6)], reserve_types[rtu[2]])
+                            add_to_expression!(
+                                ramp_expr_res_down[ntup...],
+                                v_reserve[validate_tuple(val_dict, common_ts, rtu, 6)],
+                                reserve_types[rtu[2]])
                         end
                     elseif red_tup[3] in res_nodes_tuple #producer to node
                         for rtu in res_tup_up_with_s_and_t
-                            add_to_expression!(ramp_expr_res_up[tup], v_reserve[validate_tuple(val_dict, common_ts, rtu, 6)], -1 * reserve_types[rtu[2]]) 
+                            add_to_expression!(
+                                ramp_expr_res_up[ntup...],
+                                v_reserve[validate_tuple(val_dict, common_ts, rtu, 6)],
+                                -reserve_types[rtu[2]]) 
                         end
                         for rtd in res_tup_down_with_s_and_t
-                            add_to_expression!(ramp_expr_res_down[tup], v_reserve[validate_tuple(val_dict, common_ts, rtd, 6)], reserve_types[rtd[2]]) 
+                            add_to_expression!(
+                                ramp_expr_res_down[ntup...],
+                                v_reserve[validate_tuple(val_dict, common_ts, rtd, 6)],
+                                reserve_types[rtd[2]]) 
                         end
                     end
                 end
@@ -1040,49 +1064,68 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
     previous_ts = previous_times(input_data)
     previous_proc_tup(tup) = (tup[1 : 4]..., previous_ts[tup[5]])
     if input_data.setup.contains_reserves
-        e_ramp_v_load = model_contents["expression"]["e_ramp_v_load"] = OrderedDict()
-        for tup in res_proc_tuples
-            e_ramp_v_load[tup] = AffExpr(0.0)
-            if tup[5] == input_data.temporals.t[1]
+        model_contents["expression"]["e_ramp_v_load"] = @expression(
+            model,
+            e_ramp_v_load[rr = reduced_res_proc_tuple, s = scens, t = times],
+            AffExpr(0.0))
+        for tup in reduced_res_proc_tuple, s = scens, t = times
+            ltup = (tup..., s, t)
+            add_to_expression!(
+                e_ramp_v_load[tup, s, t],
+                v_load[validate_tuple(val_dict, common_ts, ltup, 4)])
+            if t == times[1]
                 topo = filter(x -> tup[2] == x.source && tup[3] == x.sink, input_data.processes[tup[1]].topos)[1]
-                add_to_expression!(e_ramp_v_load[tup], v_load[validate_tuple(val_dict, common_ts, tup, 4)])
-                add_to_expression!(e_ramp_v_load[tup], - (topo.initial_flow * topo.capacity))
+                add_to_expression!(
+                    e_ramp_v_load[tup, s, t],
+                    -topo.initial_flow * topo.capacity)
             else
-                add_to_expression!(e_ramp_v_load[tup], v_load[validate_tuple(val_dict, common_ts, tup, 4)])
-                add_to_expression!(e_ramp_v_load[tup], v_load[validate_tuple(val_dict, common_ts, previous_proc_tup(tup), 4)], -1)
+                add_to_expression!(
+                    e_ramp_v_load[tup, s, t],
+                    v_load[validate_tuple(val_dict, common_ts, previous_proc_tup(ltup), 4)],
+                    -1)
             end
         end
     end
 
     model_contents["expression"]["e_ramp_v_flow"] = @expression(
-        model, e_ramp_v_flow[tup = ramp_tuple], AffExpr(0.0))
-    for tup in ramp_tuple
-        if tup[5] == input_data.temporals.t[1]
+        model, e_ramp_v_flow[rrt = reduced_ramp_tuple, s = scens, t = times],
+        AffExpr(0.0))
+    for tup in reduced_ramp_tuple, s in scens, t in times
+        ltup = (tup..., s, t)
+        add_to_expression!(
+            e_ramp_v_flow[tup, s, t],
+            v_flow[validate_tuple(val_dict, common_ts, ltup, 4)])
+        if t == input_data.temporals.t[1]
             topo = filter(x -> tup[2] == x.source && tup[3] == x.sink, input_data.processes[tup[1]].topos)[1]
-            add_to_expression!(e_ramp_v_flow[tup], v_flow[validate_tuple(val_dict, common_ts, tup, 4)])
-            add_to_expression!(e_ramp_v_flow[tup], - (topo.initial_flow * topo.capacity))
+            add_to_expression!(e_ramp_v_flow[tup, s, t],
+                               -topo.initial_flow * topo.capacity)
         else
-            add_to_expression!(e_ramp_v_flow[tup], v_flow[validate_tuple(val_dict, common_ts, tup, 4)])
-            add_to_expression!(e_ramp_v_flow[tup], v_flow[validate_tuple(val_dict, common_ts, previous_proc_tup(tup), 4)], -1)
+            add_to_expression!(
+                e_ramp_v_flow[tup, s, t],
+                v_flow[validate_tuple(
+                    val_dict, common_ts, previous_proc_tup(ltup), 4)],
+                -1)
         end
     end
 
     if input_data.setup.contains_reserves && !isempty(ramp_expr_res_up)
         @constraints model begin
-            ramp_up_eq_v_load[tup = res_proc_tuples],
-            e_ramp_v_load[tup] <= ramp_expr_up[tup] + ramp_expr_res_up[tup]
+            ramp_up_eq_v_load[
+                rrp = reduced_res_proc_tuple, s = scens, t = times],
+            e_ramp_v_load[rrp, s, t] <= ramp_expr_up[rrp, s, t] + ramp_expr_res_up[rrp, s, t]
 
-            ramp_down_eq_v_load[tup = res_proc_tuples],
-            e_ramp_v_load[tup] >= ramp_expr_down[tup] + ramp_expr_res_down[tup]
+            ramp_down_eq_v_load[
+                rrp = reduced_res_proc_tuple, s = scens, t = times],
+            e_ramp_v_load[rrp, s, t] >= ramp_expr_down[rrp, s, t] + ramp_expr_res_down[rrp, s, t]
         end
     end
 
     @constraints model begin
-        ramp_up_eq_v_flow[tup = ramp_tuple],
-        e_ramp_v_flow[tup] <= ramp_expr_up[tup]
+        ramp_up_eq_v_flow,
+        e_ramp_v_flow .<= ramp_expr_up
 
-        ramp_down_eq_v_flow[tup = ramp_tuple],
-        e_ramp_v_flow[tup] >= ramp_expr_down[tup]
+        ramp_down_eq_v_flow,
+        e_ramp_v_flow .>= ramp_expr_down
     end
 end
 
