@@ -423,7 +423,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
             data = timeseries_data["fixed_ts"][!,mm.market]
             for i in 1:length(timestamps)
                 if !ismissing(data[i])
-                    tup = (timestamps[i],data[i])
+                    tup = (string(ZonedDateTime(timestamps[i], tz"UTC")),data[i])
                     push!(markets[mm.market].fixed,tup)
                 end
             end
