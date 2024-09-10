@@ -431,6 +431,8 @@ function state_node_tuples(input_data::InputData) # original name: create_node_s
 end
 
 
+is_balance_node(n::Node) = !n.is_commodity && !n.is_market
+
 """
     balance_node_tuples(input_data::InputData)
 
@@ -438,7 +440,7 @@ Return tuples for each node over which balance should be maintained for every ti
 """
 function balance_node_tuples(input_data::InputData) # original name: create_node_balance_tuple()
     [(n.name, s, t)
-     for n in values(input_data.nodes) if !n.is_commodity && !n.is_market
+     for n in values(input_data.nodes) if is_balance_node(n)
      for s in keys(input_data.scenarios) for t in input_data.temporals.t]
 end
 
@@ -546,26 +548,19 @@ function cf_process_topology_tuples(input_data::InputData) # original name: crea
     return cf_ptt
 end
 
+is_fixed_limit_process(p::Process) = !p.is_cf && p.conversion == 1
+
 """
     fixed_limit_process_topology_tuples(input_data::InputData)
 
-Return tuples containing information on process topologies with fixed limit on flow capacity. Form: (p, so, si, s, t).
+Generate tuples containing information on process topologies with fixed
+limit on flow capacity. Form: (p, so, si).
 """
 function fixed_limit_process_topology_tuples( input_data::InputData) # original name: create_lim_tuple()
-    flptt = NTuple{5, String}[]
-    fixed_processes = filter(x -> !x.is_cf && x.conversion == 1, collect(values(input_data.processes)))
-    scens = scenarios(input_data)
-    sizehint!(flptt, length(fixed_processes) * length(scens) * length(input_data.temporals.t))
-    for p in fixed_processes
-        for topo in p.topos
-            for s in scens, t in input_data.temporals.t
-                push!(flptt, (p.name, topo.source, topo.sink, s, t))
-            end
-        end
-    end
-    return flptt
+    return ((p.name, topo.source, topo.sink)
+            for p in values(input_data.processes) if is_fixed_limit_process(p)
+            for topo in p.topos)
 end
-
 
 """
     transport_process_topology_tuples(input_data::InputData)

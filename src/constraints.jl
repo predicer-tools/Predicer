@@ -527,7 +527,11 @@ function setup_process_limits(model_contents::OrderedDict, input_data::Predicer.
     val_dict = model_contents["validation_dict"]
     common_ts = model_contents["common_timesteps"]
     trans_tuple = transport_process_topology_tuples(input_data)
+    lim_procs = [p for p in values(input_data.processes)
+                   if is_fixed_limit_process(p)]
     lim_tuple = fixed_limit_process_topology_tuples(input_data)
+    scens = scenarios(input_data)
+    times = input_data.temporals.t
     cf_balance_tuple = cf_process_topology_tuples(input_data)
     v_flow = model.obj_dict[:v_flow]
     processes = input_data.processes
@@ -558,56 +562,62 @@ function setup_process_limits(model_contents::OrderedDict, input_data::Predicer.
     cf_up_bal_eq = @constraint(model, cf_up_bal_eq[tup in collect(keys(cf_fac_up))], cf_fac_up[tup] <= 0)
 
     @expressions model begin
-        e_lim_max[tup = lim_tuple], AffExpr(0.0)
-        e_lim_min[tup = lim_tuple], AffExpr(0.0)
-        e_lim_res_max[tup = lim_tuple], AffExpr(0.0)
-        e_lim_res_min[tup = lim_tuple], AffExpr(0.0)
+        e_lim_max[tup = lim_tuple, s = scens, t = times], AffExpr(0.0)
+        e_lim_min[tup = lim_tuple, s = scens, t = times], AffExpr(0.0)
+        e_lim_res_max[tup = lim_tuple, s = scens, t = times], AffExpr(0.0)
+        e_lim_res_min[tup = lim_tuple, s = scens, t = times], AffExpr(0.0)
     end
     model_contents["expression"]["e_lim_max"] = e_lim_max
     model_contents["expression"]["e_lim_min"] = e_lim_min
     model_contents["expression"]["e_lim_res_max"] = e_lim_res_max
     model_contents["expression"]["e_lim_res_min"] = e_lim_res_min
 
+    topo_cap(topo, s, t) =
+        isempty(topo.cap_ts) ? topo.capacity : topo.cap_ts(s, t)
+
     # online processes
-    if input_data.setup.contains_online
-        proc_online_tuple = online_process_tuples(input_data)
-        p_online = filter(x -> processes[x[1]].is_online, lim_tuple)
-        
-        if !isempty(proc_online_tuple)
-            v_online = model.obj_dict[:v_online]
-            for tup in p_online
-                topo = filter(x->x.sink == tup[3] && x.source == tup[2], processes[tup[1]].topos)[1]
-                if isempty(topo.cap_ts)
-                    cap = topo.capacity
-                else
-                    cap = topo.cap_ts(tup[4], tup[5])
+    if (input_data.setup.contains_online
+            && !isempty(online_process_tuples(input_data)))
+        v_online = model[:v_online]
+        for p in lim_procs
+            p.is_online || continue
+            for topo in p.topos
+                tup = (p.name, topo.source, topo.sink)
+                for s in scens, t in times
+                    vtup = validate_tuple(val_dict, common_ts,
+                                          (p.name, s, t), 2)
+                    cap = topo_cap(topo, s, t)
+                    add_to_expression!(
+                        e_lim_max[tup, s, t],
+                        v_online[vtup], -p.load_max * cap)
+                    add_to_expression!(
+                        e_lim_min[tup, s, t],
+                        v_online[vtup], -p.load_min * cap)
                 end
-                add_to_expression!(e_lim_max[tup], v_online[validate_tuple(val_dict, common_ts, (tup[1], tup[4], tup[5]), 2)], -processes[tup[1]].load_max * cap)
-                add_to_expression!(e_lim_min[tup], v_online[validate_tuple(val_dict, common_ts, (tup[1], tup[4], tup[5]), 2)], -processes[tup[1]].load_min * cap)
             end
         end
     end
 
     # non-online, non-cf processes
-    p_offline = filter(x -> !(processes[x[1]].is_online), lim_tuple)
-    for tup in p_offline
-        topo = filter(x->x.sink == tup[3] && x.source == tup[2], processes[tup[1]].topos)[1]
-        if isempty(topo.cap_ts)
-            cap = topo.capacity
-        else
-            cap = topo.cap_ts(tup[4], tup[5])
+    for p in lim_procs
+        p.is_online && continue
+        for topo in p.topos
+            tup = (p.name, topo.source, topo.sink)
+            for s in scens, t in times
+                add_to_expression!(e_lim_max[tup, s, t], -topo_cap(topo, s, t))
+            end
         end
-        add_to_expression!(e_lim_max[tup], -cap)
     end
 
     # reserve processes
     if input_data.setup.contains_reserves
         v_load = model.obj_dict[:v_load]
-        res_p_tuples = unique(map(x -> x[3:end], reserve_process_tuples(input_data)))
+        res_p_tuples = unique(map(x -> x[3:5], reserve_process_tuples(input_data)))
         res_pot_cons_tuple = unique(map(x -> (x[1:5]), consumer_reserve_process_tuples(input_data)))
         res_pot_prod_tuple = unique(map(x -> (x[1:5]), producer_reserve_process_tuples(input_data)))
-        v_reserve = model.obj_dict[:v_reserve]
-        res_lim_tuple = unique(map(y -> (y[1:3]), filter(x -> input_data.processes[x[1]].is_res, lim_tuple)))
+        v_reserve = model[:v_reserve]
+        res_lim_tuple = unique(x[1:3] for x in lim_tuple
+                                      if input_data.processes[x[1]].is_res)
 
         for tup in res_lim_tuple
             p_reserve_cons_up = filter(x ->x[1] == "res_up" && x[3:end] == tup, res_pot_cons_tuple)
@@ -615,46 +625,57 @@ function setup_process_limits(model_contents::OrderedDict, input_data::Predicer.
             p_reserve_cons_down = filter(x ->x[1] == "res_down" && x[3:end] == tup, res_pot_cons_tuple)
             p_reserve_prod_down = filter(x ->x[1] == "res_down" && x[3:end] == tup, res_pot_prod_tuple)
 
-            for s in scenarios(input_data), t in input_data.temporals.t
-                index_tup = (tup[1], tup[2], tup[3], s, t)
+            for s in scens, t in times
                 p_r_c_up = map(x -> (x[1], x[2], x[3], x[4], x[5], s, t), p_reserve_cons_up)
                 p_r_p_up = map(x -> (x[1], x[2], x[3], x[4], x[5], s, t), p_reserve_prod_up)
                 p_r_c_down = map(x -> (x[1], x[2], x[3], x[4], x[5], s, t), p_reserve_cons_down)
                 p_r_p_down = map(x -> (x[1], x[2], x[3], x[4], x[5], s, t), p_reserve_prod_down)
                 if !isempty(p_reserve_cons_up)
-                    add_to_expression!(e_lim_res_min[index_tup], sum(v_reserve[validate_tuples(val_dict, common_ts, p_r_c_up, 6)]), -1)
+                    add_to_expression!(
+                        e_lim_res_min[tup, s, t],
+                        sum(v_reserve[validate_tuples(
+                            val_dict, common_ts, p_r_c_up, 6)]), -1)
                 end
                 if !isempty(p_reserve_prod_up)
-                    add_to_expression!(e_lim_res_max[index_tup], sum(v_reserve[validate_tuples(val_dict, common_ts, p_r_p_up, 6)]))
+                    add_to_expression!(
+                        e_lim_res_max[tup, s, t],
+                        sum(v_reserve[validate_tuples(
+                            val_dict, common_ts, p_r_p_up, 6)]))
                 end
                 if !isempty(p_reserve_cons_down)
-                    add_to_expression!(e_lim_res_max[index_tup], sum(v_reserve[validate_tuples(val_dict, common_ts, p_r_c_down, 6)]))
+                    add_to_expression!(
+                        e_lim_res_max[tup, s, t],
+                        sum(v_reserve[validate_tuples(
+                            val_dict, common_ts, p_r_c_down, 6)]))
                 end
                 if !isempty(p_reserve_prod_down)
-                    add_to_expression!(e_lim_res_min[index_tup], sum(v_reserve[validate_tuples(val_dict, common_ts, p_r_p_down, 6)]), -1)
+                    add_to_expression!(
+                        e_lim_res_min[tup, s, t],
+                        sum(v_reserve[validate_tuples(
+                            val_dict, common_ts, p_r_p_down, 6)]), -1)
                 end
             end
         end
 
         @constraints model begin
-            v_load_max_eq[tup = res_p_tuples],
-            (v_load[validate_tuple(val_dict, common_ts, tup, 4)]
-             + e_lim_max[tup] + e_lim_res_max[tup]) <= 0
+            v_load_max_eq[tup = res_p_tuples, s = scens, t = times],
+            (v_load[validate_tuple(val_dict, common_ts, (tup..., s, t), 4)]
+             + e_lim_max[tup, s, t] + e_lim_res_max[tup, s, t]) <= 0
 
-            v_load_min_eq[tup = res_p_tuples],
-            (v_load[validate_tuple(val_dict, common_ts, tup, 4)]
-             + e_lim_min[tup] + e_lim_res_min[tup]) >= 0
+            v_load_min_eq[tup = res_p_tuples, s = scens, t = times],
+            (v_load[validate_tuple(val_dict, common_ts, (tup..., s, t), 4)]
+             + e_lim_min[tup, s, t] + e_lim_res_min[tup, s, t]) >= 0
         end
     end
 
     @constraints model begin
-        v_flow_max_eq[tup = lim_tuple],
-        (v_flow[validate_tuple(val_dict, common_ts, tup, 4)]
-         + e_lim_max[tup]) <= 0
+        v_flow_max_eq[tup = lim_tuple, s = scens, t = times],
+        (v_flow[validate_tuple(val_dict, common_ts, (tup..., s, t), 4)]
+         + e_lim_max[tup, s, t]) <= 0
 
-        v_flow_min_eq[tup = lim_tuple],
-        (v_flow[validate_tuple(val_dict, common_ts, tup, 4)]
-         + e_lim_min[tup]) >= 0
+        v_flow_min_eq[tup = lim_tuple, s = scens, t = times],
+        (v_flow[validate_tuple(val_dict, common_ts, (tup..., s, t), 4)]
+         + e_lim_min[tup, s, t]) >= 0
     end
 end
 
@@ -1598,12 +1619,13 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     val_dict = model_contents["validation_dict"]
     common_ts = model_contents["common_timesteps"]
     process_tuple = process_topology_tuples(input_data)
-    reduced_process_tuple = unique(map(x -> x[1:4], process_tuple))
-    node_balance_tuple = balance_node_tuples(input_data)
+    reduced_process_tuple = ((p.name, topo.source, topo.sink)
+                             for p in values(input_data.processes)
+                             for topo in p.topos)
     
-    v_flow = model.obj_dict[:v_flow]
+    v_flow = model[:v_flow]
     v_bid = model_contents["expression"]["v_bid"]
-    v_flow_bal = model.obj_dict[:v_flow_bal]
+    v_flow_bal = model[:v_flow_bal]
 
     scenarios = collect(keys(input_data.scenarios))
     nodes = input_data.nodes
@@ -1612,51 +1634,67 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     temporals = input_data.temporals
 
     # Commodity costs and market costs
-    commodity_costs = model_contents["expression"]["commodity_costs"] = OrderedDict()
-    market_costs = model_contents["expression"]["market_costs"] = OrderedDict()
-    for s in scenarios
-        commodity_costs[s] = AffExpr(0.0)
-        market_costs[s] = AffExpr(0.0)
-        for n in keys(nodes)
-            #Commodity costs:
-            if nodes[n].is_commodity
-                red_flow_tups = filter(x -> x[2] == n && x[4] == s, reduced_process_tuple)
-                cost_ts = nodes[n].cost(s)
-                # Add to expression for each t found in series
-                for t in input_data.temporals.t
-                    flow_tups = map(x -> (x[1:end]..., t), red_flow_tups)
-                    for tup in unique(validate_tuples(val_dict, common_ts, flow_tups, 4))
-                        add_to_expression!(commodity_costs[s], sum(v_flow[tup]), cost_ts(tup[5]) * temporals(tup[5]))
-                    end
+    @expressions model begin
+        commodity_costs[s = scenarios], AffExpr(0.0)
+        market_costs[s = scenarios], AffExpr(0.0)
+    end
+    model_contents["expression"]["commodity_costs"] = commodity_costs
+    model_contents["expression"]["market_costs"] = market_costs
+    for (n, node) in nodes
+        flow_out = [tup for tup in reduced_process_tuple if tup[2] == n]
+        #Commodity costs:
+        if node.is_commodity
+            # Add to expression for each t found in series
+            for s in scenarios, t in input_data.temporals.t
+                flow_tups = [(tup..., s, t) for tup in flow_out]
+                for tup in unique(validate_tuples(val_dict, common_ts, flow_tups, 4))
+                    add_to_expression!(
+                        commodity_costs[s],
+                        v_flow[tup], node.cost(s, t) * temporals(tup[5]))
                 end
             end
-            # Spot-Market costs and profits
-            if nodes[n].is_market
-                # bidding market with balance market
-                if markets[n].is_bid
-                    price_ts = markets[n].price(s)
-                    price_up_ts = markets[n].up_price(s)
-                    price_dw_ts = markets[n].down_price(s)
-                    for t in temporals.t
-                        tup = (nodes[n].name,s,t)
-                        tup_up = (nodes[n].name,"up",s,t)
-                        tup_dw = (nodes[n].name,"dw",s,t)
-                        add_to_expression!(market_costs[s], v_bid[tup], -1* price_ts(t) * temporals(t))
-                        add_to_expression!(market_costs[s], v_flow_bal[validate_tuple(val_dict, common_ts, tup_up, 3)], price_up_ts(t) * temporals(t))
-                        add_to_expression!(market_costs[s], v_flow_bal[validate_tuple(val_dict, common_ts, tup_dw, 3)], -1*price_dw_ts(t) * temporals(t))
-                    end
-                # non-bidding market
-                else
-                    flow_out = filter(x -> x[2] == n && x[4] == s, process_tuple)
-                    flow_in = filter(x -> x[3] == n && x[4] == s, process_tuple)
-                    price_ts = markets[n].price(s)
-
+        end
+        # Spot-Market costs and profits
+        if node.is_market
+            market = markets[n]
+            # bidding market with balance market
+            if market.is_bid
+                for s in scenarios, t in temporals.t
+                    tup = (node.name,s,t)
+                    tup_up = (node.name,"up",s,t)
+                    tup_dw = (node.name,"dw",s,t)
+                    add_to_expression!(
+                        market_costs[s],
+                        v_bid[tup], -market.price(s, t) * temporals(t))
+                    add_to_expression!(
+                        market_costs[s],
+                        v_flow_bal[
+                            validate_tuple(val_dict, common_ts, tup_up, 3)],
+                        market.up_price(s, t) * temporals(t))
+                    add_to_expression!(
+                        market_costs[s],
+                        v_flow_bal[
+                            validate_tuple(val_dict, common_ts, tup_dw, 3)],
+                        -market.down_price(s, t) * temporals(t))
+                end
+            # non-bidding market
+            else
+                flow_in = [tup for tup in reduced_process_tuple if tup[3] == n]
+                for s in scenarios, t in temporals.t
                     for tup in flow_out
-                        add_to_expression!(market_costs[s], sum(v_flow[validate_tuple(val_dict, common_ts, tup, 4)]), price_ts(tup[5]) * temporals(tup[5]))
+                        add_to_expression!(
+                            market_costs[s],
+                            v_flow[validate_tuple(
+                                val_dict, common_ts, (tup..., s, t), 4)],
+                            market.price(s, t) * temporals(t))
                     end
                     # Assuming what goes into the node is sold and has a negatuive cost
                     for tup in flow_in
-                        add_to_expression!(market_costs[s], sum(v_flow[validate_tuple(val_dict, common_ts, tup, 4)]), -1* price_ts(tup[5]) * temporals(tup[5]))
+                        add_to_expression!(
+                            market_costs[s],
+                            v_flow[
+                                validate_tuple(val_dict, common_ts, tup, 4)],
+                            -market.price(s, t) * temporals(t))
                     end
                 end
             end
@@ -1664,26 +1702,24 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     end
 
     # VOM_costs
-    vom_costs = model_contents["expression"]["vom_costs"] = OrderedDict()
-    reduced_proc_tuple = unique(map(x->(x[1],x[2],x[3]),process_tuple))
-    for s in scenarios
-        vom_costs[s] = AffExpr(0.0)
-        for tup in reduced_proc_tuple
-            vom = filter(x->x.source == tup[2] && x.sink == tup[3], processes[tup[1]].topos)[1].vom_cost
-            if vom != 0
-                flows = [(tup[1:3]..., s, t) for t in input_data.temporals.t]
-                for f in flows
-                    add_to_expression!(vom_costs[s], sum(v_flow[validate_tuple(val_dict, common_ts, f, 4)]), vom * temporals(f[5]))
-                end
+    model_contents["expression"]["vom_costs"] = @expression(
+        model, vom_costs[s = scenarios], AffExpr(0.0))
+    for tup in reduced_process_tuple
+        vom = filter(x->x.source == tup[2] && x.sink == tup[3], processes[tup[1]].topos)[1].vom_cost
+        if vom != 0
+            for s in scenarios, t in temporals.t
+                f = (tup..., s, t)
+                add_to_expression!(
+                    vom_costs[s],
+                    v_flow[validate_tuple(val_dict, common_ts, f, 4)],
+                    vom * temporals(f[5]))
             end
         end
     end
 
     # Start costs
-    start_costs = model_contents["expression"]["start_costs"] = OrderedDict()
-    for s in scenarios
-        start_costs[s] = AffExpr(0.0)
-    end
+    model_contents["expression"]["start_costs"] = @expression(
+        model, start_costs[s = scenarios], AffExpr(0.0))
     if input_data.setup.contains_online
         proc_online_tuple = online_process_tuples(input_data)
         for s in scenarios
@@ -1699,12 +1735,10 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     end
 
     # Reserve profits:
-    reserve_costs = model_contents["expression"]["reserve_costs"] = OrderedDict()
-    for s in scenarios
-        reserve_costs[s] = AffExpr(0.0)
-    end
+    model_contents["expression"]["reserve_costs"] = @expression(
+        model, reserve_costs[s = scenarios], AffExpr(0.0))
     if input_data.setup.contains_reserves
-        v_res_final = model.obj_dict[:v_res_final]
+        v_res_final = model[:v_res_final]
         res_final_tuple = reserve_market_tuples(input_data)
         for s in scenarios
             for tup in filter(x -> x[2] == s, res_final_tuple)
@@ -1715,12 +1749,10 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     end
 
     # reserve activation profits
-    reserve_activation_costs = model_contents["expression"]["reserve_activation_costs"] = OrderedDict()
-    for s in scenarios
-        reserve_activation_costs[s] = AffExpr(0.0)
-    end
+    model_contents["expression"]["reserve_activation_costs"] = @expression(
+        model, reserve_activation_costs[s = scenarios], AffExpr(0.0))
     if input_data.setup.contains_reserves
-        v_res_final = model.obj_dict[:v_res_final]
+        v_res_final = model[:v_res_final]
         res_final_tup = reserve_market_tuples(input_data)
         for s in scenarios
             for tup in filter(x -> x[2] == s, res_final_tup)
@@ -1732,12 +1764,10 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     end
 
     # Reserve fee costs:
-    reserve_fees = model_contents["expression"]["reserve_fee_costs"] = OrderedDict()
-    for s in scenarios
-        reserve_fees[s] = AffExpr(0.0)
-    end
+    model_contents["expression"]["reserve_fee_costs"] = @expression(
+        model, reserve_fees[s = scenarios], AffExpr(0.0))
     if input_data.setup.contains_reserves
-        v_reserve_online = model.obj_dict[:v_reserve_online]
+        v_reserve_online = model[:v_reserve_online]
         res_online_tuple = create_reserve_limits(input_data)
         for s in scenarios
             for tup in filter(x->x[2] == s, res_online_tuple)
@@ -1747,13 +1777,11 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     end
 
     # Setpoint deviation costs
-    setpoint_deviation_costs = model_contents["expression"]["setpoint_deviation_costs"] = OrderedDict()
-    v_set_up = model.obj_dict[:v_set_up]
-    v_set_down = model.obj_dict[:v_set_down]
-    for s in scenarios
-        setpoint_deviation_costs[s] = AffExpr(0.0)
-    end
-    for c in collect(keys(input_data.gen_constraints))
+    model_contents["expression"]["setpoint_deviation_costs"] = @expression(
+        model, setpoint_deviation_costs[s = scenarios], AffExpr(0.0))
+    v_set_up = model[:v_set_up]
+    v_set_down = model[:v_set_down]
+    for c in keys(input_data.gen_constraints)
         if input_data.gen_constraints[c].is_setpoint
             penalty = input_data.gen_constraints[c].penalty
             for s in scenarios
@@ -1767,10 +1795,8 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     end
 
     # State residue costs
-    state_residue_costs = model_contents["expression"]["state_residue_costs"] = OrderedDict()
-    for s in scenarios
-        state_residue_costs[s] = AffExpr(0.0)
-    end
+    model_contents["expression"]["state_residue_costs"] = @expression(
+        model, state_residue_costs[s = scenarios], AffExpr(0.0))
     if input_data.setup.contains_states
         v_state = model.obj_dict[:v_state]
         state_node_tuple = state_node_tuples(input_data)
@@ -1782,24 +1808,21 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     end
 
     # Dummy variable costs
-    dummy_costs = model_contents["expression"]["dummy_costs"] = OrderedDict(
-        s => AffExpr(0.0) for s in scenarios)
+    model_contents["expression"]["dummy_costs"] = @expression(
+        model, dummy_costs[s = scenarios], AffExpr(0.0))
     p_node = input_data.setup.node_dummy_variable_cost
     p_ramp = input_data.setup.ramp_dummy_variable_cost
 
     if input_data.setup.use_node_dummy_variables
         vq_state_up = model[:vq_state_up]
         vq_state_dw = model[:vq_state_dw]
-        for tup in node_balance_tuple
-            s = tup[2]
-            add_to_expression!(
-                dummy_costs[s],
-                vq_state_up[validate_tuple(val_dict, common_ts, tup, 2)],
-                p_node)
-            add_to_expression!(
-                dummy_costs[s],
-                vq_state_dw[validate_tuple(val_dict, common_ts, tup, 2)],
-                p_node)
+        for n in values(input_data.nodes)
+            is_balance_node(n) || continue
+            for s in scenarios, t in temporals.t
+                vtup = validate_tuple(val_dict, common_ts, (n.name, s, t), 2)
+                add_to_expression!(dummy_costs[s], vq_state_up[vtup], p_node)
+                add_to_expression!(dummy_costs[s], vq_state_dw[vtup], p_node)
+            end
         end
     end
     if input_data.setup.use_ramp_dummy_variables
@@ -1842,13 +1865,14 @@ function setup_cvar_element(model_contents::OrderedDict, input_data::Predicer.In
     if input_data.setup.contains_risk
         model = model_contents["model"]
         total_costs = model_contents["expression"]["total_costs"]
-        v_var = model.obj_dict[:v_var]
-        v_cvar_z = model.obj_dict[:v_cvar_z]
-        scenarios = collect(keys(input_data.scenarios))
-        scen_p = collect(values(input_data.scenarios))
+        v_var = model[:v_var]
+        v_cvar_z = model[:v_cvar_z]
         alfa = input_data.risk["alfa"]
-        cvar_constraint = @constraint(model, cvar_constraint[s in scenarios], v_cvar_z[s] >= total_costs[s]-v_var)
-        model_contents["expression"]["cvar"] = @expression(model, sum(v_var)+(1/(1-alfa))*sum(values(scen_p).*v_cvar_z[scenarios]))
+        @constraint(model, cvar_constraint[s = scenarios(input_data)],
+                    v_cvar_z[s] >= total_costs[s] - v_var)
+        model_contents["expression"]["cvar"] = @expression(
+            model, v_var + sum(
+                (p/(1-alfa)) * v_cvar_z[s] for (s, p) in input_data.scenarios))
     end
 end
 
