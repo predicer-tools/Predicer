@@ -9,7 +9,7 @@
     optimize!(dem)
     @test JuMP.termination_status(dem) == MOI.OPTIMAL
     if inp.setup.contains_risk
-        @test(known_obj - objective_value(dem) >= -obj_rtol(dem),
+        @test(known_obj - objective_value(dem) ≥ -obj_rtol(dem),
               skip=isnan(known_obj))
     else
         @test(objective_value(dem) ≈ known_obj, rtol=obj_rtol(dem),

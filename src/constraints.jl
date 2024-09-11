@@ -1208,7 +1208,7 @@ end
 
 #XXX Should this be somewhere else?
 """
-    market_proc_index(input_data)
+$(TYPEDSIGNATURES)
 
 Return a pair of Dicts mapping market names to (process, source, sink) triples
 The first Dict contains the triple having the market as sink (incoming),
