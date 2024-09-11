@@ -1293,8 +1293,9 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
     process_tuple = process_topology_tuples(input_data)
     reduced_process_tuple = unique(map(x -> x[1:3], process_tuple))
 
-    balance_process_tuple = create_balance_market_tuple(input_data)
-    reduced_balance_process_tuple = unique(map(x -> x[1:2], balance_process_tuple))
+    reduced_balance_process_tuple =
+        [(m.name, d) for m in values(markets) if is_balance_market(m)
+                     for d in market_dirs]
     
     v_flow = model.obj_dict[:v_flow]
     v_flow_bal = model.obj_dict[:v_flow_bal]
