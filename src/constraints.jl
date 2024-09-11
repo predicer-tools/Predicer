@@ -1197,6 +1197,33 @@ function setup_fixed_values(model_contents::OrderedDict, input_data::Predicer.In
     fixed_value_eq = @constraint(model, fixed_value_eq[tup in fixed_value_tuple], fix_expr[tup] == 0)
 end
 
+#XXX Should this be somewhere else?
+"""
+    market_proc_index(input_data)
+
+Return a pair of Dicts mapping market names to (process, source, sink) triples
+The first Dict contains the triple having the market as sink (incoming),
+the second as source (outgoing).  It is assumed there is only one of each.
+"""
+function market_proc_index(inp::InputData)
+    #=TODO This assumes too little or too much.
+    If we wanted to be general, we'd allow multiple in and out processes.
+    On the other hand, market processes are created so that there is one
+    per market, the same in and out, and its name is derived from the market
+    name, so we wouldn't need to search for it.
+    =#
+    proc_tup_in = Dict{String, NTuple{3, String}}()
+    proc_tup_out = Dict{String, NTuple{3, String}}()
+    for p in values(inp.processes), topo in p.topos
+        if topo.sink in keys(inp.markets)
+            proc_tup_in[topo.sink] = (p.name, topo.source, topo.sink)
+        end
+        if topo.source in keys(inp.markets)
+            proc_tup_out[topo.source] = (p.name, topo.source, topo.sink)
+        end
+    end
+    return (proc_tup_in, proc_tup_out)
+end
 
 """
     setup_bidding_curve_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
@@ -1213,12 +1240,8 @@ function setup_bidding_curve_constraints(model_contents::OrderedDict, input_data
     common_ts = model_contents["common_timesteps"]
     markets = input_data.markets
     b_slots = input_data.bid_slots
-    bid_scen_tuple = Predicer.bid_scenario_tuples(input_data)
-    reduced_bid_scen_tuple = unique(map(x -> x[1], bid_scen_tuple))
-    process_tuple = process_topology_tuples(input_data)
-    reduced_process_tuple = unique(map(x -> x[1:3], process_tuple))
-    balance_process_tuple = create_balance_market_tuple(input_data)
-    reduced_balance_process_tuple = unique(map(x -> x[1:2], balance_process_tuple))
+    (proc_tup_in, proc_tup_out) = market_proc_index(input_data)
+
     v_flow = model.obj_dict[:v_flow]
     v_flow_bal = model.obj_dict[:v_flow_bal]
     v_bid_vol = model.obj_dict[:v_bid_volume]
@@ -1226,11 +1249,11 @@ function setup_bidding_curve_constraints(model_contents::OrderedDict, input_data
     v_bid = model_contents["expression"]["v_bid"] = OrderedDict()
     e_bid_slot = OrderedDict()
 
-    for m in reduced_bid_scen_tuple
-        m_cons_flow = filter(x -> x[2] == m, reduced_process_tuple)[1]
-        m_prod_flow = filter(x -> x[3] == m, reduced_process_tuple)[1]
-        m_cons_bal_flow = filter(x -> x[1] == m && x[2] == "dw", reduced_balance_process_tuple)[1]
-        m_prod_bal_flow = filter(x -> x[1] == m && x[2] == "up", reduced_balance_process_tuple)[1]
+    for m in keys(b_slots)
+        m_cons_flow = proc_tup_out[m]
+        m_prod_flow = proc_tup_in[m]
+        m_cons_bal_flow = (m, "dw")
+        m_prod_bal_flow = (m, "up")
         for s in scenarios(input_data), t in input_data.temporals.t
             tup = (m, s, t)
             v_bid[tup] = AffExpr(0.0)
@@ -1252,7 +1275,8 @@ function setup_bidding_curve_constraints(model_contents::OrderedDict, input_data
             add_to_expression!(e_bid_slot[tup],v_bid_vol[(tup[1],bn1,tup[3])],(ps-p0)/(p1-p0))
         end
     end
-    bid_slot_eq = @constraint(model, bid_slot_eq[tup in bid_scen_tuple], v_bid[tup] == e_bid_slot[tup])
+    bid_scen_tuple = Predicer.bid_scenario_tuples(input_data)
+    @constraint(model, bid_slot_eq[tup in bid_scen_tuple], v_bid[tup] == e_bid_slot[tup])
 end
 
 """
@@ -1290,19 +1314,13 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
     markets = input_data.markets
     scens = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
-    process_tuple = process_topology_tuples(input_data)
-    reduced_process_tuple = unique(map(x -> x[1:3], process_tuple))
+    (proc_tup_in, proc_tup_out) = market_proc_index(input_data)
 
-    reduced_balance_process_tuple =
-        [(m.name, d) for m in values(markets) if is_balance_market(m)
-                     for d in market_dirs]
-    
-    v_flow = model.obj_dict[:v_flow]
-    v_flow_bal = model.obj_dict[:v_flow_bal]
+    v_flow = model[:v_flow]
+    v_flow_bal = model[:v_flow_bal]
     v_bid = model_contents["expression"]["v_bid"] = OrderedDict()
-
     if input_data.setup.contains_reserves
-        v_res_final = model.obj_dict[:v_res_final]
+        v_res_final = model[:v_res_final]
     end
     
     price_matr = OrderedDict()
@@ -1311,18 +1329,18 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
             pcols = []
             sizehint!(pcols, length(scens))
             if markets[m].m_type == "energy"
+                m_cons_flow = proc_tup_out[m] # market consuming flow
+                m_prod_flow = proc_tup_in[m] # market producing flow
+                m_cons_bal_flow = (m, "dw") # bal market consuming flow
+                m_prod_bal_flow = (m, "up") # bal market producing flow
                 for s in scens
                     push!(pcols, values(markets[m].price(s).series))
-                    m_cons_flow = filter(x -> x[2] == m, reduced_process_tuple)[1] # market consuming flow
-                    m_prod_flow = filter(x -> x[3] == m, reduced_process_tuple)[1] # market producing flow
-                    m_cons_bal_flow = filter(x -> x[1] == m && x[2] == "dw", reduced_balance_process_tuple)[1] # bal market consuming flow
-                    m_prod_bal_flow = filter(x -> x[1] == m && x[2] == "up", reduced_balance_process_tuple)[1] # bal market producing flow
                     for t in temporals.t
-                        v_bid[(markets[m].name,s,t)] = AffExpr(0.0)
-                        add_to_expression!(v_bid[(markets[m].name,s,t)], v_flow[validate_tuple(val_dict, common_ts, (m_prod_flow..., s, t), 4)],1.0) # producer flow
-                        add_to_expression!(v_bid[(markets[m].name,s,t)], v_flow_bal[validate_tuple(val_dict, common_ts, (m_prod_bal_flow..., s, t), 3)],1.0) #"producer" balance flow
-                        add_to_expression!(v_bid[(markets[m].name,s,t)], v_flow[validate_tuple(val_dict, common_ts, (m_cons_flow..., s, t), 4)],-1.0) # consumer flow
-                        add_to_expression!(v_bid[(markets[m].name,s,t)], v_flow_bal[validate_tuple(val_dict, common_ts, (m_cons_bal_flow..., s, t), 3)],-1.0) # consumer balance flow
+                        vb = v_bid[(markets[m].name,s,t)] = AffExpr(0.0)
+                        add_to_expression!(vb, v_flow[validate_tuple(val_dict, common_ts, (m_prod_flow..., s, t), 4)],1.0) # producer flow
+                        add_to_expression!(vb, v_flow_bal[validate_tuple(val_dict, common_ts, (m_prod_bal_flow..., s, t), 3)],1.0) #"producer" balance flow
+                        add_to_expression!(vb, v_flow[validate_tuple(val_dict, common_ts, (m_cons_flow..., s, t), 4)],-1.0) # consumer flow
+                        add_to_expression!(vb, v_flow_bal[validate_tuple(val_dict, common_ts, (m_cons_bal_flow..., s, t), 3)],-1.0) # consumer balance flow
                     end
                 end
             end
