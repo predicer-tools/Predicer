@@ -1226,20 +1226,45 @@ function setup_bidding_curve_constraints(
     val_dict = model_contents["validation_dict"]
     common_ts = model_contents["common_timesteps"]
     markets = input_data.markets
-    process_tuple = process_topology_tuples(input_data)
-    balance_process_tuple = create_balance_market_tuple(input_data)
     v_flow = model.obj_dict[:v_flow]
     v_flow_bal = model.obj_dict[:v_flow_bal]
 
-    function compute_v_bid(tup)
+    #=TODO This assumes too little or too much.
+    If we wanted to be general, we'd allow multiple in and out processes.
+    On the other hand, market processes are created so that there is one
+    per market, the same in and out, and its name is derived from the market
+    name, so we wouldn't need to search for it.
+    =#
+    proc_tup_in = Dict{String, NTuple{3, String}}()
+    proc_tup_out = Dict{String, NTuple{3, String}}()
+    for p in values(input_data.processes), topo in p.topos
+        if topo.sink in keys(markets)
+            proc_tup_in[topo.sink] = (p.name, topo.source, topo.sink)
+        end
+        if topo.source in keys(markets)
+            proc_tup_out[topo.source] = (p.name, topo.source, topo.sink)
+        end
+    end
+
+    function compute_v_bid(m, s, t)
         v = AffExpr(0.0)
-        if markets[tup[1]].m_type == "energy"
-            add_to_expression!(v, v_flow[Predicer.validate_tuple(val_dict, common_ts, filter(x->x[3]==tup[1] && x[5]==tup[3] && x[4]==tup[2],process_tuple)[1], 4)],1.0)
-            add_to_expression!(v, v_flow_bal[Predicer.validate_tuple(val_dict, common_ts, filter(x->x[1]==tup[1] && x[2]=="up" && x[4]==tup[3] && x[3]==tup[2],balance_process_tuple)[1], 3)],1.0)
-            add_to_expression!(v, v_flow[Predicer.validate_tuple(val_dict, common_ts, filter(x->x[2]==tup[1] && x[5]==tup[3] && x[4]==tup[2],process_tuple)[1], 4)],-1.0)
-            add_to_expression!(v, v_flow_bal[Predicer.validate_tuple(val_dict, common_ts, filter(x->x[1]==tup[1] && x[2]=="dw" && x[4]==tup[3] && x[3]==tup[2],balance_process_tuple)[1], 3)],-1.0)
+        if markets[m].m_type == "energy"
+            add_to_expression!(
+                v, v_flow[Predicer.validate_tuple(
+                    val_dict, common_ts, (proc_tup_in[m]..., s, t), 4)])
+            add_to_expression!(
+                v, v_flow_bal[Predicer.validate_tuple(
+                    val_dict, common_ts, (m, "up", s, t), 3)])
+            add_to_expression!(
+                v, v_flow[Predicer.validate_tuple(
+                    val_dict, common_ts, (proc_tup_out[m]..., s, t), 4)],
+                -1.0)
+            add_to_expression!(
+                v, v_flow_bal[Predicer.validate_tuple(
+                    val_dict, common_ts, (m, "dw", s, t), 3)],
+                -1.0)
         else
-            add_to_expression!(v, v_res_final[tup],1.0)
+            add_to_expression!(v, v_res_final[tup], 1.0)
         end
         return v
     end
@@ -1249,7 +1274,7 @@ function setup_bidding_curve_constraints(
     for (m, bs) in input_data.bid_slots
         for s in keys(input_data.scenarios)
             for (ti, t) in enumerate(bs.time_steps)
-                v_bid[(m, s, t)] = compute_v_bid((m, s, t))
+                v_bid[(m, s, t)] = compute_v_bid(m, s, t)
                 bn0, bn1 = bs.market_price_allocation[(s, t)]
                 p0 = bs.prices[(t, bn0)]
                 p1 = bs.prices[(t, bn1)]
