@@ -710,24 +710,19 @@ function scenarios(input_data::InputData) # original name: create_risk_tuple()
     return scens
 end
 
+is_balance_market(m::Market) = m.is_bid && m.m_type == "energy"
+market_dirs = ["up", "dw"]
+
 """ 
     create_balance_market_tuple((input_data::Predicer.InputData)
 
 Returns array of tuples containing balance market. Form: (m, dir, s, t).
 """
 function create_balance_market_tuple(input_data::Predicer.InputData)
-    bal_tuples = NTuple{4, String}[]
-    energy_markets = filter(x -> x.m_type == "energy" && x.is_bid, collect(values(input_data.markets)))
-    dir = ["up","dw"]
-    scens = scenarios(input_data)
-    temps = input_data.temporals
-    sizehint!(bal_tuples, length(energy_markets) * length(dir) * length(scens) * length(temps.t))
-    for m in energy_markets
-        for d in dir, s in scens, t in temps.t
-            push!(bal_tuples, (m.name, d, s, t))
-        end
-    end
-    return bal_tuples
+    return [(m.name, d, s, t)
+            for m in values(input_data.markets) if is_balance_market(m)
+            for d in market_dirs for s in scenarios(input_data)
+            for t in input_data.temporals.t]
 end
 
 
