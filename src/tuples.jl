@@ -87,8 +87,9 @@ function validate_tuples(
         val_dict::OrderedDict, cts::Union{Vector{String}, Vector{Any}},
         tuples, s_index::Int)
     if !isempty(val_dict)
-        return [Predicer.validate_tuple(val_dict, cts, x, s_index)
-                for x in tuples]
+        return map(tuples) do x
+            Predicer.validate_tuple(val_dict, cts, x, s_index)
+        end
     else
         return tuples
     end
