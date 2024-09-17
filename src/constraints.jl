@@ -11,13 +11,9 @@ Create all constraints used in the model.
 # Arguments
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model. 
-- `sddp`: skip the objective function and the CVaR stuff
-   (`setup_cost_calculations` is still done).  Also passed to
-   `setup_bidding_curve_constraints` etc.
 """
 function create_constraints(
-        model_contents::OrderedDict, input_data::Predicer.InputData;
-        sddp::Bool = false)
+        model_contents::OrderedDict, input_data::Predicer.InputData)
     setup_reserve_realisation(model_contents, input_data)
     setup_node_balance(model_contents, input_data)
     setup_process_online_balance(model_contents, input_data)
@@ -26,13 +22,13 @@ function create_constraints(
     setup_process_limits(model_contents, input_data)
     setup_reserve_balances(model_contents, input_data)
     setup_ramp_constraints(model_contents, input_data)
-    setup_bidding_curve_constraints(model_contents, input_data; sddp)
+    setup_bidding_curve_constraints(model_contents, input_data)
     setup_bidding_constraints(model_contents, input_data)
-    setup_bidding_volume_constraints(model_contents, input_data; sddp)
+    setup_bidding_volume_constraints(model_contents, input_data)
     setup_fixed_values(model_contents, input_data)
     setup_generic_constraints(model_contents, input_data)
     setup_cost_calculations(model_contents, input_data)
-    if !sddp
+    if !haskey(model_contents, "sddp_shape")
         setup_cvar_element(model_contents, input_data)
         setup_objective_function(model_contents, input_data)
     end
@@ -1247,13 +1243,11 @@ equating the two.  m runs over markets having bid slots.
 # Arguments
 - `model_contents`: Constructed model and auxiliary data. 
 - `input_data`: Data used to build the model. 
-- `sddp`: The bid curve variables `v_bid_volume` are `SDDP.State` and indexed
-  differently from the non-SDDP case.  Their `in` values are used.
 """
 function setup_bidding_curve_constraints(
-        model_contents::OrderedDict, input_data::Predicer.InputData;
-        sddp::Bool=false)
+        model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
+    sddp = haskey(model_contents, "sddp_shape")
     val_dict = model_contents["validation_dict"]
     common_ts = model_contents["common_timesteps"]
     markets = input_data.markets
@@ -1326,12 +1320,11 @@ Constrain bid curves to increase for bid slots.  Creates a constraint named
 # Arguments
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
 - `input_data::OrderedDict`: Dictionary containing data used to build the model.
-- `sddp`: The bid curve variables are `SDDP.State`.  Their `out` values are used.
 """
 function setup_bidding_volume_constraints(
-        model_contents::OrderedDict, input_data::Predicer.InputData;
-        sddp::Bool=false)
+        model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
+    sddp = haskey(model_contents, "sddp_shape")
     tups = ((m, bs.slots[i - 1], bs.slots[i], t)
             for (m, bs) in input_data.bid_slots
             for i in 2 : length(bs.slots)

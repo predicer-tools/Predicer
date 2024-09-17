@@ -122,12 +122,13 @@ function sddp_policy_graph(inputs::AbstractVector{InputData}; kws...)
         end
         mc = build_model_contents_dict(inp)
         mc["model"] = sp
+        mc["sddp_shape"] = st_shape
         sddp_create_bid_state(mc, st_shape)
         if st == 1
-            setup_bidding_volume_constraints(mc, inp, sddp=true)
+            setup_bidding_volume_constraints(mc, inp)
         else
-            create_variables(mc, inp, sddp=true)
-            create_constraints(mc, inp, sddp=true)
+            create_variables(mc, inp)
+            create_constraints(mc, inp)
             @stageobjective(sp, mc["expression"]["total_costs"][scen])
         end
     end
