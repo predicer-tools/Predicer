@@ -1,5 +1,6 @@
 using DataStructures
 using TimeZones
+using DocStringExtensions
 
 
 """
@@ -987,12 +988,27 @@ end
 struct BidSlot
     market::String
     time_steps::Vector{String}
+    time_index::SortedDict{String, Int}
     slots::Vector{String}
     prices::OrderedDict{Tuple{String,String}, Float64}
     market_price_allocation::OrderedDict{Tuple{String,String}, Tuple{String,String}}
     function BidSlot(name,time_steps,slots,prices,market_price_allocation)
-        return new(name,time_steps,slots,prices,market_price_allocation)
+        return new(name,time_steps,
+                   SortedDict(t => i for (i, t) in enumerate(time_steps)),
+                   slots,prices,market_price_allocation)
     end
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Return the index of the greatest element in bs.time_steps that is less than
+or equal to t.  Return zero if there is no such element.
+"""
+function time_slot_of(bs::BidSlot, t::String)
+    st = searchsortedlast(bs.time_index, t)
+    return (st == beforestartsemitoken(bs.time_index)
+            ? 0 : bs.time_index[st])
 end
 
 

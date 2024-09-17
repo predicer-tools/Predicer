@@ -1239,12 +1239,16 @@ $(TYPEDSIGNATURES)
 
 Interpolation constraints for bid slots.   Match the market
 prices of the scenario to the bid curves and set the scenario bid volumes
-accordingly.  Creates a constraint named `bid_slot_eq`.
+accordingly.  Creates the expressions `v_bid[m, s, t]` (flow associated
+with market m in scenario s at time t) and `e_bid_slot[m, s, ti]`
+(interpolated volume from bid curve ti), and a constraint named `bid_slot_eq`
+equating the two.  m runs over markets having bid slots.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
-- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
-- `sddp`: The bid curve variables are `SDDP.State`.  Their `in` values are used.
+- `model_contents`: Constructed model and auxiliary data. 
+- `input_data`: Data used to build the model. 
+- `sddp`: The bid curve variables `v_bid_volume` are `SDDP.State` and indexed
+  differently from the non-SDDP case.  Their `in` values are used.
 """
 function setup_bidding_curve_constraints(
         model_contents::OrderedDict, input_data::Predicer.InputData;
@@ -1255,8 +1259,8 @@ function setup_bidding_curve_constraints(
     markets = input_data.markets
     (proc_tup_in, proc_tup_out) = market_proc_index(input_data)
 
-    v_flow = model.obj_dict[:v_flow]
-    v_flow_bal = model.obj_dict[:v_flow_bal]
+    v_flow = model[:v_flow]
+    v_flow_bal = model[:v_flow_bal]
 
     function compute_v_bid(m, s, t)
         v = AffExpr(0.0)
@@ -1280,29 +1284,37 @@ function setup_bidding_curve_constraints(
         end
         return v
     end
-    v_bid = model_contents["expression"]["v_bid"] = OrderedDict()
-    v_bid_vol = model.obj_dict[:v_bid_volume]
-    e_bid_slot = Dict()
-    for (m, bs) in input_data.bid_slots
-        for s in keys(input_data.scenarios)
-            for (ti, t) in enumerate(bs.time_steps)
-                v_bid[(m, s, t)] = compute_v_bid(m, s, t)
-                bn0, bn1 = bs.market_price_allocation[(s, t)]
-                p0 = bs.prices[(t, bn0)]
-                p1 = bs.prices[(t, bn1)]
-                ps = markets[m].price(s, t)
-                e_bid_slot[(m, s, t)] = AffExpr(0.0)
-                bid_vol(bn) = (sddp ? v_bid_vol[m, bn, ti].in
-                                    : v_bid_vol[(m, bn, t)]) 
-                add_to_expression!(e_bid_slot[(m, s, t)],
-                                   bid_vol(bn0), (p1-ps)/(p1-p0))
-                add_to_expression!(e_bid_slot[(m, s, t)],
-                                   bid_vol(bn1), (ps-p0)/(p1-p0))
-            end
-        end
+    bid_slots = input_data.bid_slots
+    v_bid_vol = model[:v_bid_volume]
+    function interpolate_bid(m, s, ti)
+        bs = bid_slots[m]
+        t = bs.time_steps[ti]
+        bn0, bn1 = bs.market_price_allocation[(s, t)]
+        p0 = bs.prices[(t, bn0)]
+        p1 = bs.prices[(t, bn1)]
+        ps = markets[m].price(s, t)
+        expr = AffExpr(0.0)
+        bid_vol(bn) = (sddp ? v_bid_vol[m, bn, ti].in
+                            : v_bid_vol[(m, bn, t)]) 
+        add_to_expression!(expr, bid_vol(bn0), (p1-ps)/(p1-p0))
+        add_to_expression!(expr, bid_vol(bn1), (ps-p0)/(p1-p0))
+        return expr
     end
-    @constraint(model, bid_slot_eq[tup in keys(v_bid)],
-                v_bid[tup] == e_bid_slot[tup])
+    scens = scenarios(input_data)
+    times = input_data.temporals.t
+    @expressions model begin
+        v_bid[m = keys(bid_slots), s = scens, t = times],
+            compute_v_bid(m, s, t)
+
+        e_bid_slot[m = keys(input_data.bid_slots), s = scens,
+                   ti = 1 : length(bid_slots[m].time_steps)],
+            interpolate_bid(m, s, ti)
+    end
+    #TODO This will be relaxed later, at least for SDDP.
+    @assert all(bs.time_steps[1] ≤ times[1] for bs in values(bid_slots))
+    @constraint(model, bid_slot_eq[
+            m = keys(bid_slots), s = scens, t = times],
+        v_bid[m, s, t] == e_bid_slot[m, s, time_slot_of(bid_slots[m], t)])
 end
 
 """
@@ -1324,7 +1336,7 @@ function setup_bidding_volume_constraints(
             for (m, bs) in input_data.bid_slots
             for i in 2 : length(bs.slots)
             for t in (sddp ? (1 : length(bs.time_steps)) : bs.time_steps))
-    v_bid_vol = model.obj_dict[:v_bid_volume]
+    v_bid_vol = model[:v_bid_volume]
     bid_vol = sddp ? tup -> v_bid_vol[tup].out : tup -> v_bid_vol[tup]
     @constraint(model, bid_vol[(m, s0, s1, t) = tups],
                 bid_vol((m, s1, t)) ≥ bid_vol((m, s0, t)))
