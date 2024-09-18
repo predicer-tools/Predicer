@@ -1,3 +1,4 @@
+using DocStringExtensions
 using DataStructures
 using TimeZones
 
@@ -30,52 +31,44 @@ end
 Base.showerror(io::IO, e::PredicerUserError) = print_PUE(io, e)
 
 """
-    mutable struct Temporals
-        t::Vector{String}
-        dtf::Float64
-        is_variable_dt::Bool
-        variable_dt::Vector{Tuple{String, Float64}}
-        ts_format::String
-    end
+$(TYPEDEF)
 
 Struct used for storing information about the timesteps in the model.
-#Fields
-- `t::Vector{String}`: Vector containing the timesteps. 
-- `dtf::Float64`: The length between timesteps compared to one hour, if the length of the timesteps don't vary. dt = (t2-t1)/(1 hour)
-- `is_variable_dt::Bool`: FLag indicating whether the timesteps vary in length. Default false. 
-- `variable_dt::OrderedDict{String, Float64}`: Vector containing the length between timesteps compared to one hour. The first element is the length between t_1 and t_2.
+
+$(TYPEDFIELDS)
 """
-mutable struct Temporals
+struct Temporals
+    """Timestamp strings as given to the constructor"""
     t::Vector{String}
+    """Parsed timestamps in UTC, ordered like `t`"""
+    times::OrderedDict{String, DateTime}
+    """Timestep length in hours if uniform"""
     dtf::Float64
+    """Whether timesteps vary in length"""
     is_variable_dt::Bool
+    """Time step lengths in hours if variable."""
     variable_dt::OrderedDict{String, Float64}
+    """Format string for parsing timestamps"""
     ts_format::String
-end
 
-
-"""
-    function Temporals(ts::Vector{String})
-
-Constructor for the Temporals struct.
-"""
-function Temporals(ts::Vector{String}, ts_format="yyyy-mm-ddTHH:MM:SSzzzz")
-    #dts = []
-    dts = OrderedDict{String, Float64}()
-    zdt_ts = map(x -> ZonedDateTime(x, ts_format), ts)
-    for i in 1:(length(zdt_ts))
-        if i < length(zdt_ts)
-            dts[ts[i]] = Dates.Minute(zdt_ts[i+1] - zdt_ts[i])/Dates.Minute(60)
-            #push!(dts, (ts[i], Dates.Minute(zdt_ts[i+1] - zdt_ts[i])/Dates.Minute(60)))
+    @doc """$(TYPEDSIGNATURES)"""
+    function Temporals(ts::Vector{String}, ts_format="yyyy-mm-ddTHH:MM:SSzzzz")
+        #dts = []
+        times = DateTime.(ZonedDateTime.(ts, ts_format), UTC)
+        tdict = OrderedDict(ts .=> times)
+        dts = diff(times) ./ Dates.Hour(1)
+        @assert all(dts .> 0)
+        if all(dts[1] .== dts[2 : end])
+            return new(ts, tdict, dts[1], false,
+                       OrderedDict{String, Float64}(), ts_format)
         else
-            dts[ts[i]] = collect(values(dts))[end]
-            #push!(push!(dts, (ts[i], dts[end][2])))
+            dtsd = OrderedDict{String, Float64}(
+                ts[i] => dt for (i, dt) in enumerate(dts))
+            #XXX The end of the modeling period is not given; we assume the
+            # last time step is as long as its predecessor.
+            dtsd[ts[end]] = dts[end]
+            return new(ts, tdict, 0, true, dtsd, ts_format)
         end
-    end
-    if length(unique(collect(values(dts)))) == 1
-        return Temporals(ts, collect(values(dts))[1], false, OrderedDict{String, Float64}(), ts_format)
-    elseif length(unique(collect(values(dts)))) > 1
-        return Temporals(ts, 0.0, true, dts, ts_format)
     end
 end
 
@@ -157,13 +150,12 @@ end
 
 # --- TimeSeries ---
 """
-    struct TimeSeries
-        scenario::AbstractString
-        series::SortedDict{AbstractString, Number}
-    end
+$(TYPEDEF)
 
 A struct for time series.  Includes a scenario name.  The representation
 of time may change at some point.
+
+$(TYPEDFIELDS)
 """
 struct TimeSeries
     scenario::AbstractString
