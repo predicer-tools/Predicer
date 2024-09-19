@@ -52,76 +52,57 @@ function create_tuples(input_data::InputData) # unused, should be debricated
 end
 
 """
-    validate_tuple(mc::OrderedDict, tuple::NTuple{N, String} where N, s_index::Int)
-
-Helper function used to correct generated index tuples in cases when the start of the optimization horizon is the same for all scenarios.
-"""
-function validate_tuple(mc::OrderedDict, tuple::NTuple{N, AbstractString} where N, s_index::Int)
-    if !isempty(mc["validation_dict"])
-        if tuple[s_index+1] in mc["common_timesteps"]
-            if s_index + 1 < length(tuple)
-                (tuple[1:s_index-1]..., mc["validation_dict"][tuple[s_index:s_index+1]]..., tuple[s_index+2:end]...)
-            else
-                return (tuple[1:s_index-1]..., mc["validation_dict"][tuple[s_index:s_index+1]]...)
-            end
-        else
-            return tuple
-        end
-    else
-        return tuple
-    end
-end
-
-
-"""
     validate_tuple(val_dict::OrderedDict, cts::Vector{String}, tuple::NTuple{N, AbstractString} where N, s_index::Int)
 
 Helper function used to correct generated index tuples in cases when the start of the optimization horizon is the same for all scenarios.
 This version is faster when validating larger tuples.
 """
-function validate_tuple(val_dict::OrderedDict, cts::Union{Vector{String}, Vector{Any}}, tuple::NTuple{N, AbstractString} where N, s_index::Int)
-    if !isempty(val_dict)
-        if tuple[s_index+1] in cts
-            if s_index + 1 < length(tuple)
-                (tuple[1:s_index-1]..., val_dict[tuple[s_index:s_index+1]]..., tuple[s_index+2:end]...)
-            else
-                return (tuple[1:s_index-1]..., val_dict[tuple[s_index:s_index+1]]...)
-            end
-        else
-            return tuple
-        end
+function validate_tuple(
+        val_dict::OrderedDict, cts::Union{Vector{String}, Vector{Any}},
+        tuple::NTuple{N, AbstractString} where N, s_index::Int)
+    if !isempty(val_dict) && tuple[s_index+1] in cts
+        return (tuple[1:s_index-1]..., val_dict[tuple[s_index:s_index+1]]...,
+                tuple[s_index+2:end]...)
     else
         return tuple
     end
 end
 
 """
-    validate_tuple(mc::OrderedDict, tuple::Vector{T} where T, s_index::Int)
+    validate_tuple(mc::OrderedDict, tuple::NTuple{N, String} where N, s_index::Int)
 
 Helper function used to correct generated index tuples in cases when the start of the optimization horizon is the same for all scenarios.
 """
-function validate_tuples(mc::OrderedDict, tuples::Vector{T} where T, s_index::Int)
-    if !isempty(mc["validation_dict"])
-        val_dict = mc["validation_dict"]
-        cts =  mc["common_timesteps"]
-        return map(x -> Predicer.validate_tuple(val_dict, cts, x, s_index), tuples)
-    else
-        return tuples
-    end
-end
+validate_tuple(mc::OrderedDict, tuple::NTuple{N, AbstractString} where N,
+               s_index::Int) =
+    validate_tuple(mc["validation_dict"], mc["common_timesteps"], tuple,
+                   s_index)
 
 """
-    validate_tuple(mc::OrderedDict, tuple::Vector{T} where T, s_index::Int)
+    validate_tuple(mc::OrderedDict, tuples, s_index::Int)
 
 Helper function used to correct generated index tuples in cases when the start of the optimization horizon is the same for all scenarios.
 """
-function validate_tuples(val_dict::OrderedDict, cts::Union{Vector{String}, Vector{Any}}, tuples::Vector{T} where T, s_index::Int)
+function validate_tuples(
+        val_dict::OrderedDict, cts::Union{Vector{String}, Vector{Any}},
+        tuples, s_index::Int)
     if !isempty(val_dict)
-        return map(x -> Predicer.validate_tuple(val_dict, cts, x, s_index), tuples)
+        return map(tuples) do x
+            Predicer.validate_tuple(val_dict, cts, x, s_index)
+        end
     else
         return tuples
     end
 end
+
+"""
+    validate_tuple(mc::OrderedDict, tuples, s_index::Int)
+
+Helper function used to correct generated index tuples in cases when the start of the optimization horizon is the same for all scenarios.
+"""
+validate_tuples(mc::OrderedDict, tuples, s_index::Int) =
+    validate_tuples(mc["validation_dict"], mc["common_timesteps"],
+                    tuples, s_index)
 
 """
     reserve_nodes(input_data::InputData)
@@ -431,6 +412,8 @@ function state_node_tuples(input_data::InputData) # original name: create_node_s
 end
 
 
+is_balance_node(n::Node) = !n.is_commodity && !n.is_market
+
 """
     balance_node_tuples(input_data::InputData)
 
@@ -438,7 +421,7 @@ Return tuples for each node over which balance should be maintained for every ti
 """
 function balance_node_tuples(input_data::InputData) # original name: create_node_balance_tuple()
     [(n.name, s, t)
-     for n in values(input_data.nodes) if !n.is_commodity && !n.is_market
+     for n in values(input_data.nodes) if is_balance_node(n)
      for s in keys(input_data.scenarios) for t in input_data.temporals.t]
 end
 
@@ -546,26 +529,19 @@ function cf_process_topology_tuples(input_data::InputData) # original name: crea
     return cf_ptt
 end
 
+is_fixed_limit_process(p::Process) = !p.is_cf && p.conversion == 1
+
 """
     fixed_limit_process_topology_tuples(input_data::InputData)
 
-Return tuples containing information on process topologies with fixed limit on flow capacity. Form: (p, so, si, s, t).
+Generate tuples containing information on process topologies with fixed
+limit on flow capacity. Form: (p, so, si).
 """
 function fixed_limit_process_topology_tuples( input_data::InputData) # original name: create_lim_tuple()
-    flptt = NTuple{5, String}[]
-    fixed_processes = filter(x -> !x.is_cf && x.conversion == 1, collect(values(input_data.processes)))
-    scens = scenarios(input_data)
-    sizehint!(flptt, length(fixed_processes) * length(scens) * length(input_data.temporals.t))
-    for p in fixed_processes
-        for topo in p.topos
-            for s in scens, t in input_data.temporals.t
-                push!(flptt, (p.name, topo.source, topo.sink, s, t))
-            end
-        end
-    end
-    return flptt
+    return ((p.name, topo.source, topo.sink)
+            for p in values(input_data.processes) if is_fixed_limit_process(p)
+            for topo in p.topos)
 end
-
 
 """
     transport_process_topology_tuples(input_data::InputData)
@@ -689,6 +665,10 @@ function fixed_market_tuples(input_data::InputData) # original name: create_fixe
     return fixed_market_tuples
 end
 
+process_topology_ramp_tuples(inp::InputData) =
+    ((p.name, tp.source, tp.sink)
+     for p in values(inp.processes) if p.conversion == 1 && !p.is_cf
+     for tp in p.topos)
 
 """
     process_topology_ramp_times_tuples(input_data::InputData)
@@ -696,20 +676,9 @@ end
 Return tuples containing time steps with ramp possibility for each process topology and scenario. Form: (p, so, si, s, t).
 """
 function process_topology_ramp_times_tuples(input_data::InputData) # orignal name: create_ramp_tuple()
-    rtptt = NTuple{5, String}[]
-    ramp_procs = filter(x -> x.conversion == 1 && !x.is_cf, collect(values(input_data.processes)))
-    n_topos = sum(map(x -> length(x.topos), ramp_procs))
-    scens = scenarios(input_data)
-    temps = input_data.temporals
-    sizehint!(rtptt, n_topos * length(scens) * length(temps.t))
-    for p in ramp_procs
-        for topo in p.topos
-            for s in scens, t in temps.t
-                push!(rtptt, (p.name, topo.source, topo.sink, s, t))
-            end
-        end
-    end
-    return rtptt
+    [(pss..., s, t)
+     for pss in process_topology_ramp_tuples(input_data)
+     for s in scenarios(input_data) for t in input_data.temporals.t]
 end
 
 """
@@ -722,24 +691,19 @@ function scenarios(input_data::InputData) # original name: create_risk_tuple()
     return scens
 end
 
+is_balance_market(m::Market) = m.is_bid && m.m_type == "energy"
+market_dirs = ["up", "dw"]
+
 """ 
     create_balance_market_tuple((input_data::Predicer.InputData)
 
 Returns array of tuples containing balance market. Form: (m, dir, s, t).
 """
 function create_balance_market_tuple(input_data::Predicer.InputData)
-    bal_tuples = NTuple{4, String}[]
-    energy_markets = filter(x -> x.m_type == "energy" && x.is_bid, collect(values(input_data.markets)))
-    dir = ["up","dw"]
-    scens = scenarios(input_data)
-    temps = input_data.temporals
-    sizehint!(bal_tuples, length(energy_markets) * length(dir) * length(scens) * length(temps.t))
-    for m in energy_markets
-        for d in dir, s in scens, t in temps.t
-            push!(bal_tuples, (m.name, d, s, t))
-        end
-    end
-    return bal_tuples
+    return [(m.name, d, s, t)
+            for m in values(input_data.markets) if is_balance_market(m)
+            for d in market_dirs for s in scenarios(input_data)
+            for t in input_data.temporals.t]
 end
 
 
