@@ -1,5 +1,5 @@
 using DataStructures
-using TimeZones
+using Dates
 
 
 """
@@ -857,7 +857,7 @@ end
 Function to create tuples for inflow blocks. Form (blockname, node, s, t).
 """
 function block_tuples(input_data::InputData)
-    [(bn, b.node, ts.scenario, t)
+    [(bn, b.node, ts.scenario, string(t))
      for (bn, b) in input_data.inflow_blocks
      for ts in b.data.ts_data for t in keys(ts.series)]
 end
@@ -907,14 +907,17 @@ function node_delay_tuple(input_data::InputData)
             n1 = tup[1]
             n2 = tup[2]
             delay = tup[3]
-            for (i, t) in enumerate(input_data.temporals.t[begin:end])
+            #XXX What about varying time steps?
+            for (i, t) in enumerate(input_data.temporals.t)
                 if (length(input_data.temporals.t) - i) <= delay
-                    t2 = ZonedDateTime(t, input_data.temporals.ts_format) +  TimeZones.Hour(delay) * input_data.temporals.dtf
+                    t2 = string(
+                        input_data.temporals.times[t]
+                        + Hour(delay * input_data.temporals.dtf))
                 else
                     t2 = input_data.temporals.t[i+delay]
                 end
                 for s in scens
-                    push!(node_delay_tup, (n1, n2, s, string(t), string(t2)))
+                    push!(node_delay_tup, (n1, n2, s, t, t2))
                 end
             end
         end
@@ -957,8 +960,9 @@ end
 Function to create bid slot tuples. Form (m,slot,t)
 """
 function bid_slot_tuples(input_data::InputData)
-    ((m, s, t) for (m, bs) in input_data.bid_slots
-               for s in bs.slots for t in bs.time_steps)
+    ((m, s, string(t))
+     for (m, bs) in input_data.bid_slots
+     for s in bs.slots for t in bs.time_steps)
 end
 
 """
@@ -967,6 +971,7 @@ end
 Function to create bid scenario tuples linked to bid slots. Form (m,s,t)
 """
 function bid_scenario_tuples(input_data::InputData)
-    ((m, s, t) for (m, bs) in input_data.bid_slots
-               for s in keys(input_data.scenarios) for t in bs.time_steps)
+    ((m, s, string(t))
+     for (m, bs) in input_data.bid_slots
+     for s in keys(input_data.scenarios) for t in bs.time_steps)
 end

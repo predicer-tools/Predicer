@@ -1,16 +1,16 @@
 using DataFrames
 using XLSX
 using DataStructures
-using TimeZones
+using Dates
 
 import Predicer
 
-function import_input_data(input_data_path::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[])
+function import_input_data(input_data_path::String, t_horizon::Vector{DateTime}=DateTime[])
     system_data, timeseries_data, temps = Predicer.read_xlsx(input_data_path, t_horizon)
     return Predicer.compile_input_data(system_data, timeseries_data, temps)
 end
 
-function read_xlsx(input_data_path::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[])
+function read_xlsx(input_data_path::String, t_horizon::Vector{DateTime}=DateTime[])
 
     sheetnames_system = ["setup", "nodes", "processes", "groups", "process_topology", "node_history", "node_delay", "node_diffusion", "inflow_blocks", "markets","scenarios","efficiencies", "reserve_type","risk", "cap_ts", "gen_constraint", "constraints", "bid_slots"]
     sheetnames_timeseries = ["cf", "inflow", "market_prices", "reserve_realisation", "reserve_activation_price", "price","eff_ts", "fixed_ts", "balance_prices"]
@@ -32,13 +32,13 @@ function read_xlsx(input_data_path::String, t_horizon::Vector{ZonedDateTime}=Zon
     if !isempty(t_horizon)
         temps = map(ts -> string(ts), t_horizon)
     else
-        temps = map(t-> string(ZonedDateTime(t, tz"UTC")), DataFrame(XLSX.gettable(xl["timeseries"])).t)
+        temps = DateTime.(DataFrame(XLSX.gettable(xl["timeseries"])).t)
     end
 
-    return system_data, timeseries_data, temps
+    return system_data, timeseries_data, OrderedSet(temps)
 end
 
-function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDict, temps::Vector{String}=String[])
+function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDict, temps)
 
     processes = OrderedDict{String, Predicer.Process}()
     nodes = OrderedDict{String, Predicer.Node}()
@@ -55,6 +55,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
     gen_constraints = OrderedDict{String, Predicer.GenConstraint}()
     
     bid_slots = OrderedDict{String, Predicer.BidSlot}()
+    tvec = [temps...]
     
 
     for i in 1:nrow(system_data["scenarios"])
@@ -98,13 +99,13 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                                 timeseries_data["scenarios"][scenario][k] = OrderedDict()
                             end
                             if !(series_direction in keys(timeseries_data["scenarios"][scenario][k]))
-                                timeseries_data["scenarios"][scenario][k][series_direction] = DataFrame(t=temps)
+                                timeseries_data["scenarios"][scenario][k][series_direction] = DataFrame(t=tvec)
                             end
                             sub_df = timeseries_data[k]
                             if isempty(temps)
                                 timeseries_data["scenarios"][scenario][k][series_direction][!, series] = sub_df[!, n]
                             else
-                                timeseries_data["scenarios"][scenario][k][series_direction][!, series] = filter(:t => x -> string(ZonedDateTime(x, tz"UTC")) in temps, sub_df)[!, n]
+                                timeseries_data["scenarios"][scenario][k][series_direction][!, series] = filter(:t => x -> DateTime(x) in temps, sub_df)[!, n]
                             end
                             
                         else
@@ -112,13 +113,13 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                                 timeseries_data["scenarios"][scenario] = OrderedDict()
                             end
                             if !(k in keys(timeseries_data["scenarios"][scenario]))
-                                timeseries_data["scenarios"][scenario][k] = DataFrame(t=temps)
+                                timeseries_data["scenarios"][scenario][k] = DataFrame(t=tvec)
                             end
                             sub_df = timeseries_data[k]
                             if isempty(temps)
                                 timeseries_data["scenarios"][scenario][k][!, series] = sub_df[!, n]
                             else
-                                timeseries_data["scenarios"][scenario][k][!, series] = filter(:t => x -> string(ZonedDateTime(x, tz"UTC")) in temps, sub_df)[!, n]
+                                timeseries_data["scenarios"][scenario][k][!, series] = filter(:t => x -> DateTime(x) in temps, sub_df)[!, n]
                             end
                         end
                     end
@@ -156,7 +157,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
     end
 
     for n in names(system_data["node_diffusion"])
-        timesteps = map(x -> string(ZonedDateTime(x, tz"UTC")), system_data["node_diffusion"].t)
+        timesteps = system_data["node_diffusion"].t
         if n != "t"
             col = split(n, ",")
             node1 = col[1]
@@ -240,7 +241,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
     end
     
     for n in names(system_data["cap_ts"])
-        timesteps = map(x -> string(ZonedDateTime(x, tz"UTC")), system_data["cap_ts"].t)
+        timesteps = system_data["cap_ts"].t
         if n != "t"
             col = split(n,",")
             proc = col[1]
@@ -323,7 +324,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                 for c in cols
                     if length(split(c, ",")) == 3 # this column has the timesteps. 
                         raw_ts = filter(x -> typeof(x) != Missing, system_data["node_history"][!, c])
-                        ts = map(t-> string(ZonedDateTime(t, tz"UTC")), raw_ts)
+                        ts = DateTime.(raw_ts)
                     elseif length(split(c, ",")) == 2 # this columnn has the values. 
                         vals = filter(x -> typeof(x) != Missing, system_data["node_history"][!, c])
                     end
@@ -350,7 +351,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                     for c in cols
                         if length(split(c, ",")) == 3 # this column has the timesteps. 
                             raw_ts = filter(x -> typeof(x) != Missing, system_data["node_history"][!, c])
-                            ts = map(t-> string(ZonedDateTime(t, tz"UTC")), raw_ts)
+                            ts = DateTime.(raw_ts)
                         elseif length(split(c, ",")) == 2 # this columnn has the values. 
                             vals = filter(x -> typeof(x) != Missing, system_data["node_history"][!, c])
                         end
@@ -376,15 +377,14 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
         end
         for b in collect(keys(inflow_blocks))
             t_col = collect(skipmissing(system_data["inflow_blocks"][!,inflow_blocks[b].name*","*inflow_blocks[b].node]))
-            inflow_blocks[b].start_time = string(ZonedDateTime(t_col[1], tz"UTC"))
+            inflow_blocks[b].start_time = DateTime(t_col[1])
             for s in collect(keys(scens))
                 s_col = collect(skipmissing(system_data["inflow_blocks"][!,inflow_blocks[b].name*","*s]))
                 if length(t_col) != length(s_col)
                     msg = "The data columns of the inflow block " * String(b) * " are not the same length!"
                     throw(errorException(msg))
                 end
-                series = TimeSeries(
-                    s, string.(ZonedDateTime.(t_col, tz"UTC")), s_col)
+                series = TimeSeries(s, DateTime.(t_col), s_col)
                 push!(inflow_blocks[b].data,series)
             end
         end
@@ -423,7 +423,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
             data = timeseries_data["fixed_ts"][!,mm.market]
             for i in 1:length(timestamps)
                 if !ismissing(data[i])
-                    tup = (string(ZonedDateTime(timestamps[i], tz"UTC")),data[i])
+                    tup = (DateTime(timestamps[i]),data[i])
                     push!(markets[mm.market].fixed,tup)
                 end
             end
@@ -464,10 +464,10 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
     #---market bid slot----------------------------------
 
     if length(names(system_data["bid_slots"])) > 1
-        system_data["bid_slots"].t = string.(ZonedDateTime.(system_data["bid_slots"].t, tz"UTC"))
+        time_steps = system_data["bid_slots"].t = DateTime.(
+            system_data["bid_slots"].t)
         ns = names(system_data["bid_slots"])[2:end]
         market_names = unique(map(n -> map(x -> strip(x), split(n, ","))[1], ns))
-        time_steps = system_data["bid_slots"].t
 
         for m in market_names
             price_dict = OrderedDict()
@@ -483,7 +483,9 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
             for (i,t) in enumerate(time_steps)
                 bid_vec = collect(system_data["bid_slots"][i,filter(x->split(x,",")[1]==m,ns)])
                 for s in keys(scens)
-                    alloc_dict[s,t] = (slot_names[searchsorted(bid_vec,prices(s,t)).stop],slot_names[searchsorted(bid_vec,prices(s,t)).start])
+                    alloc_dict[s,t] = (
+                        slot_names[searchsorted(bid_vec,prices(s,t)).stop],
+                        slot_names[searchsorted(bid_vec,prices(s,t)).start])
                 end
             end
 
@@ -505,7 +507,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
 
     con_vecs = OrderedDict()
     for n in names(system_data["gen_constraint"])
-        timesteps = map(t-> string(ZonedDateTime(t, tz"UTC")), system_data["gen_constraint"].t)
+        timesteps = system_data["gen_constraint"].t
         if n != "t"
             col = map(substr -> strip(substr), split(n,","))
             constr = col[1]

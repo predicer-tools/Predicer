@@ -1,13 +1,12 @@
 using JuMP
 using HiGHS
 using DataFrames
-using TimeZones
 using Dates
 using DataStructures
 using XLSX
 
 
-function get_data(fpath::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[])
+function get_data(fpath::String, t_horizon::Vector{DateTime}=DateTime[])
     return import_input_data(fpath, t_horizon)
 end
 
@@ -83,7 +82,7 @@ function generate_model(model :: Model, input_data :: InputData)
     return model_contents
 end
 
-function generate_model(fpath::String, t_horizon::Vector{ZonedDateTime}=ZonedDateTime[])
+function generate_model(fpath::String, t_horizon::Vector{DateTime}=DateTime[])
     # get input_data
     input_data = Predicer.get_data(fpath, t_horizon) |> tweak_input!
     return generate_model(Predicer.setup_optimizer(), input_data), input_data

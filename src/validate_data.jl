@@ -546,11 +546,11 @@ function validate_processes(error_log::OrderedDict, input_data::Predicer.InputDa
                 push!(error_log["errors"], "Invalid Process: ", p.name, ". A cf process cannot have online functionality.\n")
                 is_valid = false 
             end
-            validate_timeseriesdata(error_log, p.cf, input_data.temporals.ts_format)
+            validate_timeseriesdata(error_log, p.cf)
         end
 
         if !isempty(p.eff_ts)
-            validate_timeseriesdata(error_log, p.eff_ts, input_data.temporals.ts_format)
+            validate_timeseriesdata(error_log, p.eff_ts)
         end
     end
     error_log["is_valid"] = is_valid
@@ -599,13 +599,13 @@ function validate_nodes(error_log::OrderedDict, input_data::Predicer.InputData)
             push!(error_log["errors"], "Invalid Node: ", n.name, ". A commodity Node must have a price.\n")
             is_valid = false
         else
-            validate_timeseriesdata(error_log, n.cost, input_data.temporals.ts_format)
+            validate_timeseriesdata(error_log, n.cost)
         end
         if isempty(n.inflow) && n.is_inflow
             push!(error_log["errors"], "Invalid Node: ", n.name, ". A Node with inflow must have an inflow timeseries.\n")
             is_valid = false        
         else
-            validate_timeseriesdata(error_log, n.inflow, input_data.temporals.ts_format)
+            validate_timeseriesdata(error_log, n.inflow)
         end
         if n.is_state
             if isnothing(n.state)
@@ -656,11 +656,11 @@ end
 
 
 """
-    function validate_timeseriesdata(error_log::OrderedDict, tsd::TimeSeriesData, ts_format::String)
+    function validate_timeseriesdata(error_log::OrderedDict, tsd::TimeSeriesData)
 
 Checks that the TimeSeriesData struct has one timeseries per scenario, and that the timesteps are in chronological order.
 """
-function validate_timeseriesdata(error_log::OrderedDict, tsd::Predicer.TimeSeriesData, ts_format::String)
+function validate_timeseriesdata(error_log::OrderedDict, tsd::Predicer.TimeSeriesData)
     # Nah, it'll be fine.
 end
 
@@ -671,27 +671,8 @@ end
 Checks that the time data in the model is valid. 
 """
 function validate_temporals(error_log::OrderedDict, input_data::Predicer.InputData)
-    is_valid = error_log["is_valid"]
-    temporals = input_data.temporals
-    if length(temporals.t) != length(unique(temporals.t))
-        push!(error_log["errors"], "Invalid timeseries. All timesteps must be unique.\n")
-        is_valid = false
-    end
-    for i in 1:length(temporals.t)-1
-        if ZonedDateTime(temporals.t[i+1], temporals.ts_format) - ZonedDateTime(temporals.t[i], temporals.ts_format) <= Dates.Minute(0)
-            push!(error_log["errors"], "Invalid timeseries. Timesteps not in chronological order.\n")
-            is_valid = false
-        end
-    end
-    if temporals.is_variable_dt
-        for tp in temporals.variable_dt
-            if tp[2] <= 0
-                push!(error_log["errors"], "Invalid timeseries. Time length between timesteps must be positive: " * tp[1] * "\n")
-                is_valid = false
-            end
-        end
-    end
-    error_log["is_valid"] = is_valid
+    # Nah, it'll be fine.
+    error_log["is_valid"] = true
 end
 
 

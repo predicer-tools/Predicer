@@ -1,6 +1,6 @@
 using DocStringExtensions
 using DataStructures
-using TimeZones
+using Dates
 
 
 """
@@ -38,67 +38,45 @@ Struct used for storing information about the timesteps in the model.
 $(TYPEDFIELDS)
 """
 struct Temporals
-    """Timestamp strings as given to the constructor"""
+    """Timestamps as strings, for use in JuMP indices"""
     t::Vector{String}
-    """Parsed timestamps in UTC, ordered like `t`"""
+    """Mapping from timestamp strings to DateTime, in the order of `t`"""
     times::OrderedDict{String, DateTime}
     """Timestep length in hours if uniform"""
     dtf::Float64
     """Whether timesteps vary in length"""
     is_variable_dt::Bool
     """Time step lengths in hours if variable."""
-    variable_dt::OrderedDict{String, Float64}
-    """Format string for parsing timestamps"""
-    ts_format::String
+    variable_dt::OrderedDict{DateTime, Float64}
 
     @doc """$(TYPEDSIGNATURES)"""
-    function Temporals(ts::Vector{String}, ts_format="yyyy-mm-ddTHH:MM:SSzzzz")
+    function Temporals(ts::Vector{DateTime})
         #dts = []
-        times = DateTime.(ZonedDateTime.(ts, ts_format), UTC)
-        tdict = OrderedDict(ts .=> times)
-        dts = diff(times) ./ Dates.Hour(1)
+        dts = diff(ts) ./ Dates.Hour(1)
         @assert all(dts .> 0)
+        sts = string.(ts)
+        t = OrderedDict(sts .=> ts)
         if all(dts[1] .== dts[2 : end])
-            return new(ts, tdict, dts[1], false,
-                       OrderedDict{String, Float64}(), ts_format)
+            return new(sts, t, dts[1], false, OrderedDict())
         else
-            dtsd = OrderedDict{String, Float64}(
-                ts[i] => dt for (i, dt) in enumerate(dts))
             #XXX The end of the modeling period is not given; we assume the
             # last time step is as long as its predecessor.
-            dtsd[ts[end]] = dts[end]
-            return new(ts, tdict, 0, true, dtsd, ts_format)
+            push!(dts, dts[end])
+            return new(sts, t, 0, true, OrderedDict(ts .=> dts))
         end
     end
 end
 
+#TODO This is just weird.  Replace with a properly named function.
 """
-    function (t::Temporals)(ts::ZonedDateTime)
+$(TYPEDSIGNATURES)
 
 Returns the length of the timesteps between t and t+1 compared to one hour.
 """
-function (t::Temporals)(ts::ZonedDateTime)
-    if t.is_variable_dt
-        return filter(x -> x[1] == string(ts), t.variable_dt)[1][2]
-    else
-        return t.dtf
-    end
-end
+(tem::Temporals)(t::DateTime) =
+    tem.is_variable_dt ? tem.variable_dt[t] : tem.dtf
 
-
-"""
-    function (t::Temporals)(ts::String).
-
-Returns the length of the timesteps between t and t+1 compared to one hour.
-"""
-function (t::Temporals)(ts::String)
-    if t.is_variable_dt
-        return t.variable_dt[ts]
-    else
-        return t.dtf
-    end
-end
-
+(tem::Temporals)(t::String) = tem(tem.times[t])
 
 """
     mutable struct State
@@ -152,14 +130,13 @@ end
 """
 $(TYPEDEF)
 
-A struct for time series.  Includes a scenario name.  The representation
-of time may change at some point.
+A struct for time series.  Includes a scenario name.
 
 $(TYPEDFIELDS)
 """
 struct TimeSeries
     scenario::AbstractString
-    series::SortedDict{AbstractString, Number}
+    series::SortedDict{DateTime, Number}
 end
 
 TimeSeries(scenario, keys, values) = TimeSeries(
@@ -194,24 +171,18 @@ function Base.:getindex(ts::TimeSeries, i::UnitRange{Int64})
     return getindex(ts.series, i)
 end
 
-
 """
-    function (ts::TimeSeries)(t::ZonedDateTime)
-
-Returns the value of the TimeSeries at the given timestep. If the exact timestep is not defined, retrieve the value corresponding to the closest previous timestep, or alternatively the first timestep. 
-"""
-(ts::TimeSeries)(t::ZonedDateTime) = ts(string(t))
-
-"""
-    function (ts::TimeSeries)(t::String)
+$(TYPEDSIGNATURES)
 
 Returns the value of the TimeSeries at the given timestep. If the exact timestep is not defined, retrieve the value corresponding to the closest previous timestep, or alternatively the first timestep. 
 """
-function (ts::TimeSeries)(t::AbstractString)
+function (ts::TimeSeries)(t::DateTime)
     st = searchsortedlast(ts.series, t)
     return ts.series[(st == beforestartsemitoken(ts.series)
                       ? startof(ts.series) : st)]
 end
+
+(ts::TimeSeries)(t::String) = ts(DateTime(t))
 
 """
     function Base.:values(ts::TimeSeries)
@@ -289,31 +260,20 @@ function Base.:values(tsd::TimeSeriesData)
 end
 
 """
-    function (tsd::TimeSeriesData)(s::String, t::String)
+$(TYPEDSIGNATURES)
 
 Returns the value of the TimeSeries for scenario s and timestep t.
 """
-function (tsd::TimeSeriesData)(s::AbstractString, t::AbstractString)
+function (tsd::TimeSeriesData)(s::AbstractString, t)
     return tsd(s)(t)
 end
-
-
-"""
-    function (tsd::TimeSeriesData)(s::String, t::TimeZones.ZonedDateTime)
-
-Returns the value of the TimeSeries for scenario s and timestep t.
-"""
-function (tsd::TimeSeriesData)(s::AbstractString, t::TimeZones.ZonedDateTime)
-    return tsd(s)(t)
-end
-
 
 """
     function (tsd::TimeSeriesData)(s::String)
 
 Returns the TimeSeries for scenario s.
 """
-function (tsd::TimeSeriesData)(s::String)
+function (tsd::TimeSeriesData)(s::AbstractString)
     @assert length(tsd.ts_data) == length(tsd.index)
     return tsd.ts_data[tsd.index[s]]
 end
@@ -969,7 +929,7 @@ struct Market
     up_price::TimeSeriesData
     down_price::TimeSeriesData
     reserve_activation_price::TimeSeriesData
-    fixed::Vector{Tuple{AbstractString, Number}}
+    fixed::Vector{Tuple{DateTime, Number}}
     function Market(name, m_type, node, pgroup, direction, reserve_type, is_bid, is_limited, min_bid, max_bid, fee)
         return new(name, m_type, node, pgroup, direction, TimeSeriesData(), reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
     end
@@ -978,10 +938,15 @@ end
 
 struct BidSlot
     market::String
-    time_steps::Vector{String}
+    """Time slots (defined by the market)"""
+    time_steps::Vector{DateTime}
+    """Price slots"""
     slots::Vector{String}
-    prices::OrderedDict{Tuple{String,String}, Float64}
-    market_price_allocation::OrderedDict{Tuple{String,String}, Tuple{String,String}}
+    """Price points by time slot and price slot name"""
+    prices::OrderedDict{Tuple{DateTime,String}, Float64}
+    """Precomputed price matches by scenario and time slot.  Values are
+    price slot names of the end points of the matching segment."""
+    market_price_allocation::OrderedDict{Tuple{String,DateTime}, Tuple{String,String}}
     function BidSlot(name,time_steps,slots,prices,market_price_allocation)
         return new(name,time_steps,slots,prices,market_price_allocation)
     end
@@ -1095,10 +1060,10 @@ end
 mutable struct InflowBlock
     name::String
     node::String
-    start_time::AbstractString
+    start_time::DateTime
     data::TimeSeriesData
     function InflowBlock(name::String, node::String)
-        return new(name, node, "", TimeSeriesData())
+        return new(name, node, DateTime(0), TimeSeriesData())
     end
 end
 
