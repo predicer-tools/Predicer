@@ -154,7 +154,10 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
             s = tup[2]
             t = tup[3]
             for b_tup in filter(x -> x[2] == n && x[3] == s && x[4] == t, block_tups) # get tuples with blocks
-                v_tup = (b_tup[1], b_tup[2], validate_tuple(model_contents,(b_tup[3],input_data.inflow_blocks[b_tup[1]].start_time),1)[1])
+                v_tup = (b_tup[1], b_tup[2], validate_tuple(
+                    model_contents,
+                    (b_tup[3],string(input_data.inflow_blocks[b_tup[1]].start_time))
+                    ,1)[1])
                 add_to_expression!(e_node_bal_eq_inflow_block_expr[(n, s, t)], v_block[v_tup])
             end
             if input_data.nodes[tup[1]].is_state
@@ -234,12 +237,15 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
     end
 
     # setup node history expression
-    for n in collect(keys(input_data.node_histories))
+    for n in keys(input_data.node_histories)
         hist = input_data.node_histories[n].steps
         for s in keys(input_data.scenarios)
-            for ts in hist(s).series
-                add_to_expression!(e_node_bal_eq_history[(n, s, ts[1])], ts[2])
-                add_to_expression!(e_constraint_node_bal_eq[(n, s, ts[1])], e_node_bal_eq_history[(n, s, ts[1])])
+            for (t, y) in hist(s).series
+                ts = string(t)
+                add_to_expression!(e_node_bal_eq_history[(n, s, ts)], y)
+                add_to_expression!(
+                    e_constraint_node_bal_eq[(n, s, ts)],
+                    e_node_bal_eq_history[(n, s, ts)])
             end
         end
     end
@@ -317,10 +323,7 @@ function setup_process_online_balance(model_contents::OrderedDict, input_data::P
             max_offline_lhs = OrderedDict()
 
 
-            ts_as_zdt = OrderedDict()
-            for x in temporals.t
-                ts_as_zdt[x] = ZonedDateTime(x, temporals.ts_format)
-            end
+            ts_as_zdt = temporals.times
 
             for p in unique(map(x -> x[1], proc_online_tuple))
                 min_online = processes[p].min_online * Dates.Minute(60)
@@ -1257,21 +1260,22 @@ function setup_bidding_curve_constraints(
     v_flow_bal = model[:v_flow_bal]
 
     function compute_v_bid(m, s, t)
+        ts = string(t)
         v = AffExpr(0.0)
         if markets[m].m_type == "energy"
             add_to_expression!(
                 v, v_flow[Predicer.validate_tuple(
-                    val_dict, common_ts, (proc_tup_in[m]..., s, t), 4)])
+                    val_dict, common_ts, (proc_tup_in[m]..., s, ts), 4)])
             add_to_expression!(
                 v, v_flow_bal[Predicer.validate_tuple(
-                    val_dict, common_ts, (m, "up", s, t), 3)])
+                    val_dict, common_ts, (m, "up", s, ts), 3)])
             add_to_expression!(
                 v, v_flow[Predicer.validate_tuple(
-                    val_dict, common_ts, (proc_tup_out[m]..., s, t), 4)],
+                    val_dict, common_ts, (proc_tup_out[m]..., s, ts), 4)],
                 -1.0)
             add_to_expression!(
                 v, v_flow_bal[Predicer.validate_tuple(
-                    val_dict, common_ts, (m, "dw", s, t), 3)],
+                    val_dict, common_ts, (m, "dw", s, ts), 3)],
                 -1.0)
         else
             add_to_expression!(v, v_res_final[tup], 1.0)
@@ -1289,13 +1293,13 @@ function setup_bidding_curve_constraints(
         ps = markets[m].price(s, t)
         expr = AffExpr(0.0)
         bid_vol(bn) = (sddp ? v_bid_vol[m, bn, ti].in
-                            : v_bid_vol[(m, bn, t)]) 
+                            : v_bid_vol[(m, bn, string(t))]) 
         add_to_expression!(expr, bid_vol(bn0), (p1-ps)/(p1-p0))
         add_to_expression!(expr, bid_vol(bn1), (ps-p0)/(p1-p0))
         return expr
     end
     scens = scenarios(input_data)
-    times = input_data.temporals.t
+    times = values(input_data.temporals.times)
     @expressions model begin
         v_bid[m = keys(bid_slots), s = scens, t = times],
             compute_v_bid(m, s, t)
@@ -1305,7 +1309,7 @@ function setup_bidding_curve_constraints(
             interpolate_bid(m, s, ti)
     end
     #TODO This will be relaxed later, at least for SDDP.
-    @assert all(bs.time_steps[1] ≤ times[1] for bs in values(bid_slots))
+    @assert all(bs.time_steps[1] ≤ first(times) for bs in values(bid_slots))
     @constraint(model, bid_slot_eq[
             m = keys(bid_slots), s = scens, t = times],
         v_bid[m, s, t] == e_bid_slot[m, s, time_slot_of(bid_slots[m], t)])
@@ -1328,7 +1332,7 @@ function setup_bidding_volume_constraints(
     tups = ((m, bs.slots[i - 1], bs.slots[i], t)
             for (m, bs) in input_data.bid_slots
             for i in 2 : length(bs.slots)
-            for t in (sddp ? (1 : length(bs.time_steps)) : bs.time_steps))
+            for t in (sddp ? (1 : length(bs.time_steps)) : string.(bs.time_steps)))
     v_bid_vol = model[:v_bid_volume]
     bid_vol = sddp ? tup -> v_bid_vol[tup].out : tup -> v_bid_vol[tup]
     @constraint(model, bid_vol[(m, s0, s1, t) = tups],
@@ -1405,19 +1409,19 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
         markets[m].is_bid || continue
         slots = get(input_data.bid_slots, m, nothing)
         slot_times = Set(isnothing(slots) ? [] : slots.time_steps)
-        for (i,t) in enumerate(temporals.t)
+        for (i,(ts, t)) in enumerate(temporals.times)
             t in slot_times && continue
             if markets[m].m_type == "energy"
                 #XXX Is this ever different from m?
                 mn = markets[m].name
                 for (sns, eq) in scen_pairs(price_matr[m][i,:])
-                    vars = [v_bid[(mn, s, t)] for s in sns]
-                    cons[m, t, sns...] = (vars[2] - vars[1], eq)
+                    vars = [v_bid[(mn, s, ts)] for s in sns]
+                    cons[m, ts, sns...] = (vars[2] - vars[1], eq)
                 end
             elseif markets[m].m_type == "reserve" && input_data.setup.contains_reserves
                 for (sns, eq) in scen_pairs(price_matr[m][i,:])
-                    vars = [v_res_final[validate_tuple(val_dict, common_ts, (m, s, t), 2)] for s in sns]
-                    cons[m, t, sns...] = (vars[2] - vars[1], eq)
+                    vars = [v_res_final[validate_tuple(val_dict, common_ts, (m, s, ts), 2)] for s in sns]
+                    cons[m, ts, sns...] = (vars[2] - vars[1], eq)
                 end
             end
         end
@@ -1493,7 +1497,14 @@ function setup_inflow_blocks(model_contents::OrderedDict, input_data::Predicer.I
             if !isempty(b_tups)
                 node_block_expr[(n, s, t)] = AffExpr(0.0)
                 for b_tup in b_tups
-                    add_to_expression!(node_block_expr[(n, s, t)], v_block[(b_tup[1], n, validate_tuple(model_contents,(s,input_data.inflow_blocks[b_tup[1]].start_time),1)[1])])
+                    add_to_expression!(
+                        node_block_expr[(n, s, t)],
+                        v_block[(b_tup[1], n, validate_tuple(
+                            model_contents,
+                            (s, string(
+                                input_data.inflow_blocks[
+                                    b_tup[1]].start_time)),
+                            1)[1])])
                 end
             end
         end
@@ -1518,7 +1529,7 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
     process_tuple = process_topology_tuples(input_data)
     online_tuple = online_process_tuples(input_data)
     state_tuple = state_node_tuples(input_data)
-    setpoint_tups = setpoint_tuples(input_data)
+    setpoints = [k for (k, c) in input_data.gen_constraints if c.is_setpoint]
     v_flow = model.obj_dict[:v_flow]
     if input_data.setup.contains_online
         v_online = model.obj_dict[:v_online]    
@@ -1548,7 +1559,8 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
         # Get timesteps for where there is data defined. (Assuming all scenarios are equal)
         gen_const_ts = keys(gen_constraints[c].factors[1].data(scenarios(input_data)[1]).series)
         # Get timesteps which are found in both temporals and gen constraints 
-        relevant_ts = filter(t -> t in gen_const_ts, temporals.t)
+        relevant_times = filter(p -> p.second in gen_const_ts, temporals.times)
+        relevant_ts = values(relevant_times)
         facs = gen_constraints[c].factors
         consta = gen_constraints[c].constant
         eq_dir = gen_constraints[c].gc_type
@@ -1568,8 +1580,8 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
                     else
                         tup = filter(x -> x[1] == p_flow[1] && (x[2] == p_flow[1] || x[3] == p_flow[2]), reduced_process_tuple)[1]
                     end
-                    for s in scenarios(input_data), t in relevant_ts
-                        p_tup_with_s_and_t = (tup[1], tup[2], tup[3], s, t)
+                    for s in scenarios(input_data), (ts, t) in relevant_times
+                        p_tup_with_s_and_t = (tup[1], tup[2], tup[3], s, ts)
                         fac_data = f.data(s, t)
                         add_to_expression!(
                             const_expr[c][(s,t)], fac_data,
@@ -1583,8 +1595,8 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
                         msg = "Factor " * string((p, f.var_tuple)) * " of gen_constraint " * string(c) * " has no online functionality!" 
                         throw(ErrorException(msg))
                     end
-                    for s in scenarios(input_data), t in relevant_ts
-                        online_tup_with_s_and_t = (p, s, t)
+                    for s in scenarios(input_data), (ts, t) in relevant_times
+                        online_tup_with_s_and_t = (p, s, ts)
                         fac_data = f.data(s, t)
                         add_to_expression!(
                             const_expr[c][(s,t)], fac_data,
@@ -1598,15 +1610,15 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
                         msg = "Factor " * string((n, f.var_tuple)) * " of gen_constraint " * string(c) * " has no state functionality!" 
                         throw(ErrorException(msg))
                     end
-                    for s in scenarios(input_data), t in relevant_ts
-                        n_tup_with_s_and_t = (n, s, t)
+                    for s in scenarios(input_data), (ts, t) in relevant_times
+                        n_tup_with_s_and_t = (n, s, ts)
                         fac_data = f.data(s, t)
                         add_to_expression!(const_expr[c][(s,t)],fac_data,v_state[validate_tuple(val_dict, common_ts, n_tup_with_s_and_t, 2)])
                     end       
                 end
             end
         else
-            for s in scenarios(input_data), t in relevant_ts
+            for s in scenarios(input_data), (ts, t) in relevant_times
                 if !haskey(setpoint_expr_lhs, (c, s, t))
                 #if !((c, s, t) in collect(keys(setpoint_expr_lhs)))
                     setpoint_expr_lhs[(c, s, t)] = AffExpr(0.0)
@@ -1619,12 +1631,12 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
                     if f.var_type == "state"
                         n = string(f.var_tuple[1])
                         d_max = input_data.nodes[n].state.state_max
-                        add_to_expression!(setpoint_expr_lhs[(c, s, t)], v_state[validate_tuple(val_dict, common_ts, (n, s, t), 2)])
+                        add_to_expression!(setpoint_expr_lhs[(c, s, t)], v_state[validate_tuple(val_dict, common_ts, (n, s, ts), 2)])
                     elseif f.var_type == "flow"
                         p = f.var_tuple[1]
                         topo = filter(x -> x.source == f.var_tuple[2] || x.sink == f.var_tuple[2], input_data.processes[p].topos)[1]
                         d_max = topo.capacity
-                        flow_tup = (p, topo.source, topo.sink, s, t)
+                        flow_tup = (p, topo.source, topo.sink, s, ts)
                         add_to_expression!(setpoint_expr_lhs[(c, s, t)], v_flow[validate_tuple(val_dict, common_ts, flow_tup, 4)])
                     else
                         msg = "Setpoint constraints cannot be used with variables of the type " * f.var_type * "!" 
@@ -1641,13 +1653,13 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
                         d_upper = d_setpoint / d_max
                         d_lower = 0.0
                     end
-                    JuMP.set_upper_bound(v_set_up[validate_tuple(val_dict, common_ts, (c, s, t), 2)], (1.0 - d_upper) * d_max)
-                    JuMP.set_upper_bound(v_set_down[validate_tuple(val_dict, common_ts, (c, s, t), 2)], d_lower * d_max)
-                    JuMP.set_upper_bound(v_setpoint[validate_tuple(val_dict, common_ts, (c, s, t), 2)], (d_upper - d_lower) * d_max)
+                    JuMP.set_upper_bound(v_set_up[validate_tuple(val_dict, common_ts, (c, s, ts), 2)], (1.0 - d_upper) * d_max)
+                    JuMP.set_upper_bound(v_set_down[validate_tuple(val_dict, common_ts, (c, s, ts), 2)], d_lower * d_max)
+                    JuMP.set_upper_bound(v_setpoint[validate_tuple(val_dict, common_ts, (c, s, ts), 2)], (d_upper - d_lower) * d_max)
                     add_to_expression!(setpoint_expr_rhs[(c, s, t)], d_lower * d_max)                    
-                    add_to_expression!(setpoint_expr_rhs[(c, s, t)], v_setpoint[validate_tuple(val_dict, common_ts, (c, s, t), 2)])                    
-                    add_to_expression!(setpoint_expr_rhs[(c, s, t)], v_set_up[validate_tuple(val_dict, common_ts, (c, s, t), 2)])                    
-                    add_to_expression!(setpoint_expr_rhs[(c, s, t)], v_set_down[validate_tuple(val_dict, common_ts, (c, s, t), 2)], -1)                    
+                    add_to_expression!(setpoint_expr_rhs[(c, s, t)], v_setpoint[validate_tuple(val_dict, common_ts, (c, s, ts), 2)])                    
+                    add_to_expression!(setpoint_expr_rhs[(c, s, t)], v_set_up[validate_tuple(val_dict, common_ts, (c, s, ts), 2)])                    
+                    add_to_expression!(setpoint_expr_rhs[(c, s, t)], v_set_down[validate_tuple(val_dict, common_ts, (c, s, ts), 2)], -1)                    
                 end
             end
         end
@@ -1657,8 +1669,11 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
                         t = const_ts[c]],
                 const_expr[c][(s, t)] in const_set[c])
     model_contents["gen_constraint"] = gen_con
-    @constraint(model, setpoint_eq[tup in setpoint_tups],
-                setpoint_expr_lhs[tup] == setpoint_expr_rhs[tup])
+    tup_it(tup) = (tup[1], tup[2], temporals.times[tup[3]])
+    @constraint(
+        model, setpoint_eq[c = setpoints, s = scenarios(input_data),
+                           t = values(temporals.times)],
+        setpoint_expr_lhs[c, s, t] == setpoint_expr_rhs[c, s, t])
 end
 
 

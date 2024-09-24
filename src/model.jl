@@ -1,7 +1,6 @@
 using JuMP
 using Cbc
 using DataFrames
-using TimeZones
 using Dates
 using DataStructures
 using XLSX
@@ -380,7 +379,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
         end
         for block in blocks
             colname = block[1] * "_" * block[2] * "_" * block[3]
-            b_tup = (block..., input_data.inflow_blocks[block[1]].start_time)
+            b_tup = (block..., string(input_data.inflow_blocks[block[1]].start_time))
             df[!, colname] = [JuMP.value.(v_block[validate_tuple(model_contents, b_tup, 3)[begin:3]])]
         end
     elseif e_type == "v_setpoint" || e_type == "v_set_up" || e_type == "v_set_down"
