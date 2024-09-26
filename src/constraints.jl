@@ -28,7 +28,7 @@ function create_constraints(
     setup_fixed_values(model_contents, input_data)
     setup_generic_constraints(model_contents, input_data)
     setup_cost_calculations(model_contents, input_data)
-    if !haskey(model_contents, "sddp_shape")
+    if !haskey(model_contents, "sddp")
         setup_cvar_element(model_contents, input_data)
         setup_objective_function(model_contents, input_data)
     end
@@ -1250,7 +1250,7 @@ equating the two.  m runs over markets having bid slots.
 function setup_bidding_curve_constraints(
         model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
-    sddp = haskey(model_contents, "sddp_shape")
+    sddp = haskey(model_contents, "sddp")
     val_dict = model_contents["validation_dict"]
     common_ts = model_contents["common_timesteps"]
     markets = input_data.markets
@@ -1328,7 +1328,7 @@ Constrain bid curves to increase for bid slots.  Creates a constraint named
 function setup_bidding_volume_constraints(
         model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
-    sddp = haskey(model_contents, "sddp_shape")
+    sddp = haskey(model_contents, "sddp")
     tups = ((m, bs.slots[i - 1], bs.slots[i], t)
             for (m, bs) in input_data.bid_slots
             for i in 2 : length(bs.slots)

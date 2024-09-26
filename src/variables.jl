@@ -26,7 +26,7 @@ function create_variables(
     create_v_setpoint(model_contents, input_data)
     create_v_block(model_contents, input_data)
     create_v_node_delay(model_contents, input_data)
-    if !haskey(model_contents, "sddp_shape")
+    if !haskey(model_contents, "sddp")
         create_v_risk(model_contents, input_data)
         create_v_bid_volume(model_contents,input_data)
     end
