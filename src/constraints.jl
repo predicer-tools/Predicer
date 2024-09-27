@@ -1669,7 +1669,6 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
                         t = const_ts[c]],
                 const_expr[c][(s, t)] in const_set[c])
     model_contents["gen_constraint"] = gen_con
-    tup_it(tup) = (tup[1], tup[2], temporals.times[tup[3]])
     @constraint(
         model, setpoint_eq[c = setpoints, s = scenarios(input_data),
                            t = values(temporals.times)],
