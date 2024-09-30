@@ -1328,13 +1328,39 @@ Constrain bid curves to increase for bid slots.  Creates a constraint named
 function setup_bidding_volume_constraints(
         model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
-    sddp = haskey(model_contents, "sddp")
-    tups = ((m, bs.slots[i - 1], bs.slots[i], t)
-            for (m, bs) in input_data.bid_slots
-            for i in 2 : length(bs.slots)
-            for t in (sddp ? (1 : length(bs.time_steps)) : string.(bs.time_steps)))
     v_bid_vol = model[:v_bid_volume]
-    bid_vol = sddp ? tup -> v_bid_vol[tup].out : tup -> v_bid_vol[tup]
+    if haskey(model_contents, "sddp")
+        sddp = model_contents["sddp"]
+        bid_slots = OrderedDict()
+        zero_slots = Dict()
+        carry_slots = OrderedDict()
+        for kv in input_data.bid_slots
+            m = kv.first
+            if shall_bid(m, sddp)
+                push!(bid_slots, kv)
+            elseif shall_clear(m, sddp)
+                push!(zero_slots, kv)
+            else
+                push!(carry_slots, kv)
+            end
+        end
+        times = bs -> 1 : length(bs.time_steps)
+        bid_vol = tup -> v_bid_vol[tup].out
+        fix.(bid_vol.([(m, s, t) for (m, bs) in zero_slots
+                                 for s in bs.slots for t in times(bs)]),
+             0)
+        ctups = ((m, s, t) for (m, bs) in carry_slots
+                           for s in bs.slots for t in times(bs))
+        @constraint(model, carry_bid[tup = ctups],
+                    v_bid_vol[tup].out == v_bid_vol[tup].in)
+    else
+        bid_slots = input_data.bid_slots
+        times = bs -> string.(bs.time_steps)
+        bid_vol = tup -> v_bid_vol[tup]
+    end
+    tups = ((m, bs.slots[i - 1], bs.slots[i], t)
+            for (m, bs) in bid_slots
+            for i in 2 : length(bs.slots) for t in times(bs))
     @constraint(model, bid_vol[(m, s0, s1, t) = tups],
                 bid_vol((m, s1, t)) ≥ bid_vol((m, s0, t)))
 end

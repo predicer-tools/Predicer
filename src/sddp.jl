@@ -23,7 +23,7 @@ struct BidShape
     overlap::Integer
     """Names of bid curve points"""
     slots::Vector{String}
-    """Lower bound for bid volumes.  Non-positive, possibly -Inf."""
+    """Lower bound for bid volumes.  Non-positive, typically 0 or -Inf."""
     lower_bound::Float64
 end
 """
@@ -135,6 +135,9 @@ mutable struct StageParam
     stage::Int
 end
 
+shall_bid(m::String, sp::StageParam) = sp.stage in sp.staging.markets[m].bid
+shall_clear(m::String, sp::StageParam) =
+    sp.stage in sp.staging.markets[m].clear
 
 """
 $(TYPEDSIGNATURES)
