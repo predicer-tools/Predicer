@@ -1319,7 +1319,10 @@ end
 $(TYPEDSIGNATURES)
 
 Constrain bid curves to increase for bid slots.  Creates a constraint named
-`bid_vol`.
+`bid_vol`.  For SDDP, do different things depending on staging:
+- In a bidding stage, constrain outgoing bid curves to increase.
+- In a non-bidding clearing stage, fix outgoing bid curves to zero.
+- If neither bidding nor clearing, set outgoing bid curves to incoming.
 
 # Arguments
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
@@ -1348,7 +1351,7 @@ function setup_bidding_volume_constraints(
         bid_vol = tup -> v_bid_vol[tup].out
         fix.(bid_vol.([(m, s, t) for (m, bs) in zero_slots
                                  for s in bs.slots for t in times(bs)]),
-             0)
+             0; force=true)
         ctups = ((m, s, t) for (m, bs) in carry_slots
                            for s in bs.slots for t in times(bs))
         @constraint(model, carry_bid[tup = ctups],
