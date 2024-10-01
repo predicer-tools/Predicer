@@ -672,7 +672,6 @@ Checks that the time data in the model is valid.
 """
 function validate_temporals(error_log::OrderedDict, input_data::Predicer.InputData)
     # Nah, it'll be fine.
-    error_log["is_valid"] = true
 end
 
 

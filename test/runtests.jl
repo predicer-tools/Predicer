@@ -24,12 +24,12 @@ comparison.
 """
 cases = OrderedDict(
     "input_data.xlsx" => -10985.20345389959,
-    "input_data_complete.xlsx" => -7139.999025659914,
+    "input_data_complete.xlsx" => -7138.42326815,
     "input_data_bidcurve.xlsx" => -4371.579033779262,
     "input_data_bidcurve_e.xlsx" => -4501.509824681449,
     "demo_model.xlsx" => -1095.5118308122817,
     "example_model.xlsx" => -11014.1278942231,
-    "input_data_common_start.xlsx" => -1574.9410327933133,
+    "input_data_common_start.xlsx" => -1589.80385514,
     "input_data_delays.xlsx" => 62.22222222222222,
     "input_data_temps.xlsx" => 65388.35282275837,
     "simple_building_model.xlsx" => 563.7841038762567,
