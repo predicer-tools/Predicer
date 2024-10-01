@@ -153,7 +153,7 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
                     model_contents,
                     (b_tup[3],string(input_data.inflow_blocks[b_tup[1]].start_time))
                     ,1)[1])
-                add_to_expression!(e_node_bal_eq_inflow_block_expr[(n, s, t)], v_block[v_tup])
+                add_to_expression!(e_node_bal_eq_inflow_block_expr[(n, s, t)], v_block[v_tup], input_data.inflow_blocks[b_tup[1]].data(s, t))
             end
             if input_data.nodes[tup[1]].is_state
                 if input_data.nodes[tup[1]].state.is_temp
@@ -162,9 +162,6 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
             end
             add_to_expression!(e_constraint_node_bal_eq[(n, s, t)],  e_node_bal_eq_inflow_block_expr[(n, s, t)])
         end
-    end
-    for tup in constraint_indices
-        add_to_expression!(e_constraint_node_bal_eq[tup], e_node_bal_eq_inflow_block_expr[tup])
     end
 
     #setup diffusion expression
