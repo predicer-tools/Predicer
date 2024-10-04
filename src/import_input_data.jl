@@ -59,7 +59,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
     gen_constraints = OrderedDict{String, Predicer.GenConstraint}()
     
     bid_slots = OrderedDict{String, Predicer.BidSlot}()
-    tvec = [temps...]
+    tvec = collect(temps)
     
 
     for i in 1:nrow(system_data["scenarios"])
