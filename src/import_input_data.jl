@@ -18,8 +18,18 @@ function read_xlsx(input_data_path::String, t_horizon::Vector{DateTime}=DateTime
     system_data = OrderedDict()
     timeseries_data = OrderedDict()
     timeseries_data["scenarios"] = OrderedDict()
-
     xl = XLSX.readxlsx(input_data_path)
+
+    if !isempty(t_horizon)
+        temps = map(ts -> string(ts), t_horizon)
+    else
+        temps = DateTime.(DataFrame(XLSX.gettable(xl["timeseries"])).t)
+    end
+
+    orderedtemps = OrderedSet(temps)
+    if length(temps) != length(orderedtemps)
+        throw(ArgumentError("There are duplicate timesteps in the 'timeseries' sheet. Ensure that the timesteps are unique."))
+    end
 
     for sn in sheetnames_system
         system_data[sn] = DataFrame(XLSX.gettable(xl[sn]))
@@ -28,14 +38,8 @@ function read_xlsx(input_data_path::String, t_horizon::Vector{DateTime}=DateTime
     for sn in sheetnames_timeseries
         timeseries_data[sn] = DataFrame(XLSX.gettable(xl[sn]))
     end
-
-    if !isempty(t_horizon)
-        temps = map(ts -> string(ts), t_horizon)
-    else
-        temps = DateTime.(DataFrame(XLSX.gettable(xl["timeseries"])).t)
-    end
-
-    return system_data, timeseries_data, OrderedSet(temps)
+    
+    return system_data, timeseries_data, orderedtemps
 end
 
 function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDict, temps)
