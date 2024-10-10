@@ -38,7 +38,7 @@ Nodes are fundamental building blocks in Predicer, along with Processes.
 | state_loss_proportional    | Float  | Hourly storage loss relative to the state of the storage         |
 | scenario_independent_state | Bool  | If true, forces the state variable to be equal in all scenarios   |
 | is_temp                    | Bool   | Flag indicating whether the state of the node models temperature |
-| T_E_conversion             | Float  | Conversion coefficient from temperature to energy (kWh/K)        |
+| t_e_conversion             | Float  | Conversion coefficient from temperature to energy (kWh/K)        |
 | residual_value             | Float  | Value of the storage contents at the end of the time range       |
 
 
@@ -74,7 +74,7 @@ The user can define groups of either nodes or processes. Groups are used to defi
 
 | Parameter     | Type    | Description                                                      |
 |---------------|---------|------------------------------------------------------------------|
-| type          | String  | Type of the group (node/process)                                 |
+| group_type    | String  | Type of the group (node/process)                                 |
 | entity        | String  | The name of the node or process which is to be a part of a group |
 | group         | String  | The name of the group                                            |
 
@@ -126,7 +126,7 @@ Process topologies are used to define the process flows and capacities in the mo
 | source_sink  | String | Determines whether the connection node is a source or a sink for the process      |
 | node         | String | Name of the connection node                                                       |
 | capacity     | Float  | Capacity of the connection                                                        |
-| VOM_cost     | Float  | Variable operational and maintenance cost of using the corresponding process flow |
+| vom_cost     | Float  | Variable operational and maintenance cost of using the corresponding process flow |
 | ramp_up      | Float  | Determines the hourly upward ramp rate of the corresponding process flow          |
 | ramp_down    | Float  | Determines the hourly downward ramp rate of the corresponding process flow        |
 | initial_load | Float  | Sets the initial value of the process load, from which optimization starts        |
@@ -146,10 +146,10 @@ Unit-based processes can have a flat efficiency, as defined in the *processes* s
 
 The sheet *reserve_type* is used to define the types of reserve used in the model, mainly differing based on reserve activation speed. 
 
-| Parameter | Type | Description |
-|-------------|--------|-------------------------------------------------------------------------------------------------------------------------------------------|
-| type        | String | Name of the reserve type                                                                                                                  |
-| ramp_factor | Float  | Ramp rate factor of reserve activation speed. (If reserve has to activate in 1 hour, ramp_factor is 1.0. In 15 minutes, ramp_factor is 4) |
+| Parameter    | Type   | Description                                                                                                                               |
+|--------------|--------|-------------------------------------------------------------------------------------------------------------------------------------------|
+| reserve_type | String | Name of the reserve type                                                                                                                  |
+| ramp_factor  | Float  | Ramp rate factor of reserve activation speed. (If reserve has to activate in 1 hour, ramp_factor is 1.0. In 15 minutes, ramp_factor is 4) |
 
 
 ### markets
@@ -159,7 +159,7 @@ Markets are a type of node, with which the modelled system can be balanced by bu
 | Parameter    | Type   | Description                                                                      |
 |--------------|--------|----------------------------------------------------------------------------------|
 | market       | String | Name of the market                                                               |
-| type         | String | type of the market (energy or reserve)                                           |
+| market_type  | String | type of the market (energy or reserve)                                           |
 | node         | String | Node a market is connected to, or nodegroup a reserve market is ocnnected to.    |
 | processgroup | String | The processgroup the reserve market is connected to. Not used for energy markets.|
 | direction    | String | Direction of the market, only for reserve markets                                |
