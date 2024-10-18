@@ -182,7 +182,7 @@ Nodes are fundamental building blocks in Predicer, along with Processes.
 | state_loss_proportional    | Float  | Hourly storage loss relative to the state of the storage         |
 | scenario_independent_state | Bool  | If true, forces the state variable to be equal in all scenarios   |
 | is_temp                    | Bool   | Flag indicating whether the state of the node models temperature |
-| T_E_conversion             | Float  | Conversion coefficient from temperature to energy (kWh/K)        |
+| t_e_conversion             | Float  | Conversion coefficient from temperature to energy (kWh/K)        |
 | residual_value             | Float  | Value of the storage contents at the end of the time range       |
 
 
@@ -218,14 +218,14 @@ The user can define groups of either nodes or processes. Groups are used to defi
 
 | Parameter     | Type    | Description                                                      |
 |---------------|---------|------------------------------------------------------------------|
-| type          | String  | Type of the group (node/process)                                 |
+| group_type    | String  | Type of the group (node/process)                                 |
 | entity        | String  | The name of the node or process which is to be a part of a group |
 | group         | String  | The name of the group                                            |
 
 
 ### node_diffusion
 
-Node diffusion is used to model flow of energy between nodes with states, with the size of the flow depending on the level of the node state and the given diffusion coefficient. One possible application of this could be the flow of heat from the inside of a building to the outside during heating season. The flow of energy between nodes *N1* and *N2* is simply calculated as *E = k (T1 - T2)*, with *T1* and *T2* being the temperatures of the nodes. If the temperature difference is negative *(T2 > T1)*, the flow of energy goes from *N2* to *N1*, and if *(T1 > T2)*, the energy flows from *N1* to *N2*. The temperatures of the nodes are linked to the level of the node states, either directly if the *is_temp* flag for the state is 1, or alternatively using the *T_E_converison* coefficient if the state is modelled as energy. The data for the node diffusion functionality is provided on the *node_diffusion* sheet in the example excel file in a timeseries format. 
+Node diffusion is used to model flow of energy between nodes with states, with the size of the flow depending on the level of the node state and the given diffusion coefficient. One possible application of this could be the flow of heat from the inside of a building to the outside during heating season. The flow of energy between nodes *N1* and *N2* is simply calculated as *E = k (T1 - T2)*, with *T1* and *T2* being the temperatures of the nodes. If the temperature difference is negative *(T2 > T1)*, the flow of energy goes from *N2* to *N1*, and if *(T1 > T2)*, the energy flows from *N1* to *N2*. The temperatures of the nodes are linked to the level of the node states, either directly if the *is_temp* flag for the state is 1, or alternatively using the *t_e_converison* coefficient if the state is modelled as energy. The data for the node diffusion functionality is provided on the *node_diffusion* sheet in the example excel file in a timeseries format. 
 
 | Parameter   | Type   | Description                                                                       |
 |-------------|--------|-----------------------------------------------------------------------------------|
@@ -292,7 +292,7 @@ The sheet *reserve_type* is used to define the types of reserve used in the mode
 
 | Parameter | Type | Description |
 |-------------|--------|-------------------------------------------------------------------------------------------------------------------------------------------|
-| type        | String | Name of the reserve type                                                                                                                  |
+| reserve_type| String | Name of the reserve type                                                                                                                  |
 | ramp_factor | Float  | Ramp rate factor of reserve activation speed. (If reserve has to activate in 1 hour, ramp_factor is 1.0. In 15 minutes, ramp_factor is 4) |
 
 
@@ -303,7 +303,7 @@ Markets are a type of node, with which the modelled system can be balanced by bu
 | Parameter    | Type   | Description                                                                      |
 |--------------|--------|----------------------------------------------------------------------------------|
 | market       | String | Name of the market                                                               |
-| type         | String | type of the market (energy or reserve)                                           |
+| market_type  | String | type of the market (energy or reserve)                                           |
 | node         | String | Node a market is connected to, or nodegroup a reserve market is ocnnected to.    |
 | processgroup | String | The processgroup the reserve market is connected to. Not used for energy markets.|
 | direction    | String | Direction of the market, only for reserve markets                                |
