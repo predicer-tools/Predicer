@@ -124,14 +124,14 @@ function get_node_balance(model_contents::OrderedDict, input_data::InputData, no
     # producer processes
     prod_tups = unique(map(y -> y[1:4], filter(x -> x[3] == nodename && x[4] == scenario, process_topology_tuples(input_data))))
     for pt in prod_tups
-        colname = pt[1] * "_" * pt[2] * "_" * pt[3]
+        colname = pt[1] * "__" * pt[2] * "__" * pt[3]
         tups = filter(x -> x[1:4] == pt, process_topology_tuples(input_data))
         df[!, colname] = JuMP.value.(model.obj_dict[:v_flow][tups]).data
     end
     # consumer processes
     cons_tups = unique(map(y -> y[1:4], filter(x -> x[2] == nodename && x[4] == scenario, process_topology_tuples(input_data))))
     for ct in cons_tups
-        colname = ct[1] * "_" * ct[2] * "_" * ct[3]
+        colname = ct[1] * "__" * ct[2] * "__" * ct[3]
         tups = filter(x -> x[1:4] == ct, process_topology_tuples(input_data))
         df[!, colname] = -1 .* JuMP.value.(model.obj_dict[:v_flow][tups]).data
     end
@@ -157,7 +157,7 @@ function get_process_balance(model_contents::OrderedDict, input_data::InputData,
     # producing flows
     prod_flows = unique(map(y -> y[1:4], filter(x -> x[1] == procname && x[3] == procname && x[4] == scenario, process_topology_tuples(input_data))))
     for pf in prod_flows
-        colname = pf[1] * "_" * pf[2] * "_" * pf[3]
+        colname = pf[1] * "__" * pf[2] * "__" * pf[3]
         tups = filter(x -> x[1:4] == pf, process_topology_tuples(input_data))
         df[!, colname] = JuMP.value.(model.obj_dict[:v_flow][tups]).data
     end
@@ -165,7 +165,7 @@ function get_process_balance(model_contents::OrderedDict, input_data::InputData,
     # consuming flows
     cons_flows = unique(map(y -> y[1:4], filter(x -> x[1] == procname && x[2] == procname && x[4] == scenario, process_topology_tuples(input_data))))
     for cf in cons_flows
-        colname = cf[1] * "_" * cf[2] * "_" * cf[3]
+        colname = cf[1] * "__" * cf[2] * "__" * cf[3]
         tups = filter(x -> x[1:4] == cf, process_topology_tuples(input_data))
         df[!, colname] = -1.0 .*JuMP.value.(model.obj_dict[:v_flow][tups]).data
     end
@@ -207,7 +207,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             tups = unique(map(x->(x[1],x[2],x[3]), tuples["process_tuple"]))
         end
         for tup in tups, s in scenarios
-            colname = join(tup,"_") * "_" *s
+            colname = join(tup,"__") * "__" *s
             col_tup = filter(x->x[1:3]==tup && x[4]==s, tuples["process_tuple"])
             if !isempty(col_tup)
                 df[!, colname] = value.(v_flow[validate_tuples(model_contents, col_tup, 4)].data)
@@ -222,7 +222,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 tups = unique(map(x->(x[1],x[2],x[3]), unique(map(x -> (x[3:end]), tuples["res_potential_tuple"]))))
             end
             for tup in tups, s in scenarios
-                colname = join(tup,"_") * "_" *s
+                colname = join(tup,"__") * "__" *s
                 col_tup = filter(x->x[1:3]==tup && x[4]==s, unique(map(x -> (x[3:end]), tuples["res_potential_tuple"])))
                 if !isempty(col_tup)
                     df[!, colname] = value.(v_load[validate_tuples(model_contents, col_tup, 4)].data)
@@ -238,7 +238,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
                 tups = unique(map(x->(x[1],x[2],x[3],x[5]),tuples["res_potential_tuple"]))
             end
             for tup in tups, s in scenarios
-                col_name = join(tup,"_")  * "_" *s
+                col_name = join(tup,"__")  * "__" *s
                 col_tup = filter(x->(x[1],x[2],x[3],x[5])==tup && x[6]==s, tuples["res_potential_tuple"])
                 if !isempty(col_tup)
                     df[!, col_name] = value.(v_res[validate_tuples(model_contents, col_tup, 6)].data)
@@ -250,7 +250,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             v_res = model.obj_dict[Symbol(e_type)]
             ress = unique(map(x->x[1],tuples["res_final_tuple"]))
             for r in ress, s in scenarios
-                colname = r * "_" * s
+                colname = r * "__" * s
                 col_tup = filter(x->x[1]==r && x[2]==s, tuples["res_final_tuple"])
                 if !isempty(col_tup)
                     df[!, colname] = value.(v_res[validate_tuples(model_contents, col_tup, 2)].data)
@@ -267,7 +267,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             end
             for p in procs, s in scenarios
                 col_tup = filter(x->x[1]==p && x[2]==s, tuples["proc_online_tuple"])
-                colname = p * "_" * s
+                colname = p * "__" * s
                 if !isempty(col_tup)
                     df[!, colname] = value.(v_bin[validate_tuples(model_contents, col_tup, 2)].data)
                 end
@@ -283,7 +283,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             end
             for n in nods, s in scenarios
                 col_tup = filter(x -> x[1] == n && x[2] == s, tuples["node_state_tuple"])
-                colname = n * "_" * s
+                colname = n * "__" * s
                 if !isempty(col_tup)
                     df[!, colname] = value.(v_state[validate_tuples(model_contents, col_tup, 2)].data)
                 end
@@ -299,7 +299,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             end
             for n in nods, s in scenarios
                 col_tup = filter(x->x[1]==n && x[2]==s, tuples["node_balance_tuple"])
-                colname = n * "_" * s
+                colname = n * "__" * s
                 if !isempty(col_tup)
                     df[!, colname] = value.(v_state[validate_tuples(model_contents, col_tup, 2)].data)
                 end
@@ -315,7 +315,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             end
             for p in procs, s in scenarios
                 col_tup = filter(x->x[1:3] == p && x[4]==s, tuples["ramp_tuple"])
-                colname = p[1] * "_" * p[2] * "_" * p[3] * "_" * s
+                colname = p[1] * "__" * p[2] * "__" * p[3] * "__" * s
                 if !isempty(col_tup)
                     df[!, colname] = value.(v_ramp[validate_tuples(model_contents, col_tup, 4)].data)
                 end
@@ -332,7 +332,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             col_tup = unique(map(x->(x[1],x[3],x[4]),filter(x->x[1]==bt && x[3]==s,tuples["balance_market_tuple"])))
             if !isempty(col_tup)
                 dat_vec = []
-                colname = col_tup[1][1] * "_" * s
+                colname = col_tup[1][1] * "__" * s
                 for tup in col_tup
                     push!(dat_vec,value(v_bid[tup]))
                 end
@@ -366,7 +366,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
         dir = ["up","dw"]
         for n in nods, d in dir, s in scenarios
             col_tup = filter(x->x[1]==n && x[2]==d && x[3]==s, tuples["balance_market_tuple"])
-            colname = n * "_" * d * "_" * s
+            colname = n * "__" * d * "__" * s
             if !isempty(col_tup)
                 df[!,colname] = value.(v_bal[validate_tuples(model_contents, col_tup, 3)].data)
             end
@@ -380,7 +380,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             blocks = unique(map(x -> (x[1], x[2], x[3]), tuples["block_tuples"]))
         end
         for block in blocks
-            colname = block[1] * "_" * block[2] * "_" * block[3]
+            colname = block[1] * "__" * block[2] * "__" * block[3]
             b_tup = (block..., string(input_data.inflow_blocks[block[1]].start_time))
             df[!, colname] = [JuMP.value.(v_block[validate_tuple(model_contents, b_tup, 3)[begin:3]])]
         end
@@ -394,11 +394,11 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
         for sp in setpoints, s in scenarios
             col_tup = filter(x -> x[1] == sp && x[2] == s, tuples["setpoint_tuples"])
             if e_type == "v_set_up"
-                colname = "up_" * sp * "_" * s
+                colname = "up__" * sp * "__" * s
             elseif e_type == "v_set_down"
-                colname = "down_" *  sp * "_" * s
+                colname = "down__" *  sp * "__" * s
             elseif e_type == "v_setpoint"
-                colname = sp * "_" * s
+                colname = sp * "__" * s
             end
             if !isempty(col_tup)
                 df[!,colname] = value.(v_var[validate_tuples(model_contents, col_tup, 2)].data)
@@ -414,7 +414,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             end
             for r in ress, s in scenarios
                 col_tup = filter(x -> x[1] == r && x[2] == s, tuples["reserve_limits"])
-                colname = r * "_" * s
+                colname = r * "__" * s
                 if !isempty(col_tup)
                     df[!,colname] = value.(v_reserve_online[validate_tuples(model_contents, col_tup, 2)].data)
                 end
@@ -430,7 +430,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             end
             for n in nodenames, s in scenarios
                 diffs = []
-                colname = n * "_" * s
+                colname = n * "__" * s
                 for t in input_data.temporals.t
                     diff_k = filter(x -> x == (n, s, t),  map(x -> x.I[1], collect(keys(node_diffs))))[1]
                     push!(diffs, value.(node_diffs[diff_k]))
@@ -450,7 +450,7 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             end
             for c in conn_names, s in scenarios
                 d_conn = filter(x -> x[1] == c[1] && x[2] == c[2] && x[3] == s, node_delay_tuple(input_data))
-                colname = c[1] * "_" * c[2] * "_" * s
+                colname = c[1] * "__" * c[2] * "__" * s
                 if !isempty(d_conn)
                     df[!, colname] = value.(v_node_delays[d_conn].data)
                 end
@@ -524,7 +524,7 @@ function write_bid_matrix(model_contents::OrderedDict, input_data::Predicer.Inpu
                 else
                     if input_data.setup.contains_reserves
                         tup = filter(x->x[1]==m && x[2]==s,tuples["res_final_tuple"])
-                        volume = value.(v_res_final[tup].data)
+                        volume = value.(v_res_final[Predicer.validate_tuples(model_contents, tup, 2)].data)
                     end
                 end
                 df[!,p_name] = price
