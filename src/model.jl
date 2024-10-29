@@ -30,7 +30,6 @@ function get_costs_dataframe(model_contents::OrderedDict, input_data::InputData,
     end
     for cost in costs
         for s in scens
-            
             colname = cost * "_" * s
             df[!, colname] = [JuMP.value(es[cost][s])]
         end
@@ -150,7 +149,6 @@ Function to retrieve a DataFrame containing the balance of a specific process; i
 - `scenario::String`: Name of the scenario to be studied. 
 """
 function get_process_balance(model_contents::OrderedDict, input_data::InputData, procname::String, scenario::String="")
-    println(procname)
     model = model_contents["model"]
     df = DataFrame(t=input_data.temporals.t)
 
