@@ -81,14 +81,14 @@ function get_node_balance(model_contents::OrderedDict, input_data::InputData, no
     df = DataFrame(t=input_data.temporals.t)
     # inflow
     if input_data.nodes[nodename].is_inflow
-        inflow_vals = map(x -> x[2], input_data.nodes[nodename].inflow(scenario).series)
+        inflow_vals = collect(values(input_data.nodes[nodename].inflow(scenario).series))
     else
         inflow_vals = zeros(length(input_data.temporals.t))
     end
     df[!, "inflow"] = inflow_vals
     # state
     if input_data.nodes[nodename].is_state
-        node_tups = filter(x -> x[1] == nodename && x[2] == scenario, state_node_tuples(input_data))
+        node_tups = Predicer.validate_tuples(model_contents, filter(x -> x[1] == nodename && x[2] == scenario, state_node_tuples(input_data)), 2)
         state_vals = JuMP.value.(model.obj_dict[:v_state][node_tups]).data
         state_diff_vals = []
         for (i, sv) in enumerate(state_vals)
@@ -114,7 +114,7 @@ function get_node_balance(model_contents::OrderedDict, input_data::InputData, no
     # delay
     if nodename in Predicer.delay_nodes(input_data)
         delay_tups = filter(x -> x[1] == nodename && x[2] == scenario, balance_node_tuples(input_data))
-        node_delay_e = model_contents["expression"]["e_node_delay"]
+        node_delay_e = model_contents["model"][:e_node_bal_eq_delay]
         node_delay_vals = map(x -> JuMP.value.(node_delay_e[x]), delay_tups)
     else
         node_delay_vals = zeros(length(input_data.temporals.t))
@@ -124,14 +124,14 @@ function get_node_balance(model_contents::OrderedDict, input_data::InputData, no
     prod_tups = unique(map(y -> y[1:4], filter(x -> x[3] == nodename && x[4] == scenario, process_topology_tuples(input_data))))
     for pt in prod_tups
         colname = pt[1] * "__" * pt[2] * "__" * pt[3]
-        tups = filter(x -> x[1:4] == pt, process_topology_tuples(input_data))
+        tups = Predicer.validate_tuples(model_contents, filter(x -> x[1:4] == pt, process_topology_tuples(input_data)), 4)
         df[!, colname] = JuMP.value.(model.obj_dict[:v_flow][tups]).data
     end
     # consumer processes
     cons_tups = unique(map(y -> y[1:4], filter(x -> x[2] == nodename && x[4] == scenario, process_topology_tuples(input_data))))
     for ct in cons_tups
         colname = ct[1] * "__" * ct[2] * "__" * ct[3]
-        tups = filter(x -> x[1:4] == ct, process_topology_tuples(input_data))
+        tups = Predicer.validate_tuples(model_contents, filter(x -> x[1:4] == ct, process_topology_tuples(input_data)), 4)
         df[!, colname] = -1 .* JuMP.value.(model.obj_dict[:v_flow][tups]).data
     end
     return df
@@ -150,6 +150,7 @@ Function to retrieve a DataFrame containing the balance of a specific process; i
 - `scenario::String`: Name of the scenario to be studied. 
 """
 function get_process_balance(model_contents::OrderedDict, input_data::InputData, procname::String, scenario::String="")
+    println(procname)
     model = model_contents["model"]
     df = DataFrame(t=input_data.temporals.t)
 
@@ -157,7 +158,7 @@ function get_process_balance(model_contents::OrderedDict, input_data::InputData,
     prod_flows = unique(map(y -> y[1:4], filter(x -> x[1] == procname && x[3] == procname && x[4] == scenario, process_topology_tuples(input_data))))
     for pf in prod_flows
         colname = pf[1] * "__" * pf[2] * "__" * pf[3]
-        tups = filter(x -> x[1:4] == pf, process_topology_tuples(input_data))
+        tups = Predicer.validate_tuples(model_contents, filter(x -> x[1:4] == pf, process_topology_tuples(input_data)), 4)
         df[!, colname] = JuMP.value.(model.obj_dict[:v_flow][tups]).data
     end
 
@@ -165,12 +166,14 @@ function get_process_balance(model_contents::OrderedDict, input_data::InputData,
     cons_flows = unique(map(y -> y[1:4], filter(x -> x[1] == procname && x[2] == procname && x[4] == scenario, process_topology_tuples(input_data))))
     for cf in cons_flows
         colname = cf[1] * "__" * cf[2] * "__" * cf[3]
-        tups = filter(x -> x[1:4] == cf, process_topology_tuples(input_data))
+        tups = Predicer.validate_tuples(model_contents, filter(x -> x[1:4] == cf, process_topology_tuples(input_data)), 4)
         df[!, colname] = -1.0 .*JuMP.value.(model.obj_dict[:v_flow][tups]).data
     end
 
     # efficiency losses are incoming - outcoming
-    df[!, "eff_losses"] = map(x -> -sum(x[2:end]), eachrow(df))
+    if length(df[1,:]) > 1
+        df[!, "eff_losses"] = map(x -> -sum(x[2:end]), eachrow(df))
+    end
     return df
 end
 
