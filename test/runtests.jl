@@ -15,7 +15,7 @@ using HiGHS: Optimizer
 # comparison.
 cases = [
     "input_data.xlsx" => -10985.034456374564
-    "input_data_complete.xlsx" => -7138.42326815
+    "input_data_complete.xlsx" => -5798.38468498
     "input_data_bidcurve.xlsx" => -4371.579033779262
     "demo_model.xlsx" => -1095.5118308122817
     "example_model.xlsx" => -11014.1278942231
