@@ -1100,7 +1100,8 @@ end
         contains_markets::Bool
         reserve_realisation::Bool
         use_market_bids::Bool
-        common_timesteps::Int
+        common_start_timesteps::Int
+        common_end_timesteps::Int
         common_scenario_name::String
         use_node_dummy_variables::Bool
         use_ramp_dummy_variables::Bool
@@ -1118,7 +1119,8 @@ Struct containing setup parameters for the model, affecting the behaviour of the
 - `contains_markets::Bool`: Boolean indicating whether the model (input_data) needs market structures. 
 - `reserve_realisation::Bool`: Boolean indicating whether the reserve products in the model can be realized. If set to false, no realisation occurs.  
 - `use_market_bids::Bool`: Boolean indicating whether the model contains markets with bids.
-- `common_timesteps::Int`: Indicates the length of a common start, where the parameters and variable values are equal across all scenarios. Default is 0.
+- `common_start_timesteps::Int`: Indicates the length of a common start, where the parameters and variable values are equal across all scenarios. Default is 0.
+- `common_end_timesteps::Int`: Indicates the length of a common end, where the parameters and variable values are equal across all scenarios. Default is 0.
 - `common_scenario_name::String`: Name of the common start scenario, if it is used.     
 - `use_node_dummy_variables::Bool`: Indicates if dummy variables should be used in the node balance equations.   
 - `use_ramp_dummy_variables::Bool`: Indicates if dummy variables should be used in the process ramp balance equations.   
@@ -1136,14 +1138,15 @@ mutable struct InputDataSetup
     contains_markets::Bool
     reserve_realisation::Bool
     use_market_bids::Bool
-    common_timesteps::Int
+    common_start_timesteps::Int
+    common_end_timesteps::Int
     common_scenario_name::String
     use_node_dummy_variables::Bool
     use_ramp_dummy_variables::Bool
     node_dummy_variable_cost::Float64
     ramp_dummy_variable_cost::Float64
-    function InputDataSetup(contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, contains_markets, reserve_realisation, use_market_bids, common_timesteps, common_scenario_name, use_node_dummy_variables, use_ramp_dummy_variables, node_dummy_variable_cost, ramp_dummy_variable_cost)
-        return new(contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, contains_markets, reserve_realisation, use_market_bids, common_timesteps, common_scenario_name, use_node_dummy_variables, use_ramp_dummy_variables, node_dummy_variable_cost, ramp_dummy_variable_cost)
+    function InputDataSetup(contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, contains_markets, reserve_realisation, use_market_bids, common_start_timesteps, common_end_timesteps, common_scenario_name, use_node_dummy_variables, use_ramp_dummy_variables, node_dummy_variable_cost, ramp_dummy_variable_cost)
+        return new(contains_reserves, contains_online, contains_states, contains_piecewise_eff, contains_risk, contains_diffusion, contains_delay, contains_markets, reserve_realisation, use_market_bids, common_start_timesteps, common_end_timesteps, common_scenario_name, use_node_dummy_variables, use_ramp_dummy_variables, node_dummy_variable_cost, ramp_dummy_variable_cost)
     end
 end
 
