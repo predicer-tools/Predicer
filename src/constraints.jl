@@ -1254,10 +1254,12 @@ function setup_bidding_curve_constraints(model_contents::OrderedDict, input_data
         m_prod_flow = proc_tup_in[m]
         m_cons_bal_flow = (m, "dw")
         m_prod_bal_flow = (m, "up")
+        [e_bid_slot[(m, s, string(t))] = AffExpr(0.0) for s in scenarios(input_data), t in input_data.bid_slots[m].time_steps];
+
         for s in scenarios(input_data), (ts, t) in input_data.temporals.times
             tup = (m, s, ts)
             v_bid[tup] = AffExpr(0.0)
-            e_bid_slot[tup] = AffExpr(0.0)
+            #e_bid_slot[tup] = AffExpr(0.0)
             if markets[m].m_type == "energy"
                 add_to_expression!(v_bid[tup],v_flow[validate_tuple(val_dict, common_ts, (m_prod_flow..., s, ts), 4)],1.0) #prod 
                 add_to_expression!(v_bid[tup],v_flow_bal[validate_tuple(val_dict, common_ts, (m_prod_bal_flow..., s, ts), 3)],1.0) #prod_bal
@@ -1266,12 +1268,17 @@ function setup_bidding_curve_constraints(model_contents::OrderedDict, input_data
             else
                 add_to_expression!(v_bid[tup],v_res_final[tup],1.0)
             end
-            (bn0, bn1) = b_slots[m].market_price_allocation[(s, t)]
-            p0 = b_slots[m].prices[(t, bn0)]
-            p1 = b_slots[m].prices[(t, bn1)]
+        end
+        
+        for s in scenarios(input_data), bidslot_t in input_data.bid_slots[m].time_steps
+            t = string(bidslot_t)
+            tup = (m, s, t)
+            (bn0, bn1) = b_slots[m].market_price_allocation[(s, bidslot_t)]
+            p0 = b_slots[m].prices[(bidslot_t, bn0)]
+            p1 = b_slots[m].prices[(bidslot_t, bn1)]
             ps = markets[m].price(s, t)
-            add_to_expression!(e_bid_slot[tup],v_bid_vol[(m,bn0,ts)],1-(ps-p0)/(p1-p0))
-            add_to_expression!(e_bid_slot[tup],v_bid_vol[(m,bn1,ts)],(ps-p0)/(p1-p0))
+            add_to_expression!(e_bid_slot[tup],v_bid_vol[(m,bn0,t)],1-(ps-p0)/(p1-p0))
+            add_to_expression!(e_bid_slot[tup],v_bid_vol[(m,bn1,t)],(ps-p0)/(p1-p0))
         end
     end
     bid_scen_tuple = Predicer.bid_scenario_tuples(input_data)
@@ -1721,7 +1728,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
                         add_to_expression!(
                             market_costs[s],
                             v_flow[
-                                validate_tuple(val_dict, common_ts, tup, 4)],
+                                validate_tuple(val_dict, common_ts, (tup..., s, t), 4)],
                             -market.price(s, t) * temporals(t))
                     end
                 end

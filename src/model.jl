@@ -347,14 +347,15 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             bid_vol_tups = unique(map(x ->(x[1], x[2]), tuples["bid_slot_tuple"]))
         end
         for bvt in bid_vol_tups
-            dat_vec = []
+            # dat vec length should be same as input_data.temporals.t
+            dat_dict = OrderedDict(t => 0.0 for t in input_data.temporals.t)
             colname = bvt[1] * ", " * bvt[2]
             for tup in tuples["bid_slot_tuple"]
                 if tup[2] == bvt[2] && tup[1] == bvt[1]
-                    push!(dat_vec, JuMP.value.(v_bid_vol[tup]))
+                    dat_dict[tup[3]] = JuMP.value.(v_bid_vol[tup])
                 end
             end
-            df[!,colname] = dat_vec
+            df[!,colname] = collect(values(dat_dict))
         end
     elseif e_type == "v_flow_bal"
         v_bal = model.obj_dict[Symbol(e_type)]
