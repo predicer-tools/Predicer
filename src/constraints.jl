@@ -1790,7 +1790,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
                         add_to_expression!(
                             market_costs[s],
                             v_flow[
-                                validate_tuple(val_dict, common_ts, tup, 4)],
+                                validate_tuple(val_dict, common_ts, (tup..., s, t), 4)],
                             -market.price(s, t) * temporals(t))
                     end
                 end

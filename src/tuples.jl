@@ -60,9 +60,8 @@ This version is faster when validating larger tuples.
 function validate_tuple(
         val_dict::OrderedDict, cts::Union{Vector{String}, Vector{Any}},
         tuple::NTuple{N, AbstractString} where N, s_index::Int)
-    if !isempty(val_dict) && tuple[s_index+1] in cts
-        return (tuple[1:s_index-1]..., val_dict[tuple[s_index:s_index+1]]...,
-                tuple[s_index+2:end]...)
+    if !isempty(val_dict) && insorted(tuple[s_index+1], cts)
+        return (tuple[1:s_index-1]..., val_dict[tuple[s_index:s_index+1]]...,tuple[s_index+2:end]...)
     else
         return tuple
     end

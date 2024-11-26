@@ -181,7 +181,9 @@ depend on the scenario transitioned from, build the matrices by other means.
 function sddp_markov_mats(
         inputs::AbstractVector{InputData}) :: Vector{Matrix{Float64}}
     #^ SDDP currently requires a vector of Matrix; AbstractMatrix will not do.
-    @assert all(inp.setup.common_timesteps == 0 for inp in inputs)
+    @assert all(inp.setup.common_start_timesteps == 0
+                && inp.setup.common_end_timesteps == 0
+                for inp in inputs)
     p(i) = [values(inputs[i].scenarios)...]'
     [[1.]', (repeat(p(i), i == 1 ? 1 : length(inputs[i - 1].scenarios))
              for i in 1 : length(inputs))...]
