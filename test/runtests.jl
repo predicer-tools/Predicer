@@ -26,7 +26,7 @@ cases = OrderedDict(
     "input_data.xlsx" => -10985.20345389959,
     "input_data_complete.xlsx" => -5798.38468498,
     "input_data_bidcurve.xlsx" => -4371.579033779262,
-    #"input_data_bidcurve_e.xlsx" => -4501.509824681449,
+    "input_data_bidcurve_e.xlsx" => -4501.509824681449,
     "demo_model.xlsx" => -1095.5118308122817,
     "example_model.xlsx" => -11014.1278942231,
     "input_data_common_start.xlsx" => -1589.80385514,
@@ -45,7 +45,7 @@ A bound for the expected cost may do for single cut.
 """
 sddp_cases = OrderedDict(
     "input_data_bidcurve.xlsx" => -12000,
-    #"input_data_bidcurve_e.xlsx" => -12000,
+    "input_data_bidcurve_e.xlsx" => -12000,
 )
 
 inputs = Dict{String, Predicer.InputData}()
