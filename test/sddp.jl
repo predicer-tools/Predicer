@@ -2,8 +2,17 @@
     known_obj = cases[bn]
     @assert lower_bound ≤ known_obj
     inp = get_input(bn)
+    bn1, _ext = splitext(bn)
+    stgf = joinpath("..", "input_data", bn1 * ".yaml")
+    if isfile(stgf)
+        println("Loading staging from $stgf")
+        stg = Predicer.load_staging(stgf)
+    else
+        println("Using default staging; no file $stgf")
+        stg = Predicer.Staging([inp])
+    end
     pg = Predicer.sddp_policy_graph(
-        [inp]; lower_bound, optimizer=Optimizer)
+        [inp], stg; lower_bound, optimizer=Optimizer)
     dem = SDDP.deterministic_equivalent(pg, Optimizer)
     silent && set_silent(dem)
     optimize!(dem)

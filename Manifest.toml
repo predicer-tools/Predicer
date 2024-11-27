@@ -2,7 +2,7 @@
 
 julia_version = "1.11.1"
 manifest_format = "2.0"
-project_hash = "abf57effa5315de9c82affeb1f80b7efd5116c6d"
+project_hash = "835201adf55b41f9fed6ceb74c984780e8384663"
 
 [[deps.Accessors]]
 deps = ["CompositionsBase", "ConstructionBase", "InverseFunctions", "LinearAlgebra", "MacroTools", "Markdown"]
@@ -638,6 +638,12 @@ weakdeps = ["SparseArrays"]
     [deps.Statistics.extensions]
     SparseArraysExt = ["SparseArrays"]
 
+[[deps.StringEncodings]]
+deps = ["Libiconv_jll"]
+git-tree-sha1 = "b765e46ba27ecf6b44faf70df40c57aa3a547dcb"
+uuid = "69024149-9ee7-55f6-a4c4-859efe599b68"
+version = "0.3.7"
+
 [[deps.StringManipulation]]
 deps = ["PrecompileTools"]
 git-tree-sha1 = "a6b1675a536c5ad1a60e5a5153e1fee12eb146e3"
@@ -728,6 +734,12 @@ deps = ["Artifacts", "JLLWrappers", "Libdl", "Libiconv_jll", "Zlib_jll"]
 git-tree-sha1 = "a2fccc6559132927d4c5dc183e3e01048c6dcbd6"
 uuid = "02c8fc9c-b97f-50b9-bbe4-9be30ff0a78a"
 version = "2.13.5+0"
+
+[[deps.YAML]]
+deps = ["Base64", "Dates", "Printf", "StringEncodings"]
+git-tree-sha1 = "dea63ff72079443240fbd013ba006bcbc8a9ac00"
+uuid = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
+version = "0.4.12"
 
 [[deps.ZipArchives]]
 deps = ["ArgCheck", "CodecInflate64", "CodecZlib", "InputBuffers", "PrecompileTools", "TranscodingStreams", "Zlib_jll"]

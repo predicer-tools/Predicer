@@ -4,6 +4,7 @@ using DocStringExtensions
 using Dates
 using DataStructures
 using Accessors
+using YAML
 using SDDP
 
 """
@@ -120,6 +121,17 @@ Create a simple staging for all markets.  Basically guesswork.
 """
 Staging(inputs::AbstractVector{InputData}) = Staging(OrderedDict(
     m => length(inputs) for m in keys(inputs[1].bid_slots)))
+
+"""
+$(TYPEDSIGNATURES)
+
+Load a `Staging` from YAML.
+"""
+function load_staging(fname)
+    #XXX Fix if Staging gets more fields.
+    d = YAML.load_file(fname)
+    return Staging(d["markets"])
+end
 
 """
 $(TYPEDEF)
