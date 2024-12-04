@@ -78,8 +78,8 @@ $(TYPEDEF)
 Defines when markets act in a possibly multistage Predicer model.  Indices
 refer to the vector of `InputData` that the model is built from.  `bid` may
 also contain 0, which refers to the first SDDP stage, which only bids such
-markets.  For a single Predicer model `bid`={0} and `clear={1}`, but single
-models are usually faster to solve directly than with SDDP.
+markets.  For a single Predicer model `bid` = {0} and `clear` = {1}, but
+single models are usually faster to solve directly than with SDDP.
 
 $(TYPEDFIELDS)
 """
