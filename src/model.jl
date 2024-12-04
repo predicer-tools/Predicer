@@ -322,22 +322,16 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             end
         end
     elseif e_type == "v_bid"
-        v_bid = expr[e_type]
+        v_bid = model[:v_bid]
         if !isempty(name)
             bid_tups = unique(map(x->(x[1]),filter(x->x[1]==name,tuples["balance_market_tuple"])))
         else
             bid_tups = map(x->(x[1]),tuples["balance_market_tuple"])
         end
         for bt in bid_tups, s in scenarios
-            col_tup = unique(map(x->(x[1],x[3],x[4]),filter(x->x[1]==bt && x[3]==s,tuples["balance_market_tuple"])))
-            if !isempty(col_tup)
-                dat_vec = []
-                colname = col_tup[1][1] * "__" * s
-                for tup in col_tup
-                    push!(dat_vec,value(v_bid[tup]))
-                end
-                df[!,colname] = dat_vec
-            end
+            colname = bt * "__" * s
+            df[!, colname] = [value(v_bid[bt, s, t])
+                              for t in values(input_data.temporals.times)]
         end
     elseif e_type == "v_bid_volume"
         v_bid_vol = model.obj_dict[Symbol(e_type)]

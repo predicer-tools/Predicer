@@ -1170,7 +1170,7 @@ function setup_fixed_values(model_contents::OrderedDict, input_data::Predicer.In
     val_dict = model_contents["validation_dict"]
     common_ts = model_contents["common_timesteps"]
     fixed_value_tuple = fixed_market_tuples(input_data)
-    v_bid = model_contents["expression"]["v_bid"]
+    v_bid = model[:v_bid]
     markets = input_data.markets
     scenarios = collect(keys(input_data.scenarios))
     
@@ -1261,21 +1261,23 @@ function setup_bidding_curve_constraints(
         v = AffExpr(0.0)
         if markets[m].m_type == "energy"
             add_to_expression!(
-                v, v_flow[Predicer.validate_tuple(
+                v, v_flow[validate_tuple(
                     val_dict, common_ts, (proc_tup_in[m]..., s, ts), 4)])
             add_to_expression!(
-                v, v_flow_bal[Predicer.validate_tuple(
+                v, v_flow_bal[validate_tuple(
                     val_dict, common_ts, (m, "up", s, ts), 3)])
             add_to_expression!(
-                v, v_flow[Predicer.validate_tuple(
+                v, v_flow[validate_tuple(
                     val_dict, common_ts, (proc_tup_out[m]..., s, ts), 4)],
                 -1.0)
             add_to_expression!(
-                v, v_flow_bal[Predicer.validate_tuple(
+                v, v_flow_bal[validate_tuple(
                     val_dict, common_ts, (m, "dw", s, ts), 3)],
                 -1.0)
         else
-            add_to_expression!(v, v_res_final[tup], 1.0)
+            add_to_expression!(
+                v, model[:v_res_final][validate_tuple(
+                    val_dict, common_ts, (m, s, ts), 2)])
         end
         return v
     end
@@ -1297,11 +1299,13 @@ function setup_bidding_curve_constraints(
     end
     scens = scenarios(input_data)
     times = values(input_data.temporals.times)
+    bid_markets = (m.name for m in values(input_data.markets)
+                   if is_balance_market(m) || haskey(bid_slots, m.name))
     @expressions model begin
-        v_bid[m = keys(bid_slots), s = scens, t = times],
+        v_bid[m = bid_markets, s = scens, t = times],
             compute_v_bid(m, s, t)
 
-        e_bid_slot[m = keys(input_data.bid_slots), s = scens,
+        e_bid_slot[m = keys(bid_slots), s = scens,
                    ti = 1 : length(bid_slots[m].time_steps)],
             interpolate_bid(m, s, ti)
     end
@@ -1386,7 +1390,7 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
 
     v_flow = model[:v_flow]
     v_flow_bal = model[:v_flow_bal]
-    v_bid = model_contents["expression"]["v_bid"] = OrderedDict()
+    v_bid = model[:v_bid]
     if input_data.setup.contains_reserves
         v_res_final = model[:v_res_final]
     end
@@ -1403,13 +1407,6 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
                 m_prod_bal_flow = (m, "up") # bal market producing flow
                 for s in scens
                     push!(pcols, values(markets[m].price(s).series))
-                    for t in temporals.t
-                        vb = v_bid[(markets[m].name,s,t)] = AffExpr(0.0)
-                        add_to_expression!(vb, v_flow[validate_tuple(val_dict, common_ts, (m_prod_flow..., s, t), 4)],1.0) # producer flow
-                        add_to_expression!(vb, v_flow_bal[validate_tuple(val_dict, common_ts, (m_prod_bal_flow..., s, t), 3)],1.0) #"producer" balance flow
-                        add_to_expression!(vb, v_flow[validate_tuple(val_dict, common_ts, (m_cons_flow..., s, t), 4)],-1.0) # consumer flow
-                        add_to_expression!(vb, v_flow_bal[validate_tuple(val_dict, common_ts, (m_cons_bal_flow..., s, t), 3)],-1.0) # consumer balance flow
-                    end
                 end
             end
             if markets[m].m_type=="reserve"
@@ -1441,7 +1438,7 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
                 #XXX Is this ever different from m?
                 mn = markets[m].name
                 for (sns, eq) in scen_pairs(price_matr[m][i,:])
-                    vars = [v_bid[(mn, s, ts)] for s in sns]
+                    vars = [v_bid[mn, s, t] for s in sns]
                     cons[m, ts, sns...] = (vars[2] - vars[1], eq)
                 end
             elseif markets[m].m_type == "reserve" && input_data.setup.contains_reserves
@@ -1721,7 +1718,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
                              for topo in p.topos)
     
     v_flow = model[:v_flow]
-    v_bid = model_contents["expression"]["v_bid"]
+    v_bid = model[:v_bid]
     v_flow_bal = model[:v_flow_bal]
 
     scenarios = collect(keys(input_data.scenarios))
@@ -1756,23 +1753,23 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
             market = markets[n]
             # bidding market with balance market
             if market.is_bid
-                for s in scenarios, t in temporals.t
-                    tup = (node.name,s,t)
-                    tup_up = (node.name,"up",s,t)
-                    tup_dw = (node.name,"dw",s,t)
+                for s in scenarios, (ts, t) in temporals.times
+                    tup_up = (node.name,"up",s,ts)
+                    tup_dw = (node.name,"dw",s,ts)
                     add_to_expression!(
                         market_costs[s],
-                        v_bid[tup], -market.price(s, t) * temporals(t))
+                        v_bid[node.name, s, t],
+                        -market.price(s, ts) * temporals(t))
                     add_to_expression!(
                         market_costs[s],
                         v_flow_bal[
                             validate_tuple(val_dict, common_ts, tup_up, 3)],
-                        market.up_price(s, t) * temporals(t))
+                        market.up_price(s, ts) * temporals(t))
                     add_to_expression!(
                         market_costs[s],
                         v_flow_bal[
                             validate_tuple(val_dict, common_ts, tup_dw, 3)],
-                        -market.down_price(s, t) * temporals(t))
+                        -market.down_price(s, ts) * temporals(t))
                 end
             # non-bidding market
             else
