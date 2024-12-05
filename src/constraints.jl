@@ -1240,6 +1240,19 @@ with market m in scenario s at time t) and `e_bid_slot[m, s, ti]`
 (interpolated volume from bid curve ti), and a constraint named `bid_slot_eq`
 equating the two.  m runs over markets having bid slots.
 
+For SDDP, it is more complicated.  Let the stage timespan be [s0, s1] and
+the bid timespan [b0, b1].
+- If the market does not clear at s0:
+    * `v_bid` is set from `v_cleared_volume.in`.
+    * `v_cleared_volume.out` is set from `v_cleared_volume.in`, shifted
+      by ⌊s1⌋ - ⌊s0⌋, where floor is taken with respect to MTU using
+      BidSlot.time_steps[1] as the origin.
+- If the market clears at s0:
+    * `v_bid` is set from `v_cleared_volume.in` during [s0, min(s1, b0)]
+      and interpolated from bid curves during [min(s1, b0), s1]
+    * `v_cleared_volume.out` is similarly set from `v_cleared_volume.in`
+      or interpolated bid curves, shifting as above.  It extends to b1.
+
 # Arguments
 - `model_contents`: Constructed model and auxiliary data. 
 - `input_data`: Data used to build the model. 
@@ -1247,7 +1260,6 @@ equating the two.  m runs over markets having bid slots.
 function setup_bidding_curve_constraints(
         model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
-    sddp = haskey(model_contents, "sddp")
     val_dict = model_contents["validation_dict"]
     common_ts = model_contents["common_timesteps"]
     markets = input_data.markets
@@ -1283,6 +1295,8 @@ function setup_bidding_curve_constraints(
     end
     bid_slots = input_data.bid_slots
     v_bid_vol = model[:v_bid_volume]
+    sddp_par = get(model_contents, "sddp", nothing)
+    sddp = !isnothing(sddp_par)
     function interpolate_bid(m, s, ti)
         bs = bid_slots[m]
         t = bs.time_steps[ti]
@@ -1301,19 +1315,42 @@ function setup_bidding_curve_constraints(
     times = values(input_data.temporals.times)
     bid_markets = (m.name for m in values(input_data.markets)
                    if is_balance_market(m) || haskey(bid_slots, m.name))
+    if sddp
+        clears = m -> shall_clear(m, sddp_par)
+        cl_markets = filter(clears, keys(bid_slots))
+        cleared_vol = model[:v_cleared_volume]
+    else
+        clears = m -> true
+        cl_markets = keys(bid_slots)
+    end
     @expressions model begin
         v_bid[m = bid_markets, s = scens, t = times],
             compute_v_bid(m, s, t)
 
-        e_bid_slot[m = keys(bid_slots), s = scens,
+        e_bid_slot[m = cl_markets, s = scens,
                    ti = 1 : length(bid_slots[m].time_steps)],
             interpolate_bid(m, s, ti)
     end
-    #TODO This will be relaxed later, at least for SDDP.
-    @assert all(bs.time_steps[1] ≤ first(times) for bs in values(bid_slots))
-    @constraint(model, bid_slot_eq[
-            m = keys(bid_slots), s = scens, t = times],
-        v_bid[m, s, t] == e_bid_slot[m, s, time_slot_of(bid_slots[m], t)])
+    function e_bid(m, s, t)
+        bs = bid_slots[m]
+        ti = clears(m) ? time_slot_of(bs, t) : 0
+        @assert sddp || ti > 0
+        if ti > 0
+            return e_bid_slot[m, s, ti]
+        else
+            tic = cv_slot_of(m, t, input_data, sddp_par)
+            return cleared_vol[m, tic].in
+        end
+    end
+    @constraint(model, bid_slot_eq[m = keys(bid_slots), s = scens, t = times],
+        v_bid[m, s, t] == e_bid(m, s, t))
+    if sddp
+        len_st(m) = cv_slot_of(m, end_of(input_data.temporals),
+                               input_data, sddp_par)
+        bid_start(m) = cv_slot_of(m, bid_slots[m].time_steps[1],
+                                  input_data, sddp_par)
+        #TODO cleared_vol.out
+    end
 end
 
 """

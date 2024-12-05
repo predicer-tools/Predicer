@@ -80,6 +80,23 @@ Returns the length of the timesteps between t and t+1 compared to one hour.
 (tem::Temporals)(t::String) = tem(tem.times[t])
 
 """
+$(TYPEDSIGNATURES)
+
+Return the beginning of the time period represented by `tem`.
+"""
+start(tem::Temporals) :: DateTime = first(tem.times).second
+
+"""
+$(TYPEDSIGNATURES)
+
+Return the end of the time period represented by `tem`.
+"""
+function end_of(tem::Temporals) :: DateTime
+    lt = last(tem.times).second
+    return lt + tem(lt)
+end
+
+"""
     mutable struct State
         in_max::Float64
         out_max::Float64

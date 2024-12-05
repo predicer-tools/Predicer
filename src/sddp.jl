@@ -173,7 +173,19 @@ function sddp_create_bid_state(mc::OrderedDict, shape::StateShape)
     end
 end
 
+"""
+$(TYPEDSIGNATURES)
 
+Return the time index to `v_cleared_volume` corresponding to `t` for
+market `m`.  No bounds checking.
+"""
+function cv_slot_of(m::String, t::DateTime, inp::InputData, sp::StageParam)
+    epoch = inp.bid_slots[m].time_steps[1]
+    mtu = sp.shape.bid_shapes[m].mtu
+    ti = fld(t - epoch, mtu)
+    t0i = fld(start(inp.temporals) - epoch, mtu)
+    return ti - t0i + 1
+end
 
 """
 $(TYPEDSIGNATURES)
@@ -196,6 +208,8 @@ function sddp_markov_mats(
     @assert all(inp.setup.common_start_timesteps == 0
                 && inp.setup.common_end_timesteps == 0
                 for inp in inputs)
+    @assert all(start(inputs[i].temporals) == end_of(inputs[i - 1].temporals)
+                for i in 2 : length(inputs))
     p(i) = [values(inputs[i].scenarios)...]'
     [[1.]', (repeat(p(i), i == 1 ? 1 : length(inputs[i - 1].scenarios))
              for i in 1 : length(inputs))...]
