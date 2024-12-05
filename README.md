@@ -158,7 +158,8 @@ The setup sheet is used to define specific parameters used to define the functio
 | use_reserve_realisation  | Bool   | Indicates whether reserves can be realised. If set to false, no realisation occurs.                                             |
 | use_node_dummy_variables | Bool   | Indicates if dummy variables should be used in the node balance equations.                                                      |
 | use_ramp_dummy_variables | Bool   | Indicates if dummy variables should be used in the ramp balance equations.                                                      |
-| common_timesteps         | Int    | Indicates the length of a common start, where the parameters and variable values are equal across all scenarios. Default is 0.  |
+| common_start_timesteps   | Int    | Indicates the length of a common start, where the parameters and variable values are equal across all scenarios. Default is 0.  |
+| common_end_timesteps     | Int    | Indicates the length of a common end, where the parameters and variable values are equal across all scenarios. Default is 0.    |
 | common_scenario_name     | String | Name of the common start scenario, if it is used.                                                                               |
 
 

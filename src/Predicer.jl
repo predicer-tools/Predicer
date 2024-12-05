@@ -6,7 +6,6 @@ module Predicer
     include("constraints.jl")
     include("validate_data.jl")
     include("init.jl")
-
     include("import_input_data.jl")
 
     include("sddp.jl")
@@ -16,8 +15,14 @@ module Predicer
     solve_model,
     export_model_contents,
     get_result_dataframe,
+    get_costs_dataframe,
+    get_node_balance,
+    get_process_balance,
     write_bid_matrix,
-    resolve_market_nodes
+    get_bidding_dataframes,
+    write_bidslot_matrix,
+    resolve_market_nodes,
+    dfs_to_xlsx
 
     export Node,
     Process, 
