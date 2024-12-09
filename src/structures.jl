@@ -93,7 +93,7 @@ Return the end of the time period represented by `tem`.
 """
 function end_of(tem::Temporals) :: DateTime
     lt = last(tem.times).second
-    return lt + tem(lt)
+    return lt + Hour(tem(lt))
 end
 
 """

@@ -1345,11 +1345,25 @@ function setup_bidding_curve_constraints(
     @constraint(model, bid_slot_eq[m = keys(bid_slots), s = scens, t = times],
         v_bid[m, s, t] == e_bid(m, s, t))
     if sddp
+        @assert length(scens) == 1
+        (scen,) = scens
         len_st(m) = cv_slot_of(m, end_of(input_data.temporals),
                                input_data, sddp_par)
-        bid_start(m) = cv_slot_of(m, bid_slots[m].time_steps[1],
-                                  input_data, sddp_par)
-        #TODO cleared_vol.out
+        len_cv(m) = len_cleared_vol(sddp_par.shape.bid_shapes[m])
+        function e_bid2(m, ti)
+            if clears(m)
+                bsts = bid_slots[m].time_steps
+                bid_start = cv_slot_of(m, bsts[1], input_data, sddp_par)
+                tb = ti - bid_start + 1
+                if tb > 0
+                    return tb > length(bsts) ? 0 : e_bid_slot[m, scen, tb]
+                end
+            end
+            return ti > len_cv(m) ? 0 : cleared_vol[m, ti].in
+        end
+        @constraint(model,
+                    c_cleared_vol[m = keys(bid_slots), ti = 1 : len_cv(m)],
+                    cleared_vol[m, ti].out == e_bid2(m, ti + len_st(m)))
     end
 end
 

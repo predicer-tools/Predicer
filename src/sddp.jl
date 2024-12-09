@@ -151,6 +151,8 @@ shall_bid(m::String, sp::StageParam) = sp.stage in sp.staging.markets[m].bid
 shall_clear(m::String, sp::StageParam) =
     sp.stage in sp.staging.markets[m].clear
 
+len_cleared_vol(bsh::BidShape) = bsh.n_curves + bsh.overlap
+
 """
 $(TYPEDSIGNATURES)
 
@@ -168,7 +170,7 @@ function sddp_create_bid_state(mc::OrderedDict, shape::StateShape)
 
         #TODO means for giving the initial value
         v_cleared_volume[
-            m = keys(bss), t = 1 : bss[m].n_curves + bss[m].overlap
+            m = keys(bss), t = 1 : len_cleared_vol(bss[m])
         ] ≥ bss[m].lower_bound, (SDDP.State, initial_value=0)
     end
 end
