@@ -130,7 +130,11 @@ function create_v_state(model_contents::OrderedDict, input_data::InputData)
 
     if input_data.setup.contains_states
         # Node state variable
-        v_state = @variable(model, v_state[tup in node_state_tuple] >= 0)
+        @variable(
+            model,
+            input_data.nodes[tup[1]].state.state_min
+            <= v_state[tup in node_state_tuple]
+            <= input_data.nodes[tup[1]].state.state_max)
     end
     
     if input_data.setup.use_node_dummy_variables

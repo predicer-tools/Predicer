@@ -49,17 +49,17 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
     constraint_indices = balance_node_tuples(input_data)
 
     # initialize expressions
-    e_constraint_node_bal_eq = @expression(model, e_constraint_node_bal_eq[tup in constraint_indices], AffExpr(0.0))
-    e_node_bal_eq_prod = @expression(model, e_node_bal_eq_prod[tup in constraint_indices], AffExpr(0.0))
-    e_node_bal_eq_cons = @expression(model, e_node_bal_eq_cons[tup in constraint_indices], AffExpr(0.0))
-    e_node_bal_eq_history = @expression(model, e_node_bal_eq_history[tup in constraint_indices], AffExpr(0.0))
-    e_node_bal_eq_inflow_expr =  @expression(model, e_node_bal_eq_inflow_expr[tup in constraint_indices], AffExpr(0.0))
-    e_node_bal_eq_inflow_block_expr =  @expression(model, e_node_bal_eq_inflow_block_expr[tup in constraint_indices], AffExpr(0.0))
-    e_node_bal_eq_diffusion = @expression(model, e_node_bal_eq_diffusion[tup in constraint_indices], AffExpr(0.0))
-    e_node_bal_eq_state_balance = @expression(model, e_node_bal_eq_state_balance[tup in constraint_indices], AffExpr(0.0))
-    e_node_bal_eq_state_losses = @expression(model, e_node_bal_eq_state_losses[tup in constraint_indices], AffExpr(0.0))
-    e_node_bal_eq_delay = @expression(model, e_node_bal_eq_delay[tup in constraint_indices], AffExpr(0.0))
-    e_node_bal_eq_res_real = @expression(model, e_node_bal_eq_res_real[tup in constraint_indices], AffExpr(0.0))
+    @expressions model begin
+        e_constraint_node_bal_eq[tup in constraint_indices], AffExpr(0.0)
+        e_node_bal_eq_prod[tup in constraint_indices], AffExpr(0.0)
+        e_node_bal_eq_cons[tup in constraint_indices], AffExpr(0.0)
+        e_node_bal_eq_history[tup in constraint_indices], AffExpr(0.0)
+        e_node_bal_eq_inflow_expr[tup in constraint_indices], AffExpr(0.0)
+        e_node_bal_eq_inflow_block_expr[tup in constraint_indices], AffExpr(0.0)
+        e_node_bal_eq_diffusion[tup in constraint_indices], AffExpr(0.0)
+        e_node_bal_eq_delay[tup in constraint_indices], AffExpr(0.0)
+        e_node_bal_eq_res_real[tup in constraint_indices], AffExpr(0.0)
+    end
 
     # consumer/producer flows and loads
     v_flow = model.obj_dict[:v_flow]
@@ -80,27 +80,45 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
         end
     end
 
+    prev_times = previous_times(input_data)
+    state_nodes = [n.name for n in values(input_data.nodes) if n.is_state]
+    scens = scenarios(input_data)
+    times = input_data.temporals.t
+    function temp_conv(n, x)
+        st = input_data.nodes[n].state
+        st.is_temp ? st.t_e_conversion * x : x
+    end
+    v_st(n, s, t) = model[:v_state][
+        validate_tuple(val_dict, common_ts, (n, s, t), 2)]
+    v_st_prev(n, s, t) = (
+        t != times[1] ? v_st(n, s, prev_times[t])
+        #TODO SDDP state
+        : input_data.nodes[n].state.initial_state
+    )
+    @expressions model begin
+        e_node_bal_eq_state_balance[n = state_nodes, s = scens, t = times],
+        temp_conv(n, v_st(n, s, t) - v_st_prev(n, s, t))
+        
+        e_node_bal_eq_state_losses[n = state_nodes, s = scens, t = times],
+        (input_data.nodes[n].state.state_loss_proportional
+         * input_data.temporals(t) * v_st_prev(n, s, t))
+    end
     # state in/out/max/ in, etc
     if input_data.setup.contains_states
-        v_state = model.obj_dict[:v_state]
-        prev_times = previous_times(input_data)
-        pnbt(tup) = (tup[1 : 2]..., prev_times[tup[3]])
         for tup in state_node_tuples(input_data)
-            add_to_expression!(e_node_bal_eq_state_balance[tup], v_state[validate_tuple(val_dict, common_ts, tup, 2)])
-            if tup[3] == input_data.temporals.t[1] #first timestep
-                add_to_expression!(e_node_bal_eq_state_balance[tup], input_data.nodes[tup[1]].state.initial_state, -1)
-                add_to_expression!(e_node_bal_eq_state_losses[tup], input_data.nodes[tup[1]].state.state_loss_proportional*input_data.temporals(tup[3])*input_data.nodes[tup[1]].state.initial_state)
-            else
-                add_to_expression!(e_node_bal_eq_state_balance[tup], -v_state[validate_tuple(val_dict, common_ts, pnbt(tup), 2)])
-                add_to_expression!(e_node_bal_eq_state_losses[tup], input_data.nodes[tup[1]].state.state_loss_proportional*input_data.temporals(tup[3]), v_state[validate_tuple(val_dict, common_ts, pnbt(tup), 2)])
-            end
-            if input_data.nodes[tup[1]].state.is_temp
-                e_node_bal_eq_state_balance[tup] *= input_data.nodes[tup[1]].state.t_e_conversion
-            end
-            add_to_expression!(e_constraint_node_bal_eq[tup], e_node_bal_eq_state_balance[tup], -1)
-            add_to_expression!(e_constraint_node_bal_eq[tup], e_node_bal_eq_state_losses[tup], -1)
+            add_to_expression!(
+                e_constraint_node_bal_eq[tup],
+                e_node_bal_eq_state_balance[tup...], -1)
+            add_to_expression!(
+                e_constraint_node_bal_eq[tup],
+                e_node_bal_eq_state_losses[tup...], -1)
         end
     end
+    @constraint(
+        model, con_node_state_max[n = state_nodes, s = scens, t = times],
+        -input_data.nodes[n].state.out_max * input_data.temporals(t)
+        <= e_node_bal_eq_state_balance[n, s, t]
+        <= input_data.nodes[n].state.in_max * input_data.temporals(t))
 
     # v_res_real
     if input_data.setup.contains_reserves
@@ -166,20 +184,19 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
 
     #setup diffusion expression
     if input_data.setup.contains_diffusion && input_data.setup.contains_states
-        v_state = model.obj_dict[:v_state]
         for d_node in unique(map(x -> x[1], node_diffusion_tuple(input_data)))
             from_diff = filter(x -> x.node1 == d_node, input_data.node_diffusion)
             to_diff = filter(x -> x.node2 == d_node, input_data.node_diffusion)
             for s in scenarios(input_data), t in input_data.temporals.t
                 d_tup = (d_node, s, t)
-                d_node_state = v_state[validate_tuple(val_dict, common_ts, d_tup, 2)]
+                d_node_state = v_st(d_node, s, t)
                 if !input_data.nodes[d_node].state.is_temp
                     d_node_state /= input_data.nodes[d_node].state.t_e_conversion
                 end
                 for from_node in from_diff
                     c = from_node.coefficient(s, t)
                     n_ = from_node.node2
-                    n_node_state = v_state[validate_tuple(val_dict, common_ts, (n_, s, t), 2)]
+                    n_node_state = v_st(n_, s, t)
                     if !input_data.nodes[n_].state.is_temp
                         n_node_state /= input_data.nodes[n_].state.t_e_conversion
                     end
@@ -189,7 +206,7 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
                 for to_node in to_diff
                     c = to_node.coefficient(s, t)
                     n_ = to_node.node1
-                    n_node_state = v_state[validate_tuple(val_dict, common_ts, (n_, s, t), 2)]
+                    n_node_state = v_st(n_, s, t)
                     if !input_data.nodes[n_].state.is_temp
                         n_node_state /= input_data.nodes[n_].state.t_e_conversion
                     end
@@ -242,14 +259,7 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
         end
     end
 
-    con_node_bal_eq = @constraint(model, con_node_bal_eq[ci in constraint_indices], e_constraint_node_bal_eq[ci] == 0)
-    con_node_state_max_up = @constraint(model, con_node_state_max_up[tup in state_node_tuples(input_data)], e_node_bal_eq_state_balance[tup] <= input_data.nodes[tup[1]].state.in_max * input_data.temporals(tup[3]))
-    con_node_state_max_dw = @constraint(model, con_node_state_max_dw[tup in state_node_tuples(input_data)], -e_node_bal_eq_state_balance[tup] <= input_data.nodes[tup[1]].state.out_max * input_data.temporals(tup[3]))
-
-    for tu in state_node_tuples(input_data)
-        set_upper_bound(v_state[validate_tuple(val_dict, common_ts, tu, 2)], input_data.nodes[tu[1]].state.state_max)
-        set_lower_bound(v_state[validate_tuple(val_dict, common_ts, tu, 2)], input_data.nodes[tu[1]].state.state_min)
-    end
+    @constraint(model, con_node_bal_eq[ci in constraint_indices], e_constraint_node_bal_eq[ci] == 0)
 end
 
 
