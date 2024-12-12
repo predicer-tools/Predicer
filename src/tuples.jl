@@ -167,6 +167,29 @@ function reserve_market_directional_tuples(input_data::InputData) # original nam
 end
 
 
+proc_topos(inp::InputData) = ((p.name, t.source, t.sink)
+                              for p in values(inp.processes)
+                              for t in p.topos)
+
+"""
+$(TYPEDSIGNATURES)
+
+Return a pair of Dicts mapping market nodes to vectors of
+(process, source, sink) triples.  The first Dict contains the triples
+having the node as sink (incoming), the second as source (outgoing).
+Only nodes that the filter accepts (default all) are included in the dicts.
+"""
+function proc_index(inp::InputData, filter=x -> true)
+    proc_tup_in = DefaultDict{String, Vector{NTuple{3, String}}}(() -> [])
+    proc_tup_out = DefaultDict{String, Vector{NTuple{3, String}}}(() -> [])
+    for tup in proc_topos(inp)
+        (p, so, si) = tup
+        filter(si) && push!(proc_tup_in[si], tup)
+        filter(so) && push!(proc_tup_out[so], tup)
+    end
+    return (proc_tup_in, proc_tup_out)
+end
+
 """
     process_topology_tuples(input_data::InputData)
 
@@ -407,6 +430,9 @@ end
 
 
 is_balance_node(n::Node) = !n.is_commodity && !n.is_market
+is_balance_node(n::String, inp::InputData) = (
+    haskey(inp.nodes, n) && is_balance_node(inp.nodes[n])
+)
 
 """
     balance_node_tuples(input_data::InputData)
