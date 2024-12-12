@@ -389,25 +389,20 @@ function reserve_process_tuples(input_data::InputData) # original name: create_r
 end
 
 
+state_nodes(input_data::InputData) = (
+    input_data.setup.contains_states
+    ? [n.name for n in values(input_data.nodes) if n.is_state] : []
+)
+
 """
     state_node_tuples(input_data::InputData)
 
 Return tuples for each node with a state (storage) for every time step and scenario. Form: (n, s, t).
 """
 function state_node_tuples(input_data::InputData) # original name: create_node_state_tuple()
-    snt = NTuple{3, String}[]
-    if input_data.setup.contains_states
-        state_nodes = filter(x -> x.is_state, collect(values(input_data.nodes)))
-        scens = scenarios(input_data)
-        temporals = input_data.temporals
-        sizehint!(snt, length(state_nodes) * length(scens) * length(temporals.t))
-        for n in state_nodes
-            for s in scens, t in temporals.t
-                push!(snt, (n.name, s, t))
-            end
-        end
-    end
-    return snt
+    scens = scenarios(input_data)
+    [(n, s, t) for n in state_nodes(input_data)
+     for s in scens for t in input_data.temporals.t]
 end
 
 
