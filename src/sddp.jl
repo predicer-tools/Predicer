@@ -58,6 +58,8 @@ $(TYPEDFIELDS)
 struct StateShape
     """Bid shapes by market"""
     bid_shapes::OrderedDict{String, BidShape}
+    """node -> (lb, ub) for `v_state`"""
+    node_state_bounds::Dict{String, NTuple{2, Real}}
 end
 
 """
@@ -67,7 +69,12 @@ $(TYPEDSIGNATURES)
 """
 StateShape(overlap, inp::InputData) = StateShape(
     OrderedDict(m => BidShape(m, inp, overlap(m))
-                for m in keys(inp.bid_slots)))
+                for m in keys(inp.bid_slots)),
+    inp.setup.contains_states
+    ? Dict(n.name => (n.state.state_min, n.state.state_max)
+           for n in inp.nodes if n.is_state)
+    : Dict()
+)
 
 """$(TYPEDSIGNATURES)"""
 StateShape(inp::InputData) = StateShape(_ -> -1, inp)
@@ -156,14 +163,11 @@ len_cleared_vol(bsh::BidShape) = bsh.n_curves + bsh.overlap
 """
 $(TYPEDSIGNATURES)
 
-Add bid curve state variables.  The markets, bid slots and times are obtained
-from `shape` and must be identical for all stages, which all must call
-this function with `mc["model"]` set to the stage subproblem.  Replaces
-`create_v_bid_volume` for SDDP.
+Add bid curve state variables.  Replaces `create_v_bid_volume` for SDDP.
 """
-function sddp_create_bid_state(mc::OrderedDict, shape::StateShape)
+function sddp_create_bid_state(model, shape::StateShape)
     bss = shape.bid_shapes
-    @variables mc["model"] begin
+    @variables model begin
         v_bid_volume[
             m = keys(bss), s = bss[m].slots, t = 1 : bss[m].n_curves
         ] ≥ bss[m].lower_bound, (SDDP.State, initial_value=0)
@@ -172,6 +176,26 @@ function sddp_create_bid_state(mc::OrderedDict, shape::StateShape)
         v_cleared_volume[
             m = keys(bss), t = 1 : len_cleared_vol(bss[m])
         ] ≥ bss[m].lower_bound, (SDDP.State, initial_value=0)
+    end
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Add SDDP state variables.  Dimensions and indices are defined by `shape`,
+which must be identical for all stages, which all must call this function
+with `mc["model"]` set to the stage subproblem.  The first stage input
+data `inp1` is used for initial values.
+"""
+function sddp_create_state(mc::OrderedDict, shape::StateShape,
+                           inp1::InputData)
+    model = mc["model"]
+    sddp_create_bid_state(model, shape)
+
+    bds = shape.node_state_bounds
+    @variables model begin
+        bds[n][1] ≤ v_node_state[n = keys(bds)] ≤ bds[n][2],
+        (SDDP.State, initial_value=inp1.nodes[n].state.initial_state)
     end
 end
 
@@ -260,7 +284,7 @@ function sddp_policy_graph(
         mc = build_model_contents_dict(inp)
         mc["model"] = sp
         mc["sddp"] = StageParam(st_shape, staging, st - 1)
-        sddp_create_bid_state(mc, st_shape)
+        sddp_create_state(mc, st_shape, inputs[1])
         if st == 1
             setup_bidding_volume_constraints(mc, inp)
         else

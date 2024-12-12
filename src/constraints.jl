@@ -102,11 +102,18 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
     end
     v_st(n, s, t) = model[:v_state][
         validate_tuple(val_dict, common_ts, (n, s, t), 2)]
+    sddp = haskey(model_contents, "sddp")
     v_st_prev(n, s, t) = (
         t != times[1] ? v_st(n, s, prev_times[t])
-        #TODO SDDP state
+        : sddp ? model[:v_node_state][n].in
         : input_data.nodes[n].state.initial_state
     )
+    if sddp && input_data.setup.contains_states
+        (scen,) = scenarios(input_data)
+        tend = input_data.temporals.t[end]
+        @constraint(model, c_node_state[n = state_nodes(input_data)],
+                    model[:v_node_state].out == v_st(n, scen, tend))
+    end
     @expressions model begin
         e_node_bal_eq_state_balance[n = states, s = scens, t = times],
         temp_conv(n, v_st(n, s, t) - v_st_prev(n, s, t))
