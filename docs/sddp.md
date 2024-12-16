@@ -17,6 +17,16 @@ the currently broken hydro model could be developed into one.  As it
 is, some parts of the SDDP support have been tested a little and
 others not at all.
 
+[SDDP]: https://sddp.dev/stable/
+
+[^multistage]: In stochastic programming parlance, stages are
+    separated by random events.  The simplest case is a two-stage
+    model, where some random event causes different scenarios.  First
+    stage decisions are made before the random event occurs and cannot
+    depend on the scenario.  Second stage decisions are made
+    afterwards and vary by scenario.  Multistage means more than
+    two stages.
+
 ## A single Predicer model in SDDP
 
 Using SDDP imposes some restrictions on the Predicer model:
@@ -36,20 +46,19 @@ are implemented by the SDDP framework; the same combined mean and CVaR is
 available as in plain Predicer.
 
 SDDP models are represented as so-called policy graphs.  These are
-directed graphs with a dummy start node followed by one or more nodes
-for each stage.  Randomness can be introduced in two ways: by
-branching in the graph with assigned transition probabilities and by
-having multiple scenarios inside a node.  In the Julia framework, the
-latter requires modifying an already created JuMP model according to
-the scenario, an ability that Predicer does not have and that would be
-difficult to develop.  Hence we represent each Predicer scenario as a
-separate second stage node.  This does not scale quite as well as
-node-internal randomness, but should scale to hundreds of scenarios
-and allows Markovian dependencies for multistage (scenario
-probabilities may depend on the previous stage scenario).  The second
-stage nodes are preceded by a single first stage node for the bidding.
-Such a policy graph can be created from a Predicer `InputData`
-structure.
+directed graphs with a dummy start node followed by one or more
+alternative nodes for each stage.  Randomness can be introduced in two
+ways: by branching in the graph with assigned transition probabilities
+and by having multiple scenarios inside a node.  In the Julia
+framework, the latter requires modifying an existing JuMP model
+according to the scenario, which is difficult to implement in
+Predicer.  Hence we represent each Predicer scenario as a separate
+second stage node.  This does not scale quite as well as node-internal
+randomness, but should scale to hundreds of scenarios and allows
+Markovian dependencies for multistage (scenario probabilities may
+depend on the previous stage scenario).  The second stage nodes are
+preceded by a single first stage node for the bidding.  Such a policy
+graph can be created from a Predicer `InputData` structure.
 
 ## Multistage models
 
@@ -110,11 +119,20 @@ supported.
   iterating over scenarios.
 - We may do something similar to time later.  To anticipate that,
   always iterate over time using `Temporals.t` or `Temporals.times`.
-- TODO `StateShape` etc.
+- `StateShape` encapsulates the properties of `InputData` that
+  determine the SDDP state variables.  For multistage, each stage
+  `InputData` must yield identical `StateShape`.
+- `Staging` contains data about the stage structure that is not
+  present in the stage `InputData`.  Currently there is just the
+  market staging described above.
 - Parts of Predicer model assembly need to be aware if they are
   building an SDDP subproblem or a regular Predicer model.  They check
   for `mc["sddp"]`, which contains a `StageParam` for SDDP and is
-  absent otherwise.
+  absent otherwise.  `StageParam` included `StateShape`, `Staging` and
+  the current stage number.
+- In `StageParam` and `Staging`, stage numbers start from zero: stage
+  0 only bids the markets indicated in `Staging`.  Other stage numbers
+  correspond to the `InputData` sequence.
 
 ## To do
 
@@ -127,13 +145,6 @@ supported.
   for a multistage problem would be constructed.  Having a separete
   Excel workbook for each seems hardly feasible.  Perhaps a single
   `InputData` could be split into parts for building the stages?
-
-[SDDP]: https://sddp.dev/stable/
-
-[^multistage]: In stochastic programming parlance, stages are
-    separated by random events.  The simplest case is a two-stage
-    model, where some random event causes different scenarios.  First
-    stage decisions are made before the random event occurs and cannot
-    depend on the scenario.  Second stage decisions are made
-    afterwards and vary by scenario.  Multistage means more than
-    two stages.
+- The Excel workbook format is unwieldy even for two-stage if one
+  wants to have hundreds of scenarios.  Typically one would then
+  generate scenarios by sampling some random process.
