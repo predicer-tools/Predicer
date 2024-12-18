@@ -985,7 +985,15 @@ function setup_reserve_balances(model_contents::OrderedDict, input_data::Predice
         # res_tuple is the tuple use for v_res (market, n, res_dir, s, t)
         # res_eq_updn_tuple (market, s, t)
         # the previously used tuple is res_eq_tuple, of form (ng, rt, s, t)
-        res_eq_updn = @constraint(model, res_eq_updn[tup in res_eq_updn_tuple], v_res[validate_tuple(val_dict, common_ts, (tup[1], markets[tup[1]].node, res_dir[1], tup[2], tup[3]), 4)] - v_res[validate_tuple(val_dict, common_ts, (tup[1], markets[tup[1]].node, res_dir[2], tup[2], tup[3]), 4)] == 0)
+        res_eq_updn = @constraint(
+            model, res_eq_updn[tup in res_eq_updn_tuple],
+            v_res[validate_tuple(
+                val_dict, common_ts,
+                (tup[1], markets[tup[1]].node, res_dir[1], tup[2], tup[3]), 4)]
+            - v_res[validate_tuple(
+                val_dict, common_ts,
+                (tup[1], markets[tup[1]].node, res_dir[2], tup[2], tup[3]), 4)]
+            == 0)
         res_eq_up = @constraint(model, res_eq_up[tup in res_nodegroup], e_res_bal_up[tup] == 0)
         res_eq_dn = @constraint(model, res_eq_dn[tup in res_nodegroup], e_res_bal_dn[tup] == 0)
 
@@ -1003,7 +1011,12 @@ function setup_reserve_balances(model_contents::OrderedDict, input_data::Predice
             end
             for s in scenarios(input_data), t in input_data.temporals.t
                 r_tup = map(x -> (x..., s, t), red_r_tup)
-                reserve_final_exp[(tup, s, t)] = @expression(model, sum(v_res[validate_tuples(val_dict, common_ts, r_tup, 4)]) .* (markets[tup].direction == "up_down" ? 0.5 : 1.0) .- v_res_final[validate_tuple(val_dict, common_ts, (tup, s, t), 2)])
+                reserve_final_exp[(tup, s, t)] = @expression(
+                    model,
+                    sum(v_res[validate_tuples(val_dict, common_ts, r_tup, 4)])
+                        * (markets[tup].direction == "up_down" ? 0.5 : 1.0)
+                    - v_res_final[validate_tuple(
+                        val_dict, common_ts, (tup, s, t), 2)])
             end
         end
         reserve_final_eq = @constraint(model, reserve_final_eq[tup in res_final_tuple], reserve_final_exp[tup] == 0)
@@ -1270,14 +1283,14 @@ equating the two.  m runs over markets having bid slots.
 For SDDP, it is more complicated.  Let the stage timespan be [s0, s1] and
 the bid timespan [b0, b1].
 - If the market does not clear at s0:
-    * `v_bid` is set from `v_cleared_volume.in`.
-    * `v_cleared_volume.out` is set from `v_cleared_volume.in`, shifted
+    * `v_bid` is set to `v_cleared_volume.in`.
+    * `v_cleared_volume.out` is set to `v_cleared_volume.in`, shifted
       by ⌊s1⌋ - ⌊s0⌋, where floor is taken with respect to MTU using
       BidSlot.time_steps[1] as the origin.
 - If the market clears at s0:
-    * `v_bid` is set from `v_cleared_volume.in` during [s0, min(s1, b0)]
+    * `v_bid` is set to `v_cleared_volume.in` during [s0, min(s1, b0)]
       and interpolated from bid curves during [min(s1, b0), s1]
-    * `v_cleared_volume.out` is similarly set from `v_cleared_volume.in`
+    * `v_cleared_volume.out` is similarly set to `v_cleared_volume.in`
       or interpolated bid curves, shifting as above.  It extends to b1.
 
 # Arguments
