@@ -69,7 +69,7 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
     # consumer/producer flows and loads
     v_flow = model.obj_dict[:v_flow]
     prod_flows, cons_flows = proc_index(
-        input_data, n -> is_balance_node(n, input_data))
+        n -> is_balance_node(n, input_data), input_data)
     for no in values(input_data.nodes)
         is_balance_node(no) || continue
         n = no.name
@@ -1309,7 +1309,7 @@ function setup_bidding_curve_constraints(
     name, so we wouldn't need to search for it.
     =#
     (proc_tup_in, proc_tup_out) = proc_index(
-        input_data, n -> haskey(markets, n))
+        n -> haskey(markets, n), input_data)
 
     v_flow = model[:v_flow]
     v_flow_bal = model[:v_flow_bal]
