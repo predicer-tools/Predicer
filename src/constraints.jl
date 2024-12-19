@@ -63,17 +63,18 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
 
     # consumer/producer flows and loads
     v_flow = model.obj_dict[:v_flow]
-    reduced_v_flow_inds = unique(map(x -> (x[1:3]), process_topology_tuples(input_data)))
-    for n in unique(map(nbt -> nbt[1], balance_node_tuples(input_data)))
-        cons_flows = filter(rvfi -> rvfi[2] == n, reduced_v_flow_inds)
-        prod_flows = filter(rvfi -> rvfi[3] == n, reduced_v_flow_inds)
+    prod_flows, cons_flows = proc_index(
+        input_data, n -> is_balance_node(n, input_data))
+    for no in values(input_data.nodes)
+        is_balance_node(no) || continue
+        n = no.name
         for s in scenarios(input_data), t in input_data.temporals.t
             e_constraint_node_bal_eq[(n, s, t)] = AffExpr(0.0)
-            for cf in cons_flows
+            for cf in cons_flows[n]
                 e_node_bal_eq_cons[(n, s, t)] += v_flow[
                     validate_tuple(val_dict, common_ts, (cf..., s, t), 4)]
             end
-            for pf in prod_flows
+            for pf in prod_flows[n]
                 e_node_bal_eq_prod[(n, s, t)] += v_flow[
                     validate_tuple(val_dict, common_ts, (pf..., s, t), 4)] 
             end
@@ -1243,33 +1244,6 @@ function setup_fixed_values(model_contents::OrderedDict, input_data::Predicer.In
     fixed_value_eq = @constraint(model, fixed_value_eq[tup in fixed_value_tuple], fix_expr[tup] == 0)
 end
 
-#XXX Should this be somewhere else?
-"""
-    market_proc_index(input_data)
-
-Return a pair of Dicts mapping market names to (process, source, sink) triples
-The first Dict contains the triple having the market as sink (incoming),
-the second as source (outgoing).  It is assumed there is only one of each.
-"""
-function market_proc_index(inp::InputData)
-    #=TODO This assumes too little or too much.
-    If we wanted to be general, we'd allow multiple in and out processes.
-    On the other hand, market processes are created so that there is one
-    per market, the same in and out, and its name is derived from the market
-    name, so we wouldn't need to search for it.
-    =#
-    proc_tup_in = Dict{String, NTuple{3, String}}()
-    proc_tup_out = Dict{String, NTuple{3, String}}()
-    for p in values(inp.processes), topo in p.topos
-        if topo.sink in keys(inp.markets)
-            proc_tup_in[topo.sink] = (p.name, topo.source, topo.sink)
-        end
-        if topo.source in keys(inp.markets)
-            proc_tup_out[topo.source] = (p.name, topo.source, topo.sink)
-        end
-    end
-    return (proc_tup_in, proc_tup_out)
-end
 
 """
     setup_bidding_curve_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
@@ -1286,7 +1260,13 @@ function setup_bidding_curve_constraints(model_contents::OrderedDict, input_data
     common_ts = model_contents["common_timesteps"]
     markets = input_data.markets
     b_slots = input_data.bid_slots
-    (proc_tup_in, proc_tup_out) = market_proc_index(input_data)
+    #=XXX Overkill.
+    Market processes are created so that there is one
+    per market, the same in and out, and its name is derived from the market
+    name, so we wouldn't need to search for it.
+    =#
+    (proc_tup_in, proc_tup_out) = proc_index(
+        input_data, n -> haskey(markets, n))
 
     v_flow = model.obj_dict[:v_flow]
     v_flow_bal = model.obj_dict[:v_flow_bal]
@@ -1296,8 +1276,8 @@ function setup_bidding_curve_constraints(model_contents::OrderedDict, input_data
     e_bid_slot = OrderedDict()
 
     for m in keys(b_slots)
-        m_cons_flow = proc_tup_out[m]
-        m_prod_flow = proc_tup_in[m]
+        m_cons_flow = proc_tup_out[m][1]
+        m_prod_flow = proc_tup_in[m][1]
         m_cons_bal_flow = (m, "dw")
         m_prod_bal_flow = (m, "up")
         [e_bid_slot[(m, s, string(t))] = AffExpr(0.0) for s in scenarios(input_data), t in input_data.bid_slots[m].time_steps];
@@ -1366,7 +1346,8 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
     markets = input_data.markets
     scens = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
-    (proc_tup_in, proc_tup_out) = market_proc_index(input_data)
+    (proc_tup_in, proc_tup_out) = proc_index(
+        input_data, n -> haskey(markets, n))
 
     v_flow = model[:v_flow]
     v_flow_bal = model[:v_flow_bal]
@@ -1381,8 +1362,8 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
             pcols = []
             sizehint!(pcols, length(scens))
             if markets[m].m_type == "energy"
-                m_cons_flow = proc_tup_out[m] # market consuming flow
-                m_prod_flow = proc_tup_in[m] # market producing flow
+                m_cons_flow = proc_tup_out[m][1] # market consuming flow
+                m_prod_flow = proc_tup_in[m][1] # market producing flow
                 m_cons_bal_flow = (m, "dw") # bal market consuming flow
                 m_prod_bal_flow = (m, "up") # bal market producing flow
                 for s in scens
