@@ -179,7 +179,7 @@ Return a pair of Dicts mapping market nodes to vectors of
 having the node as sink (incoming), the second as source (outgoing).
 Only nodes that the filter accepts (default all) are included in the dicts.
 """
-function proc_index(inp::InputData, filter=x -> true)
+function proc_index(filter::Function, inp::InputData)
     proc_tup_in = DefaultDict{String, Vector{NTuple{3, String}}}(() -> [])
     proc_tup_out = DefaultDict{String, Vector{NTuple{3, String}}}(() -> [])
     for tup in proc_topos(inp)
@@ -189,6 +189,7 @@ function proc_index(inp::InputData, filter=x -> true)
     end
     return (proc_tup_in, proc_tup_out)
 end
+proc_index(inp::InputData) = proc_index(x -> true, inp)
 
 """
     process_topology_tuples(input_data::InputData)
