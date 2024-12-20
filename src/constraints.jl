@@ -298,15 +298,20 @@ function setup_process_online_balance(model_contents::OrderedDict, input_data::P
     temporals = input_data.temporals
     prev_times = previous_times(input_data)
     # Dynamic equations for start/stop online variables
-    vtu(tup...) = validate_tuple(val_dict, common_ts, tup, 2)
+    vtu2(tup...) = validate_tuple(val_dict, common_ts, tup, 2)
     online_prev(p, s, t) =
         (t == first(temporals.t) ? Int(processes[p].initial_state)
-                                 : v_online[vtu(p, s, prev_times[t])])
-    @constraint(
-        model, online_dyn_eq[p = online_procs, s = scenarios,
-                             t = temporals.t],
-        v_start[vtu(p, s, t)] - v_stop[vtu(p, s, t)]
-        - v_online[vtu(p, s, t)] + online_prev(p, s, t) == 0)
+                                 : v_online[vtu2(p, s, prev_times[t])])
+    @constraints model begin
+        online_dyn_eq[p = online_procs, s = scenarios, t = temporals.t],
+        (v_start[vtu2(p, s, t)] - v_stop[vtu2(p, s, t)]
+         - v_online[vtu2(p, s, t)] + online_prev(p, s, t)) == 0
+
+        # This used to follow from the period constraints below for t = t',
+        # but we no longer post them, only t < t'.  This is 1 row, they were 4.
+        online_no_twiddling,
+        v_start .+ v_stop .≤ 1
+    end
 
     ## setup constraints for scenario independent online processes
     # v_online[s1] == v_online[s2]
@@ -338,66 +343,46 @@ function setup_process_online_balance(model_contents::OrderedDict, input_data::P
 
     ts_as_zdt = temporals.times
 
-    for p in online_procs
-        min_online = processes[p].min_online * Dates.Minute(60)
-        min_offline = processes[p].min_offline * Dates.Minute(60)
+    # get all timesteps that are within tlen strictly after t.
+    #FIXME Should probably be strict also in the high end?
+    ts_range(t, tlen) = filter(temporals.t) do t1
+        Dates.Minute(0) < ts_as_zdt[t1] - ts_as_zdt[t] ≤ tlen
+    end
 
-        for s in scenarios, t in temporals.t
-            # get all timesteps that are within min_online/min_offline after t.
-            min_on_hours = filter(temporals.t) do x
-                Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= min_online
-            end
-            min_off_hours = filter(temporals.t) do x
-                Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= min_offline
-            end
+    min_online(p) = processes[p].min_online * Dates.Minute(60)
+    min_offline(p) = processes[p].min_offline * Dates.Minute(60)
+    max_online(p) = processes[p].max_online * Dates.Minute(60)
+    max_offline(p) = processes[p].max_offline * Dates.Minute(60)
 
-            #XXX This smells funny.  Should the first inequality be strict?
-            # No x == t?  Also above?
-            #FIXME Assumes Δt = 1 h.  It gets worse below, not just naming.
-            # What about non-uniform Δt?
-            if processes[p].max_online == 0.0
-                max_on_hours = []
-            else
-                max_online = processes[p].max_online * Dates.Minute(60)
-                max_on_hours = filter(x-> Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= max_online, temporals.t)
-            end
-            if processes[p].max_offline == 0.0
-                max_off_hours = []
-            else
-                max_offline = processes[p].max_offline * Dates.Minute(60)
-                max_off_hours = filter(x-> Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= max_offline, temporals.t)
-            end
+    @constraints model begin
+        min_online_con[p = online_procs, s = scenarios, t = temporals.t,
+                       t1 = ts_range(t, min_online(p))],
+        v_online[vtu2(p, s, t1)] ≥ v_start[vtu2(p, s, t)]
 
-            for h in min_on_hours
-                min_online_rhs[(p, s, t, h)] = v_start[validate_tuple(val_dict, common_ts, (p,s,t), 2)]
-                min_online_lhs[(p, s, t, h)] = v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)]
-            end
-            for h in min_off_hours
-                min_offline_rhs[(p, s, t, h)] = (1-v_stop[validate_tuple(val_dict, common_ts, (p,s,t), 2)])
-                min_offline_lhs[(p, s, t, h)] = v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)]
-            end
+        min_offline_con[p = online_procs, s = scenarios, t = temporals.t,
+                        t1 = ts_range(t, min_offline(p))],
+        v_online[vtu2(p, s, t1)] ≤ 1 - v_stop[vtu2(p, s, t)]
+    end
+    for p in online_procs, s in scenarios, t in temporals.t
+        #FIXME Assumes Δt = 1 h.  It gets worse below, not just naming.
+        max_on_hours = ts_range(t, max_online(p))
+        max_off_hours = ts_range(t, max_offline(p))
 
-            max_online_rhs[(p, s, t)] = processes[p].max_online
-            max_offline_rhs[(p, s, t)] = 1
-            if length(max_on_hours) > processes[p].max_online
-                max_online_lhs[(p, s, t)] = AffExpr(0.0)
-                for h in max_on_hours
-                    add_to_expression!(max_online_lhs[(p, s, t)], v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)])
-                end
+        max_online_rhs[(p, s, t)] = processes[p].max_online
+        max_offline_rhs[(p, s, t)] = 1
+        if length(max_on_hours) > processes[p].max_online
+            max_online_lhs[(p, s, t)] = AffExpr(0.0)
+            for h in max_on_hours
+                add_to_expression!(max_online_lhs[(p, s, t)], v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)])
             end
-            if length(max_off_hours) > processes[p].max_offline
-                max_offline_lhs[(p, s, t)] = AffExpr(0.0)
-                for h in max_off_hours
-                    add_to_expression!(max_offline_lhs[(p, s, t)], v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)])
-                end
+        end
+        if length(max_off_hours) > processes[p].max_offline
+            max_offline_lhs[(p, s, t)] = AffExpr(0.0)
+            for h in max_off_hours
+                add_to_expression!(max_offline_lhs[(p, s, t)], v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)])
             end
         end
     end
-
-    @constraint(model, min_online_con[tup in keys(min_online_lhs)],
-                min_online_lhs[tup] >= min_online_rhs[tup])
-    @constraint(model, min_offline_con[tup in keys(min_offline_lhs)],
-                min_offline_lhs[tup] <= min_offline_rhs[tup])
 
     @constraint(model, max_online_con[tup in keys(max_online_lhs)],
                 max_online_lhs[tup] <= max_online_rhs[tup])
