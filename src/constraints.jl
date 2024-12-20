@@ -273,7 +273,6 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
     @constraint(model, con_node_bal_eq, e_constraint_node_bal_eq .== 0)
 end
 
-
 """
     setup_process_online_balance(model_contents::OrderedDict, input_data::Predicer.InputData)
 
@@ -285,28 +284,30 @@ Setup necessary functionalities for processes with binary online variables.
 """
 function setup_process_online_balance(model_contents::OrderedDict, input_data::Predicer.InputData)
     if input_data.setup.contains_online
-        proc_online_tuple = online_process_tuples(input_data)
-        if !isempty(proc_online_tuple)
+        online_procs = [p.name for p in values(input_data.processes)
+                               if p.is_online]
+        if !isempty(online_procs)
             model = model_contents["model"]
             val_dict = model_contents["validation_dict"]
             common_ts = model_contents["common_timesteps"]
-            v_start = model.obj_dict[:v_start]
-            v_stop = model.obj_dict[:v_stop]
-            v_online = model.obj_dict[:v_online]
+            v_start = model[:v_start]
+            v_stop = model[:v_stop]
+            v_online = model[:v_online]
             
             processes = input_data.processes
-            scenarios = collect(keys(input_data.scenarios))
+            scenarios = Predicer.scenarios(input_data)
             temporals = input_data.temporals
+            prev_times = previous_times(input_data)
             # Dynamic equations for start/stop online variables
-            online_expr = model_contents["expression"]["online_expr"] = OrderedDict()
-            for (i,tup) in enumerate(proc_online_tuple)
-                if tup[3] == temporals.t[1]
-                    online_expr[tup] = @expression(model,v_start[validate_tuple(val_dict, common_ts, tup, 2)]-v_stop[validate_tuple(val_dict, common_ts, tup, 2)]-v_online[validate_tuple(val_dict, common_ts, tup, 2)] + Int(processes[tup[1]].initial_state))
-                else
-                    online_expr[tup] = @expression(model,v_start[validate_tuple(val_dict, common_ts, tup, 2)]-v_stop[validate_tuple(val_dict, common_ts, tup, 2)]-v_online[validate_tuple(val_dict, common_ts, tup, 2)]+v_online[validate_tuple(val_dict, common_ts, proc_online_tuple[i-1], 2)])
-                end
-            end
-            online_dyn_eq =  @constraint(model,online_dyn_eq[tup in proc_online_tuple], online_expr[tup] == 0)
+            vtu(tup...) = validate_tuple(val_dict, common_ts, tup, 2)
+            online_prev(p, s, t) =
+                (t == first(temporals.t) ? Int(processes[p].initial_state)
+                                         : v_online[vtu(p, s, prev_times[t])])
+            @constraint(
+                model, online_dyn_eq[p = online_procs, s = scenarios,
+                                     t = temporals.t],
+                v_start[vtu(p, s, t)] - v_stop[vtu(p, s, t)]
+                - v_online[vtu(p, s, t)] + online_prev(p, s, t) == 0)
 
             ## setup constraints for scenario independent online processes
             # v_online[s1] == v_online[s2]
@@ -338,62 +339,63 @@ function setup_process_online_balance(model_contents::OrderedDict, input_data::P
 
             ts_as_zdt = temporals.times
 
-            for p in unique(map(x -> x[1], proc_online_tuple))
+            for p in online_procs
                 min_online = processes[p].min_online * Dates.Minute(60)
                 min_offline = processes[p].min_offline * Dates.Minute(60)
 
+                for s in scenarios, t in temporals.t
+                    # get all timesteps that are within min_online/min_offline after t.
+                    min_on_hours = filter(x-> Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= min_online, temporals.t)
+                    min_off_hours = filter(x-> Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= min_offline, temporals.t)
 
-                for s in scenarios
-                    for t in temporals.t
-                        # get all timesteps that are within min_online/min_offline after t.
-                        min_on_hours = filter(x-> Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= min_online, temporals.t)
-                        min_off_hours = filter(x-> Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= min_offline, temporals.t)
+                    if processes[p].max_online == 0.0
+                        max_on_hours = []
+                    else
+                        max_online = processes[p].max_online * Dates.Minute(60)
+                        max_on_hours = filter(x-> Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= max_online, temporals.t)
+                    end
+                    if processes[p].max_offline == 0.0
+                        max_off_hours = []
+                    else
+                        max_offline = processes[p].max_offline * Dates.Minute(60)
+                        max_off_hours = filter(x-> Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= max_offline, temporals.t)
+                    end
 
-                        if processes[p].max_online == 0.0
-                            max_on_hours = []
-                        else
-                            max_online = processes[p].max_online * Dates.Minute(60)
-                            max_on_hours = filter(x-> Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= max_online, temporals.t)
-                        end
-                        if processes[p].max_offline == 0.0
-                            max_off_hours = []
-                        else
-                            max_offline = processes[p].max_offline * Dates.Minute(60)
-                            max_off_hours = filter(x-> Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= max_offline, temporals.t)
-                        end
+                    for h in min_on_hours
+                        min_online_rhs[(p, s, t, h)] = v_start[validate_tuple(val_dict, common_ts, (p,s,t), 2)]
+                        min_online_lhs[(p, s, t, h)] = v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)]
+                    end
+                    for h in min_off_hours
+                        min_offline_rhs[(p, s, t, h)] = (1-v_stop[validate_tuple(val_dict, common_ts, (p,s,t), 2)])
+                        min_offline_lhs[(p, s, t, h)] = v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)]
+                    end
 
-                        for h in min_on_hours
-                            min_online_rhs[(p, s, t, h)] = v_start[validate_tuple(val_dict, common_ts, (p,s,t), 2)]
-                            min_online_lhs[(p, s, t, h)] = v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)]
+                    max_online_rhs[(p, s, t)] = processes[p].max_online
+                    max_offline_rhs[(p, s, t)] = 1
+                    if length(max_on_hours) > processes[p].max_online 
+                        max_online_lhs[(p, s, t)] = AffExpr(0.0)
+                        for h in max_on_hours
+                            add_to_expression!(max_online_lhs[(p, s, t)], v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)])
                         end
-                        for h in min_off_hours
-                            min_offline_rhs[(p, s, t, h)] = (1-v_stop[validate_tuple(val_dict, common_ts, (p,s,t), 2)])
-                            min_offline_lhs[(p, s, t, h)] = v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)]
-                        end
-
-                        max_online_rhs[(p, s, t)] = processes[p].max_online
-                        max_offline_rhs[(p, s, t)] = 1
-                        if length(max_on_hours) > processes[p].max_online 
-                            max_online_lhs[(p, s, t)] = AffExpr(0.0)
-                            for h in max_on_hours
-                                add_to_expression!(max_online_lhs[(p, s, t)], v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)])
-                            end
-                        end
-                        if length(max_off_hours) > processes[p].max_offline
-                            max_offline_lhs[(p, s, t)] = AffExpr(0.0)
-                            for h in max_off_hours
-                                add_to_expression!(max_offline_lhs[(p, s, t)], v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)])
-                            end
+                    end
+                    if length(max_off_hours) > processes[p].max_offline
+                        max_offline_lhs[(p, s, t)] = AffExpr(0.0)
+                        for h in max_off_hours
+                            add_to_expression!(max_offline_lhs[(p, s, t)], v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)])
                         end
                     end
                 end
             end
 
-            min_online_con = @constraint(model, min_online_con[tup in keys(min_online_lhs)], min_online_lhs[tup] >= min_online_rhs[tup])
-            min_offline_con = @constraint(model, min_offline_con[tup in keys(min_offline_lhs)], min_offline_lhs[tup] <= min_offline_rhs[tup])
+            @constraint(model, min_online_con[tup in keys(min_online_lhs)],
+                        min_online_lhs[tup] >= min_online_rhs[tup])
+            @constraint(model, min_offline_con[tup in keys(min_offline_lhs)],
+                        min_offline_lhs[tup] <= min_offline_rhs[tup])
 
-            max_online_con = @constraint(model, max_online_con[tup in keys(max_online_lhs)], sum(max_online_lhs[tup]) <= max_online_rhs[tup])
-            max_offline_con = @constraint(model, max_offline_con[tup in keys(max_offline_lhs)], sum(max_offline_lhs[tup]) >= max_offline_rhs[tup])
+            @constraint(model, max_online_con[tup in keys(max_online_lhs)],
+                        max_online_lhs[tup] <= max_online_rhs[tup])
+            @constraint(model, max_offline_con[tup in keys(max_offline_lhs)],
+                        max_offline_lhs[tup] >= max_offline_rhs[tup])
         end
     end
 end
@@ -968,7 +970,7 @@ function setup_reserve_balances(model_contents::OrderedDict, input_data::Predice
                     end
                 end
             end
-        end       
+        end
 
         # res_tuple is the tuple use for v_res (market, n, res_dir, s, t)
         # res_eq_updn_tuple (market, s, t)
