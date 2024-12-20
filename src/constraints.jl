@@ -7,8 +7,8 @@ using JuMP
 Create all constraints used in the model.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
-- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
+- `input_data::OrderedDict`: Dictionary containing data used to build the model.
 """
 function create_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
     setup_reserve_realisation(model_contents, input_data)
@@ -38,8 +38,8 @@ end
 Setup node balance constraints used in the model.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
-- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
+- `input_data::OrderedDict`: Dictionary containing data used to build the model.
 """
 function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
@@ -76,7 +76,7 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
             end
             for pf in prod_flows[n]
                 e_node_bal_eq_prod[(n, s, t)] += v_flow[
-                    validate_tuple(val_dict, common_ts, (pf..., s, t), 4)] 
+                    validate_tuple(val_dict, common_ts, (pf..., s, t), 4)]
             end
             add_to_expression!(e_constraint_node_bal_eq[(n, s, t)],
                                e_node_bal_eq_prod[(n, s, t)],
@@ -97,15 +97,13 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
     end
     v_st(n, s, t) = model[:v_state][
         validate_tuple(val_dict, common_ts, (n, s, t), 2)]
-    v_st_prev(n, s, t) = (
-        t != times[1] ? v_st(n, s, prev_times[t])
-        #TODO SDDP state
-        : input_data.nodes[n].state.initial_state
-    )
+    v_st_prev(n, s, t) =
+        (t != times[1] ? v_st(n, s, prev_times[t])
+                       : input_data.nodes[n].state.initial_state)
     @expressions model begin
         e_node_bal_eq_state_balance[n = states, s = scens, t = times],
         temp_conv(n, v_st(n, s, t) - v_st_prev(n, s, t))
-        
+
         e_node_bal_eq_state_losses[n = states, s = scens, t = times],
         (input_data.nodes[n].state.state_loss_proportional
          * input_data.temporals(t) * v_st_prev(n, s, t))
@@ -279,136 +277,143 @@ end
 Setup necessary functionalities for processes with binary online variables.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
-- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
+- `input_data::OrderedDict`: Dictionary containing data used to build the model.
 """
 function setup_process_online_balance(model_contents::OrderedDict, input_data::Predicer.InputData)
-    if input_data.setup.contains_online
-        online_procs = [p.name for p in values(input_data.processes)
-                               if p.is_online]
-        if !isempty(online_procs)
-            model = model_contents["model"]
-            val_dict = model_contents["validation_dict"]
-            common_ts = model_contents["common_timesteps"]
-            v_start = model[:v_start]
-            v_stop = model[:v_stop]
-            v_online = model[:v_online]
-            
-            processes = input_data.processes
-            scenarios = Predicer.scenarios(input_data)
-            temporals = input_data.temporals
-            prev_times = previous_times(input_data)
-            # Dynamic equations for start/stop online variables
-            vtu(tup...) = validate_tuple(val_dict, common_ts, tup, 2)
-            online_prev(p, s, t) =
-                (t == first(temporals.t) ? Int(processes[p].initial_state)
-                                         : v_online[vtu(p, s, prev_times[t])])
-            @constraint(
-                model, online_dyn_eq[p = online_procs, s = scenarios,
-                                     t = temporals.t],
-                v_start[vtu(p, s, t)] - v_stop[vtu(p, s, t)]
-                - v_online[vtu(p, s, t)] + online_prev(p, s, t) == 0)
+    input_data.setup.contains_online || return
+    online_procs = [p.name for p in values(input_data.processes)
+                           if p.is_online]
+    #XXX Can this happen?  If so, what good is setup.contains_online?
+    isempty(online_procs) && return
+    model = model_contents["model"]
+    val_dict = model_contents["validation_dict"]
+    common_ts = model_contents["common_timesteps"]
+    v_start = model[:v_start]
+    v_stop = model[:v_stop]
+    v_online = model[:v_online]
 
-            ## setup constraints for scenario independent online processes
-            # v_online[s1] == v_online[s2]
-            # v_online[s2] == v_online[s3]
-            # v_online[s3] == v_online[s1]
-            #e_scenario_independence = OrderedDict()
-            #for sip in filter(p -> processes[p].is_scenario_independent, collect(keys(processes)))
-            #    p_tups = unique(filter(x -> x[1] == sip, proc_online_tuple))
-            #    for s in scenarios(input_data)
-            #        e_scenario_independence[(sip, s)] = Dict()
-            #        tups = filter(x -> x[2] == s, p_tups)
-            #        for tup in tups
-            #            e_scenario_independence[(sip, s)][]
-            #        end
-            #        # set all online variables in tups equal
-            #    end
-            #end
+    processes = input_data.processes
+    scenarios = Predicer.scenarios(input_data)
+    temporals = input_data.temporals
+    prev_times = previous_times(input_data)
+    # Dynamic equations for start/stop online variables
+    vtu(tup...) = validate_tuple(val_dict, common_ts, tup, 2)
+    online_prev(p, s, t) =
+        (t == first(temporals.t) ? Int(processes[p].initial_state)
+                                 : v_online[vtu(p, s, prev_times[t])])
+    @constraint(
+        model, online_dyn_eq[p = online_procs, s = scenarios,
+                             t = temporals.t],
+        v_start[vtu(p, s, t)] - v_stop[vtu(p, s, t)]
+        - v_online[vtu(p, s, t)] + online_prev(p, s, t) == 0)
 
-            # Minimum and maximum online and offline periods
-            min_online_rhs = OrderedDict()
-            min_online_lhs = OrderedDict()
-            min_offline_rhs = OrderedDict()
-            min_offline_lhs = OrderedDict()
-            max_online_rhs = OrderedDict()
-            max_online_lhs = OrderedDict()
-            max_offline_rhs = OrderedDict()
-            max_offline_lhs = OrderedDict()
+    ## setup constraints for scenario independent online processes
+    # v_online[s1] == v_online[s2]
+    # v_online[s2] == v_online[s3]
+    # v_online[s3] == v_online[s1]
+    #e_scenario_independence = OrderedDict()
+    #for sip in filter(p -> processes[p].is_scenario_independent, collect(keys(processes)))
+    #    p_tups = unique(filter(x -> x[1] == sip, proc_online_tuple))
+    #    for s in scenarios(input_data)
+    #        e_scenario_independence[(sip, s)] = Dict()
+    #        tups = filter(x -> x[2] == s, p_tups)
+    #        for tup in tups
+    #            e_scenario_independence[(sip, s)][]
+    #        end
+    #        # set all online variables in tups equal
+    #    end
+    #end
+
+    # Minimum and maximum online and offline periods
+    min_online_rhs = OrderedDict()
+    min_online_lhs = OrderedDict()
+    min_offline_rhs = OrderedDict()
+    min_offline_lhs = OrderedDict()
+    max_online_rhs = OrderedDict()
+    max_online_lhs = OrderedDict()
+    max_offline_rhs = OrderedDict()
+    max_offline_lhs = OrderedDict()
 
 
-            ts_as_zdt = temporals.times
+    ts_as_zdt = temporals.times
 
-            for p in online_procs
-                min_online = processes[p].min_online * Dates.Minute(60)
-                min_offline = processes[p].min_offline * Dates.Minute(60)
+    for p in online_procs
+        min_online = processes[p].min_online * Dates.Minute(60)
+        min_offline = processes[p].min_offline * Dates.Minute(60)
 
-                for s in scenarios, t in temporals.t
-                    # get all timesteps that are within min_online/min_offline after t.
-                    min_on_hours = filter(x-> Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= min_online, temporals.t)
-                    min_off_hours = filter(x-> Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= min_offline, temporals.t)
-
-                    if processes[p].max_online == 0.0
-                        max_on_hours = []
-                    else
-                        max_online = processes[p].max_online * Dates.Minute(60)
-                        max_on_hours = filter(x-> Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= max_online, temporals.t)
-                    end
-                    if processes[p].max_offline == 0.0
-                        max_off_hours = []
-                    else
-                        max_offline = processes[p].max_offline * Dates.Minute(60)
-                        max_off_hours = filter(x-> Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= max_offline, temporals.t)
-                    end
-
-                    for h in min_on_hours
-                        min_online_rhs[(p, s, t, h)] = v_start[validate_tuple(val_dict, common_ts, (p,s,t), 2)]
-                        min_online_lhs[(p, s, t, h)] = v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)]
-                    end
-                    for h in min_off_hours
-                        min_offline_rhs[(p, s, t, h)] = (1-v_stop[validate_tuple(val_dict, common_ts, (p,s,t), 2)])
-                        min_offline_lhs[(p, s, t, h)] = v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)]
-                    end
-
-                    max_online_rhs[(p, s, t)] = processes[p].max_online
-                    max_offline_rhs[(p, s, t)] = 1
-                    if length(max_on_hours) > processes[p].max_online 
-                        max_online_lhs[(p, s, t)] = AffExpr(0.0)
-                        for h in max_on_hours
-                            add_to_expression!(max_online_lhs[(p, s, t)], v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)])
-                        end
-                    end
-                    if length(max_off_hours) > processes[p].max_offline
-                        max_offline_lhs[(p, s, t)] = AffExpr(0.0)
-                        for h in max_off_hours
-                            add_to_expression!(max_offline_lhs[(p, s, t)], v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)])
-                        end
-                    end
-                end
+        for s in scenarios, t in temporals.t
+            # get all timesteps that are within min_online/min_offline after t.
+            min_on_hours = filter(temporals.t) do x
+                Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= min_online
+            end
+            min_off_hours = filter(temporals.t) do x
+                Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= min_offline
             end
 
-            @constraint(model, min_online_con[tup in keys(min_online_lhs)],
-                        min_online_lhs[tup] >= min_online_rhs[tup])
-            @constraint(model, min_offline_con[tup in keys(min_offline_lhs)],
-                        min_offline_lhs[tup] <= min_offline_rhs[tup])
+            #XXX This smells funny.  Should the first inequality be strict?
+            # No x == t?  Also above?
+            #FIXME Assumes Δt = 1 h.  It gets worse below, not just naming.
+            # What about non-uniform Δt?
+            if processes[p].max_online == 0.0
+                max_on_hours = []
+            else
+                max_online = processes[p].max_online * Dates.Minute(60)
+                max_on_hours = filter(x-> Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= max_online, temporals.t)
+            end
+            if processes[p].max_offline == 0.0
+                max_off_hours = []
+            else
+                max_offline = processes[p].max_offline * Dates.Minute(60)
+                max_off_hours = filter(x-> Dates.Minute(0) <= ts_as_zdt[x] - ts_as_zdt[t] <= max_offline, temporals.t)
+            end
 
-            @constraint(model, max_online_con[tup in keys(max_online_lhs)],
-                        max_online_lhs[tup] <= max_online_rhs[tup])
-            @constraint(model, max_offline_con[tup in keys(max_offline_lhs)],
-                        max_offline_lhs[tup] >= max_offline_rhs[tup])
+            for h in min_on_hours
+                min_online_rhs[(p, s, t, h)] = v_start[validate_tuple(val_dict, common_ts, (p,s,t), 2)]
+                min_online_lhs[(p, s, t, h)] = v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)]
+            end
+            for h in min_off_hours
+                min_offline_rhs[(p, s, t, h)] = (1-v_stop[validate_tuple(val_dict, common_ts, (p,s,t), 2)])
+                min_offline_lhs[(p, s, t, h)] = v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)]
+            end
+
+            max_online_rhs[(p, s, t)] = processes[p].max_online
+            max_offline_rhs[(p, s, t)] = 1
+            if length(max_on_hours) > processes[p].max_online
+                max_online_lhs[(p, s, t)] = AffExpr(0.0)
+                for h in max_on_hours
+                    add_to_expression!(max_online_lhs[(p, s, t)], v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)])
+                end
+            end
+            if length(max_off_hours) > processes[p].max_offline
+                max_offline_lhs[(p, s, t)] = AffExpr(0.0)
+                for h in max_off_hours
+                    add_to_expression!(max_offline_lhs[(p, s, t)], v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)])
+                end
+            end
         end
     end
+
+    @constraint(model, min_online_con[tup in keys(min_online_lhs)],
+                min_online_lhs[tup] >= min_online_rhs[tup])
+    @constraint(model, min_offline_con[tup in keys(min_offline_lhs)],
+                min_offline_lhs[tup] <= min_offline_rhs[tup])
+
+    @constraint(model, max_online_con[tup in keys(max_online_lhs)],
+                max_online_lhs[tup] <= max_online_rhs[tup])
+    @constraint(model, max_offline_con[tup in keys(max_offline_lhs)],
+                max_offline_lhs[tup] >= max_offline_rhs[tup])
 end
 
 
 """
     setup_process_balance(model_contents::OrderedDict, input_data::Predicer.InputData)
 
-Setup constraints used in process balance calculations. 
+Setup constraints used in process balance calculations.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
-- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
+- `input_data::OrderedDict`: Dictionary containing data used to build the model.
 """
 function setup_process_balance(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
@@ -471,7 +476,7 @@ function setup_process_balance(model_contents::OrderedDict, input_data::Predicer
             cap = sum(map(x->x.capacity,filter(x->x.source == p,processes[p].topos)))
 
             i = parse(Int64,replace(tup[4], "op"=>""))# Clunky solution, how to improve?
-            if i == 1 
+            if i == 1
                 op_min[tup] = 0.0
             else
                 op_min[tup] = processes[p].eff_fun[i-1][1]*cap
@@ -513,7 +518,7 @@ function setup_process_balance(model_contents::OrderedDict, input_data::Predicer
                 val_dict, common_ts, proc_op_mappings[tup], 2)])
              == sum(v_flow[validate_tuples(
                 val_dict, common_ts, proc_op_cons[tup], 4)]))
-        
+
             flow_op_in_sum[tup in proc_op_tuple],
             (sum(v_flow_op_in[validate_tuples(
                 val_dict, common_ts, proc_op_mappings[tup], 2)])
@@ -534,18 +539,18 @@ function setup_process_balance(model_contents::OrderedDict, input_data::Predicer
             (v_flow_op_out[validate_tuple(val_dict, common_ts, tup, 2)]
              == op_eff[tup]
                 * v_flow_op_in[validate_tuple(val_dict, common_ts, tup, 2)])
-            
+
             flow_bin[tup in proc_op_tuple],
             sum(v_flow_op_bin[validate_tuples(
                 val_dict, common_ts, proc_op_mappings[tup], 2)]) == 1
-        end               
+        end
     end
 end
 
 """
     setup_node_delay_flow_limits(model_contents::OrderedDict, input_data::Predicer.InputData)
 
-Setup upper and lower limits for a delay flow between two nodes. 
+Setup upper and lower limits for a delay flow between two nodes.
 """
 function setup_node_delay_flow_limits(model_contents::OrderedDict, input_data::Predicer.InputData)
     if input_data.setup.contains_delay
@@ -568,8 +573,8 @@ end
 Setup constraints used for process limitations, such as min/max loads, unit starts and participation in reserves.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
-- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
+- `input_data::OrderedDict`: Dictionary containing data used to build the model.
 """
 function setup_process_limits(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
@@ -733,11 +738,11 @@ end
 """
     setup_reserve_realisation(model_contents::OrderedDict, input_data::Predicer.InputData)
 
-Setup constraints for reserve realisation. 
+Setup constraints for reserve realisation.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
-- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
+- `input_data::OrderedDict`: Dictionary containing data used to build the model.
 """
 function setup_reserve_realisation(model_contents::OrderedDict, input_data::Predicer.InputData)
     if input_data.setup.contains_reserves
@@ -760,7 +765,7 @@ function setup_reserve_realisation(model_contents::OrderedDict, input_data::Pred
         res_market_dir_tups = reserve_market_directional_tuples(input_data)
         res_market_tuples = reserve_market_tuples(input_data)
         nodegroup_res = nodegroup_reserves(input_data)
-        
+
         res_process_tuples = reserve_process_tuples(input_data)
         process_tuples = process_topology_tuples(input_data)
         res_groups = reserve_groups(input_data)
@@ -768,10 +773,10 @@ function setup_reserve_realisation(model_contents::OrderedDict, input_data::Pred
 
         rpt = unique(map(x -> (x[3:end]), res_process_tuples))
         rpt_begin = unique(map(x -> (x[3:5]), res_process_tuples))
-        reduced_process_tuples = unique(map(x -> (x[1:3]), process_tuples))   
+        reduced_process_tuples = unique(map(x -> (x[1:3]), process_tuples))
 
-        # if no reserve realisation in the model. 
-        # set v_flow == v_load for all reserve processes. 
+        # if no reserve realisation in the model.
+        # set v_flow == v_load for all reserve processes.
         if !input_data.setup.reserve_realisation
             no_res_real_con = @constraint(model, no_res_real_con[tup in rpt], v_flow[validate_tuple(val_dict, common_ts, tup, 4)] == v_load[validate_tuple(val_dict, common_ts, tup, 4)])
         end
@@ -831,9 +836,9 @@ function setup_reserve_realisation(model_contents::OrderedDict, input_data::Pred
         res_real_eq = @constraint(model, res_real_eq[tup in nodegroup_res], v_res_real_tot[tup] == v_res_real_node[tup])
 
         # ensure that the realisation of reserve rp is equal to the realisation of processes in the processgroup of the reserve
-        # Ensures that the realisation is done by the "correct" processes. 
-        # reserve-specific realisation = sumof process_realisation for p in reserve processgroup. 
-        
+        # Ensures that the realisation is done by the "correct" processes.
+        # reserve-specific realisation = sumof process_realisation for p in reserve processgroup.
+
         for res in unique(map(x -> x[1], res_market_tuples))
             res_ng = input_data.markets[res].node
             res_ns = unique(map(x -> x[3], filter(y -> y[2] == res_ng, groups)))
@@ -855,7 +860,7 @@ function setup_reserve_realisation(model_contents::OrderedDict, input_data::Pred
                 end
             end
         end
-        
+
         res_production_eq = @constraint(model, res_production_eq[tup in nodegroup_res], v_res_real_tot[tup] == v_res_real_flow_tot[tup])
     end
 end
@@ -864,11 +869,11 @@ end
 """
     setup_reserve_balances(model_contents::OrderedDict, input_data::Predicer.InputData)
 
-Setup constraints for reserves. 
+Setup constraints for reserves.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
-- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
+- `input_data::OrderedDict`: Dictionary containing data used to build the model.
 """
 function setup_reserve_balances(model_contents::OrderedDict, input_data::Predicer.InputData)
     if input_data.setup.contains_reserves
@@ -888,15 +893,15 @@ function setup_reserve_balances(model_contents::OrderedDict, input_data::Predice
         reduced_res_final_tuple = unique(map(x -> x[1], res_final_tuple))
         res_nodes_tuple = reserve_nodes(input_data)
         node_state_tuple = state_node_tuples(input_data)
-        state_reserve_tuple = state_reserves(input_data)  
+        state_reserve_tuple = state_reserves(input_data)
         scens = scenarios(input_data)
         temporals = input_data.temporals
         markets = input_data.markets
         nodes = input_data.nodes
         processes = input_data.processes
-        v_reserve = model.obj_dict[:v_reserve]
-        v_res = model.obj_dict[:v_res]
-        v_res_final = model.obj_dict[:v_res_final]
+        v_reserve = model[:v_reserve]
+        v_res = model[:v_res]
+        v_res_final = model[:v_res_final]
         # state reserve balances
         if input_data.setup.contains_states
             for s_node in unique(map(x -> x[1], state_reserve_tuple))
@@ -913,17 +918,27 @@ function setup_reserve_balances(model_contents::OrderedDict, input_data::Predice
                     #TODO Name the constraints.
                     if !isempty(p_out_tup)
                         p_out_eff = processes[p_out_tup[1][4]].eff
+                        vr = v_reserve[validate_tuple(
+                            val_dict, common_ts, p_out_tup[1][2:end], 6)]
+                        vs = model[:v_state][validate_tuple(
+                            val_dict, common_ts, state_tup, 2)]
                         # State in/out limit
-                        @constraint(model, v_reserve[validate_tuple(val_dict, common_ts, p_out_tup[1][2:end], 6)] <= state_max_out * p_out_eff)
+                        set_upper_bound(vr, state_max_out * p_out_eff)
                         # State value limit
-                        @constraint(model, v_reserve[validate_tuple(val_dict, common_ts, p_out_tup[1][2:end], 6)] <= (model.obj_dict[:v_state][validate_tuple(val_dict, common_ts, state_tup, 2)] -  state_min) * p_out_eff / dtf)
+                        @constraint(model,
+                                    vr <= (vs - state_min) * p_out_eff / dtf)
                     end
                     if !isempty(p_in_tup)
                         p_in_eff = processes[p_in_tup[1][4]].eff
+                        vr = v_reserve[validate_tuple(
+                            val_dict, common_ts, p_in_tup[1][2:end], 6)]
+                        vs = model[:v_state][validate_tuple(
+                            val_dict, common_ts, state_tup, 2)]
                         # State in/out limit
-                        @constraint(model, v_reserve[validate_tuple(val_dict, common_ts, p_in_tup[1][2:end], 6)] <= state_max_in / p_in_eff)
+                        set_upper_bound(vr, state_max_in / p_in_eff)
                         # State value limit
-                        @constraint(model, v_reserve[validate_tuple(val_dict, common_ts, p_in_tup[1][2:end], 6)] <= (state_max - model.obj_dict[:v_state][validate_tuple(val_dict, common_ts, state_tup, 2)]) / p_in_eff / dtf)
+                        @constraint(model,
+                                    vr <= (state_max - vs) / p_in_eff / dtf)
                     end
                 end
             end
@@ -986,7 +1001,7 @@ function setup_reserve_balances(model_contents::OrderedDict, input_data::Predice
         for tup in reduced_res_final_tuple
             if markets[tup].direction == "up" || markets[tup].direction == "res_up"
                 red_r_tup = filter(x -> x[1] == tup && x[3] == "res_up", reduced_res_tuple)
-            elseif markets[tup].direction == "down" || markets[tup].direction == "res_down" 
+            elseif markets[tup].direction == "down" || markets[tup].direction == "res_down"
                 red_r_tup = filter(x -> x[1] == tup && x[3] == "res_down", reduced_res_tuple)
             elseif markets[tup].direction == "up_down" || markets[tup].direction == "res_up_down"
                 red_r_tup = filter(x -> x[1] == tup, reduced_res_tuple)
@@ -1004,11 +1019,11 @@ end
 """
     setup_ramp_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
 
-Setup process ramp constraints, based on ramp limits defined in input data and participation in reserves.  
+Setup process ramp constraints, based on ramp limits defined in input data and participation in reserves.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
-- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
+- `input_data::OrderedDict`: Dictionary containing data used to build the model.
 """
 function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
@@ -1076,7 +1091,7 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
                 ramp_dw_cap = topo.ramp_down * topo.capacity * temporals(t)
 
                 # add ramp rate limit
-                add_to_expression!(ramp_expr_up[ntup...], ramp_up_cap) 
+                add_to_expression!(ramp_expr_up[ntup...], ramp_up_cap)
                 add_to_expression!(ramp_expr_down[ntup...], ramp_dw_cap, -1)
 
                 # add ramp dummys if they are used
@@ -1091,7 +1106,7 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
                     start_cap = max(0,processes[tup[1]].load_min-topo.ramp_up)*topo.capacity
                     stop_cap = max(0,processes[tup[1]].load_min-topo.ramp_down)*topo.capacity
                     vtup = validate_tuple(val_dict, common_ts, (tup[1], tup[4], tup[5]), 2)
-                    add_to_expression!(ramp_expr_up[ntup...], v_start[vtup], start_cap) 
+                    add_to_expression!(ramp_expr_up[ntup...], v_start[vtup], start_cap)
                     add_to_expression!(ramp_expr_down[ntup...], v_stop[vtup], -stop_cap)
                 end
 
@@ -1117,13 +1132,13 @@ function setup_ramp_constraints(model_contents::OrderedDict, input_data::Predice
                             add_to_expression!(
                                 ramp_expr_res_up[ntup...],
                                 v_reserve[validate_tuple(val_dict, common_ts, rtu, 6)],
-                                -reserve_types[rtu[2]]) 
+                                -reserve_types[rtu[2]])
                         end
                         for rtd in res_tup_down_with_s_and_t
                             add_to_expression!(
                                 ramp_expr_res_down[ntup...],
                                 v_reserve[validate_tuple(val_dict, common_ts, rtd, 6)],
-                                reserve_types[rtd[2]]) 
+                                reserve_types[rtd[2]])
                         end
                     end
                 end
@@ -1203,11 +1218,11 @@ end
 """
     setup_fixed_values(model_contents::OrderedDict, input_data::Predicer.InputData)
 
-Setup constraints for setting fixed process values at certain timesteps.   
+Setup constraints for setting fixed process values at certain timesteps.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
-- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
+- `input_data::OrderedDict`: Dictionary containing data used to build the model.
 """
 function setup_fixed_values(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
@@ -1217,11 +1232,11 @@ function setup_fixed_values(model_contents::OrderedDict, input_data::Predicer.In
     v_bid = model_contents["expression"]["v_bid"]
     markets = input_data.markets
     scenarios = collect(keys(input_data.scenarios))
-    
+
     if input_data.setup.contains_reserves
         v_res_final = model.obj_dict[:v_res_final]
     end
-    
+
     fix_expr = model_contents["expression"]["fix_expr"] = OrderedDict()
     for m in keys(markets)
         if !isempty(markets[m].fixed)
@@ -1250,11 +1265,11 @@ end
 """
     setup_bidding_curve_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
 
-Setup constraints for market bidding curves.   
+Setup constraints for market bidding curves.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
-- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
+- `input_data::OrderedDict`: Dictionary containing data used to build the model.
 """
 function setup_bidding_curve_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
@@ -1289,7 +1304,7 @@ function setup_bidding_curve_constraints(model_contents::OrderedDict, input_data
             v_bid[tup] = AffExpr(0.0)
             #e_bid_slot[tup] = AffExpr(0.0)
             if markets[m].m_type == "energy"
-                add_to_expression!(v_bid[tup],v_flow[validate_tuple(val_dict, common_ts, (m_prod_flow..., s, ts), 4)],1.0) #prod 
+                add_to_expression!(v_bid[tup],v_flow[validate_tuple(val_dict, common_ts, (m_prod_flow..., s, ts), 4)],1.0) #prod
                 add_to_expression!(v_bid[tup],v_flow_bal[validate_tuple(val_dict, common_ts, (m_prod_bal_flow..., s, ts), 3)],1.0) #prod_bal
                 add_to_expression!(v_bid[tup],v_flow[validate_tuple(val_dict, common_ts, (m_cons_flow..., s, ts), 4)],-1.0) #cons
                 add_to_expression!(v_bid[tup],v_flow_bal[validate_tuple(val_dict, common_ts, (m_cons_bal_flow..., s, ts), 3)],-1.0) #cons_bal
@@ -1297,7 +1312,7 @@ function setup_bidding_curve_constraints(model_contents::OrderedDict, input_data
                 add_to_expression!(v_bid[tup],v_res_final[tup],1.0)
             end
         end
-        
+
         for s in scenarios(input_data), bidslot_t in input_data.bid_slots[m].time_steps
             t = string(bidslot_t)
             tup = (m, s, t)
@@ -1316,11 +1331,11 @@ end
 """
     setup_bidding_volume_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
 
-Setup constraints for market bidding volumes.   
+Setup constraints for market bidding volumes.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
-- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
+- `input_data::OrderedDict`: Dictionary containing data used to build the model.
 """
 function setup_bidding_volume_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
@@ -1335,11 +1350,11 @@ end
 """
     setup_bidding_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
 
-Setup constraints for market bidding.   
+Setup constraints for market bidding.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
-- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
+- `input_data::OrderedDict`: Dictionary containing data used to build the model.
 """
 function setup_bidding_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
@@ -1357,7 +1372,7 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
     if input_data.setup.contains_reserves
         v_res_final = model[:v_res_final]
     end
-    
+
     price_matr = OrderedDict()
     for m in keys(markets)
         if markets[m].is_bid
@@ -1430,8 +1445,8 @@ end
 Setup participation limits for reserve
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
-- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
+- `input_data::OrderedDict`: Dictionary containing data used to build the model.
 """
 function setup_reserve_participation(model_contents::OrderedDict, input_data::Predicer.InputData)
     if input_data.setup.contains_reserves
@@ -1465,14 +1480,14 @@ end
 
 
 """
-    setup_inflow_blocks(model_contents::OrderedDict, input_data::Predicer.InputData)    
+    setup_inflow_blocks(model_contents::OrderedDict, input_data::Predicer.InputData)
 
-Setup functionality, which can be used to model demand flexibility in Predicer. Only one block can 
-be active per node per scenario. 
+Setup functionality, which can be used to model demand flexibility in Predicer. Only one block can
+be active per node per scenario.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
-- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
+- `input_data::OrderedDict`: Dictionary containing data used to build the model.
 """
 function setup_inflow_blocks(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
@@ -1509,11 +1524,11 @@ end
 """
     setup_generic_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
 
-Setup generic constraints. 
+Setup generic constraints.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
-- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
+- `input_data::OrderedDict`: Dictionary containing data used to build the model.
 """
 function setup_generic_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
@@ -1525,14 +1540,14 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
     setpoints = [k for (k, c) in input_data.gen_constraints if c.is_setpoint]
     v_flow = model.obj_dict[:v_flow]
     if input_data.setup.contains_online
-        v_online = model.obj_dict[:v_online]    
+        v_online = model.obj_dict[:v_online]
         reduced_online_tuple = unique(map(x -> (x[1]), online_tuple))
-    end    
+    end
     if input_data.setup.contains_states
         v_state = model.obj_dict[:v_state]
         reduced_state_tuple = unique(map(x -> (x[1]), state_tuple))
     end
-    
+
     v_setpoint = model.obj_dict[:v_setpoint]
     v_set_up = model.obj_dict[:v_set_up]
     v_set_down = model.obj_dict[:v_set_down]
@@ -1551,7 +1566,7 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
     for c in keys(gen_constraints)
         # Get timesteps for where there is data defined. (Assuming all scenarios are equal)
         gen_const_ts = keys(gen_constraints[c].factors[1].data(scenarios(input_data)[1]).series)
-        # Get timesteps which are found in both temporals and gen constraints 
+        # Get timesteps which are found in both temporals and gen constraints
         relevant_times = filter(p -> p.second in gen_const_ts, temporals.times)
         relevant_ts = values(relevant_times)
         facs = gen_constraints[c].factors
@@ -1585,7 +1600,7 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
                     if input_data.processes[p].is_online
                         tup = unique(filter(x -> x == p, reduced_online_tuple))[1]
                     else
-                        msg = "Factor " * string((p, f.var_tuple)) * " of gen_constraint " * string(c) * " has no online functionality!" 
+                        msg = "Factor " * string((p, f.var_tuple)) * " of gen_constraint " * string(c) * " has no online functionality!"
                         throw(ErrorException(msg))
                     end
                     for s in scenarios(input_data), (ts, t) in relevant_times
@@ -1600,14 +1615,14 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
                     if input_data.nodes[n].is_state
                         tup = filter(x -> x == n, reduced_state_tuple)[1]
                     else
-                        msg = "Factor " * string((n, f.var_tuple)) * " of gen_constraint " * string(c) * " has no state functionality!" 
+                        msg = "Factor " * string((n, f.var_tuple)) * " of gen_constraint " * string(c) * " has no state functionality!"
                         throw(ErrorException(msg))
                     end
                     for s in scenarios(input_data), (ts, t) in relevant_times
                         n_tup_with_s_and_t = (n, s, ts)
                         fac_data = f.data(s, t)
                         add_to_expression!(const_expr[c][(s,t)],fac_data,v_state[validate_tuple(val_dict, common_ts, n_tup_with_s_and_t, 2)])
-                    end       
+                    end
                 end
             end
         else
@@ -1617,7 +1632,7 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
                     setpoint_expr_lhs[(c, s, t)] = AffExpr(0.0)
                     setpoint_expr_rhs[(c, s, t)] = AffExpr(0.0)
                 else
-                    msg = "Several columns with factors are not supported for setpoint constraints!" 
+                    msg = "Several columns with factors are not supported for setpoint constraints!"
                     throw(ErrorException(msg))
                 end
                 for f in facs
@@ -1632,11 +1647,11 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
                         flow_tup = (p, topo.source, topo.sink, s, ts)
                         add_to_expression!(setpoint_expr_lhs[(c, s, t)], v_flow[validate_tuple(val_dict, common_ts, flow_tup, 4)])
                     else
-                        msg = "Setpoint constraints cannot be used with variables of the type " * f.var_type * "!" 
+                        msg = "Setpoint constraints cannot be used with variables of the type " * f.var_type * "!"
                         throw(ErrorException(msg))
                     end
                     d_setpoint = f.data(s,t)
-                    if eq_dir == "eq" # lower and upper setpoint are the same.  
+                    if eq_dir == "eq" # lower and upper setpoint are the same.
                         d_upper = d_setpoint / d_max
                         d_lower = d_setpoint / d_max
                     elseif eq_dir == "gt" # No upper bound
@@ -1649,10 +1664,10 @@ function setup_generic_constraints(model_contents::OrderedDict, input_data::Pred
                     JuMP.set_upper_bound(v_set_up[validate_tuple(val_dict, common_ts, (c, s, ts), 2)], (1.0 - d_upper) * d_max)
                     JuMP.set_upper_bound(v_set_down[validate_tuple(val_dict, common_ts, (c, s, ts), 2)], d_lower * d_max)
                     JuMP.set_upper_bound(v_setpoint[validate_tuple(val_dict, common_ts, (c, s, ts), 2)], (d_upper - d_lower) * d_max)
-                    add_to_expression!(setpoint_expr_rhs[(c, s, t)], d_lower * d_max)                    
-                    add_to_expression!(setpoint_expr_rhs[(c, s, t)], v_setpoint[validate_tuple(val_dict, common_ts, (c, s, ts), 2)])                    
-                    add_to_expression!(setpoint_expr_rhs[(c, s, t)], v_set_up[validate_tuple(val_dict, common_ts, (c, s, ts), 2)])                    
-                    add_to_expression!(setpoint_expr_rhs[(c, s, t)], v_set_down[validate_tuple(val_dict, common_ts, (c, s, ts), 2)], -1)                    
+                    add_to_expression!(setpoint_expr_rhs[(c, s, t)], d_lower * d_max)
+                    add_to_expression!(setpoint_expr_rhs[(c, s, t)], v_setpoint[validate_tuple(val_dict, common_ts, (c, s, ts), 2)])
+                    add_to_expression!(setpoint_expr_rhs[(c, s, t)], v_set_up[validate_tuple(val_dict, common_ts, (c, s, ts), 2)])
+                    add_to_expression!(setpoint_expr_rhs[(c, s, t)], v_set_down[validate_tuple(val_dict, common_ts, (c, s, ts), 2)], -1)
                 end
             end
         end
@@ -1672,11 +1687,11 @@ end
 """
     setup_cost_calculations(model_contents::OrderedDict, input_data::Predicer.InputData)
 
-Setup expressions used for calculating the costs in the model. 
+Setup expressions used for calculating the costs in the model.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
-- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
+- `input_data::OrderedDict`: Dictionary containing data used to build the model.
 """
 function setup_cost_calculations(model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
@@ -1686,7 +1701,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     reduced_process_tuple = ((p.name, topo.source, topo.sink)
                              for p in values(input_data.processes)
                              for topo in p.topos)
-    
+
     v_flow = model[:v_flow]
     v_bid = model_contents["expression"]["v_bid"]
     v_flow_bal = model[:v_flow_bal]
@@ -1904,7 +1919,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
                 p_ramp)
         end
     end
-    
+
 
     # Total model costs
     model_contents["expression"]["total_costs"] = @expression(
@@ -1919,11 +1934,11 @@ end
 """
     setup_cvar_element(model_contents::OrderedDict, input_data::Predicer.InputData)
 
-Setup expressions used for calculating the cvar in the model. 
+Setup expressions used for calculating the cvar in the model.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
-- `input_data::OrderedDict`: Dictionary containing data used to build the model. 
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
+- `input_data::OrderedDict`: Dictionary containing data used to build the model.
 """
 function setup_cvar_element(model_contents::OrderedDict, input_data::Predicer.InputData)
     if input_data.setup.contains_risk
