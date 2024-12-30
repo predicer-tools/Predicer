@@ -136,9 +136,17 @@ supported.
 
 ## To do
 
-- Useful test cases, particularly for multistage
-- I haven't figured how reserve markets work in plain Predicer.
-  Chances are they don't work right in SDDP.
+- Useful test cases, particularly for multistage.  These could be
+  long or short term.
+    * Hydro is the long term classic.  River systems with multiple
+      plants are complicated.
+    * Heating control could be a medium term case: the thermal mass of
+      buildings provides some flexibility even if the feasible
+      temperature range is usually quite narrow.
+    * Short term cases would involve short term markets, likely
+      combined with day-ahead.  We could also model reserve activation
+      better with multistage.  However, the plain Predicer reserve
+      model is a mess and should be cleaned up first.
 - More multistage state is likely needed, at least for ramping limits
   and delays.
 - Little attention has been paid at how the sequence of `InputData`
