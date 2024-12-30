@@ -331,22 +331,21 @@ function setup_process_online_balance(model_contents::OrderedDict, input_data::P
     #end
 
     # Minimum and maximum online and offline periods
-    min_online_rhs = OrderedDict()
-    min_online_lhs = OrderedDict()
-    min_offline_rhs = OrderedDict()
-    min_offline_lhs = OrderedDict()
     max_online_rhs = OrderedDict()
     max_online_lhs = OrderedDict()
     max_offline_rhs = OrderedDict()
     max_offline_lhs = OrderedDict()
 
+    #XXX Should be in Temporals.  Replace Temporals.times with this?
+    t2ts = SortedDict(t => ts for (ts, t) in temporals.times)
 
-    ts_as_zdt = temporals.times
-
-    # get all timesteps that are within tlen strictly after t.
+    # get all timesteps that are within tlen strictly after ts.
     #FIXME Should probably be strict also in the high end?
-    ts_range(t, tlen) = filter(temporals.t) do t1
-        Dates.Minute(0) < ts_as_zdt[t1] - ts_as_zdt[t] ≤ tlen
+    function ts_range(ts, tlen)
+        t = temporals.times[ts]
+        return [ts1 for (_, ts1) in inclusive(
+            t2ts, searchsortedafter(t2ts, t),
+            searchsortedlast(t2ts, t + tlen))]
     end
 
     min_online(p) = processes[p].min_online * Dates.Minute(60)
