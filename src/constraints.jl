@@ -302,16 +302,10 @@ function setup_process_online_balance(model_contents::OrderedDict, input_data::P
     online_prev(p, s, t) =
         (t == first(temporals.t) ? Int(processes[p].initial_state)
                                  : v_online[vtu2(p, s, prev_times[t])])
-    @constraints model begin
-        online_dyn_eq[p = online_procs, s = scenarios, t = temporals.t],
-        (v_start[vtu2(p, s, t)] - v_stop[vtu2(p, s, t)]
-         - v_online[vtu2(p, s, t)] + online_prev(p, s, t)) == 0
-
-        # This used to follow from the period constraints below for t = t',
-        # but we no longer post them, only t < t'.  This is 1 row, they were 4.
-        online_no_twiddling,
-        v_start .+ v_stop .≤ 1
-    end
+    @constraint(
+        model, online_dyn_eq[p = online_procs, s = scenarios, t = temporals.t],
+        v_start[vtu2(p, s, t)] - v_stop[vtu2(p, s, t)]
+        - v_online[vtu2(p, s, t)] + online_prev(p, s, t) == 0)
 
     ## setup constraints for scenario independent online processes
     # v_online[s1] == v_online[s2]
@@ -330,63 +324,63 @@ function setup_process_online_balance(model_contents::OrderedDict, input_data::P
     #    end
     #end
 
-    # Minimum and maximum online and offline periods
-    max_online_rhs = OrderedDict()
-    max_online_lhs = OrderedDict()
-    max_offline_rhs = OrderedDict()
-    max_offline_lhs = OrderedDict()
-
     #XXX Should be in Temporals.  Replace Temporals.times with this?
     t2ts = SortedDict(t => ts for (ts, t) in temporals.times)
 
-    # get all timesteps that are within tlen strictly after ts.
-    #FIXME Should probably be strict also in the high end?
-    function ts_range(ts, tlen)
-        t = temporals.times[ts]
-        return [ts1 for (_, ts1) in inclusive(
-            t2ts, searchsortedafter(t2ts, t),
-            searchsortedlast(t2ts, t + tlen))]
-    end
+    vtu2t(p, s, t) = vtu2(p, s, t2ts[t])
+
+    # get all timesteps from t to t + tlen.
+    #FIXME Should probably be strict in the high end?
+    ts_range(t, tlen) =
+        [t1 for (t1, _) in inclusive(
+            t2ts, findkey(t2ts, t), searchsortedlast(t2ts, t + tlen))]
+
+    # Return timesteps starting from t for the shortest timespan ≥ tlen,
+    # inclusive, i.e., the last returned timestep is the smallest ≥ t + tlen,
+    # if such a timestep exists.
+    ts1_range(t, tlen) =
+        [t1 for (t1, _) in inclusive(
+            t2ts, findkey(t2ts, t), searchsortedfirst(t2ts, t + tlen))]
+
+    # Return such t that ts1_range(t, tlen) is at least tlen long.
+    # If tlen == 0, return an empty array.
+    ts1_starts(tlen) =
+        (tlen == Minute(0) ? []
+        : [t for (t, _) in exclusive(
+            t2ts, startof(t2ts),
+            searchsortedfirst(t2ts, last(t2ts).first - tlen))])
 
     min_online(p) = processes[p].min_online * Dates.Minute(60)
     min_offline(p) = processes[p].min_offline * Dates.Minute(60)
     max_online(p) = processes[p].max_online * Dates.Minute(60)
     max_offline(p) = processes[p].max_offline * Dates.Minute(60)
 
+    max_online_ranges = Dict(
+        p => let tlen = max_online(p)
+            Dict(t => ts1_range(t, tlen) for t in ts1_starts(tlen))
+        end for p in online_procs)
+
     @constraints model begin
-        min_online_con[p = online_procs, s = scenarios, t = temporals.t,
+        min_online_con[p = online_procs, s = scenarios, t = keys(t2ts),
                        t1 = ts_range(t, min_online(p))],
-        v_online[vtu2(p, s, t1)] ≥ v_start[vtu2(p, s, t)]
+        v_online[vtu2t(p, s, t1)] ≥ v_start[vtu2t(p, s, t)]
 
-        min_offline_con[p = online_procs, s = scenarios, t = temporals.t,
+        min_offline_con[p = online_procs, s = scenarios, t = keys(t2ts),
                         t1 = ts_range(t, min_offline(p))],
-        v_online[vtu2(p, s, t1)] ≤ 1 - v_stop[vtu2(p, s, t)]
-    end
-    for p in online_procs, s in scenarios, t in temporals.t
-        #FIXME Assumes Δt = 1 h.  It gets worse below, not just naming.
-        max_on_hours = ts_range(t, max_online(p))
-        max_off_hours = ts_range(t, max_offline(p))
+        v_online[vtu2t(p, s, t1)] ≤ 1 - v_stop[vtu2t(p, s, t)]
 
-        max_online_rhs[(p, s, t)] = processes[p].max_online
-        max_offline_rhs[(p, s, t)] = 1
-        if length(max_on_hours) > processes[p].max_online
-            max_online_lhs[(p, s, t)] = AffExpr(0.0)
-            for h in max_on_hours
-                add_to_expression!(max_online_lhs[(p, s, t)], v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)])
-            end
-        end
-        if length(max_off_hours) > processes[p].max_offline
-            max_offline_lhs[(p, s, t)] = AffExpr(0.0)
-            for h in max_off_hours
-                add_to_expression!(max_offline_lhs[(p, s, t)], v_online[validate_tuple(val_dict, common_ts, (p,s,h), 2)])
-            end
-        end
-    end
+        max_online_con[p = online_procs, s = scenarios,
+                       t = keys(max_online_ranges[p])],
+        sum(v_online[vtu2t(p, s, t1)]
+            for t1 in max_online_ranges[p][t]
+        ) ≤ length(max_online_ranges[p][t]) - 1
 
-    @constraint(model, max_online_con[tup in keys(max_online_lhs)],
-                max_online_lhs[tup] <= max_online_rhs[tup])
-    @constraint(model, max_offline_con[tup in keys(max_offline_lhs)],
-                max_offline_lhs[tup] >= max_offline_rhs[tup])
+        max_offline_con[p = online_procs, s = scenarios,
+                        t = ts1_starts(max_offline(p))],
+        sum(v_online[vtu2t(p, s, t1)]
+            for t1 in ts1_range(t, max_offline(p))
+        ) ≥ 1
+    end
 end
 
 
