@@ -71,12 +71,14 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
         for s in scenarios(input_data), t in input_data.temporals.t
             e_constraint_node_bal_eq[(n, s, t)] = AffExpr(0.0)
             for cf in cons_flows[n]
-                e_node_bal_eq_cons[(n, s, t)] += v_flow[
-                    validate_tuple(val_dict, common_ts, (cf..., s, t), 4)]
+                add_to_expression!(
+                    e_node_bal_eq_cons[(n, s, t)], v_flow[
+                        validate_tuple(val_dict, common_ts, (cf..., s, t), 4)])
             end
             for pf in prod_flows[n]
-                e_node_bal_eq_prod[(n, s, t)] += v_flow[
-                    validate_tuple(val_dict, common_ts, (pf..., s, t), 4)]
+                add_to_expression!(
+                    e_node_bal_eq_prod[(n, s, t)], v_flow[
+                        validate_tuple(val_dict, common_ts, (pf..., s, t), 4)])
             end
             add_to_expression!(e_constraint_node_bal_eq[(n, s, t)],
                                e_node_bal_eq_prod[(n, s, t)],
@@ -162,7 +164,8 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
                     inflow_val *= n.state.t_e_conversion
                 end
                 e_node_bal_eq_inflow_expr[(n.name, s, t)] = inflow_val
-                e_constraint_node_bal_eq[(n.name, s, t)] += inflow_val
+                add_to_expression!(
+                    e_constraint_node_bal_eq[(n.name, s, t)], inflow_val)
             end
         end
     end
@@ -355,10 +358,15 @@ function setup_process_online_balance(model_contents::OrderedDict, input_data::P
     max_online(p) = processes[p].max_online * Dates.Minute(60)
     max_offline(p) = processes[p].max_offline * Dates.Minute(60)
 
-    max_online_ranges = Dict(
-        p => let tlen = max_online(p)
-            Dict(t => ts1_range(t, tlen) for t in ts1_starts(tlen))
-        end for p in online_procs)
+    # sum(1 - v for v in vars)
+    function sum1m(vars)
+        res = AffExpr(0)
+        for v in vars
+            add_to_expression!(res, 1)
+            add_to_expression!(res, v, -1)
+        end
+        return res
+    end
 
     @constraints model begin
         min_online_con[p = online_procs, s = scenarios, t = keys(t2ts),
@@ -367,19 +375,17 @@ function setup_process_online_balance(model_contents::OrderedDict, input_data::P
 
         min_offline_con[p = online_procs, s = scenarios, t = keys(t2ts),
                         t1 = ts_range(t, min_offline(p))],
-        v_online[vtu2t(p, s, t1)] ≤ 1 - v_stop[vtu2t(p, s, t)]
+        1 - v_online[vtu2t(p, s, t1)] ≥ v_stop[vtu2t(p, s, t)]
 
         max_online_con[p = online_procs, s = scenarios,
-                       t = keys(max_online_ranges[p])],
-        sum(v_online[vtu2t(p, s, t1)]
-            for t1 in max_online_ranges[p][t]
-        ) ≤ length(max_online_ranges[p][t]) - 1
+                       t = ts1_starts(max_online(p))],
+        sum1m(v_online[vtu2t(p, s, t1)]
+              for t1 in ts1_range(t, max_online(p))) ≥ 1
 
         max_offline_con[p = online_procs, s = scenarios,
                         t = ts1_starts(max_offline(p))],
         sum(v_online[vtu2t(p, s, t1)]
-            for t1 in ts1_range(t, max_offline(p))
-        ) ≥ 1
+            for t1 in ts1_range(t, max_offline(p))) ≥ 1
     end
 end
 
