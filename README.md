@@ -336,6 +336,7 @@ The sheet *timeseries* contains the timesteps used in the model. This sheet cont
 Example
 
 | t              |
+|----------------|
 | 20.4.2022 1:00 |
 | 20.4.2022 2:00 |
 | 20.4.2022 3:00 |
