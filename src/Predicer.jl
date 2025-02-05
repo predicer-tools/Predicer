@@ -7,6 +7,7 @@ module Predicer
     include("validate_data.jl")
     include("init.jl")
     include("import_input_data.jl")
+    include("roll_predicer.jl")
     
 
     export Initialize,
