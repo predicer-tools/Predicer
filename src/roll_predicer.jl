@@ -326,6 +326,18 @@ function set_process_initial_online_state(input_data::Predicer.InputData, transf
     return input_data
 end
 
+"""
+    change_model_data(input_data::Predicer.InputData, transfer_data::Dict)
+
+Function changing input data parameters to match values obtained from variable results from the previous part-horizon.
+"""
+function change_model_data(input_data::Predicer.InputData, transfer_data::Dict)
+    input_data = set_state_initial_value(input_data, transfer_data);
+    input_data = set_process_initial_flow(input_data, transfer_data);
+    input_data = set_process_initial_load(input_data, transfer_data);
+    input_data = set_process_initial_online_state(input_data, transfer_data);
+    return input_data
+end
 
 """
     get_data_to_transfer(mc::OrderedDict{Any, Any}, old_input_data::Predicer.InputData, previous_last_t::DateTime)
