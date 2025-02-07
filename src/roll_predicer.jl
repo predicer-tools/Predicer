@@ -171,7 +171,7 @@ function roll_predicer(input_data_path::String, horizon_length::Number, overlap:
             # modify new input data with values from the previous model run.
             # these values include storage state, as well as process states for the last
             # timestep before the new horizon. 
-            input_data = Predicer.change_model_data(input_data, transfer_data)
+            input_data = Predicer.change_model_data(input_data, transfer_data);
         end
 
 
@@ -283,7 +283,7 @@ function set_process_initial_flow(input_data::Predicer.InputData, transfer_data:
     end
     for ft in flow_tups
         topo = filter(x -> x.source == ft[2] && x.sink == ft[3], input_data.processes[ft[1]].topos)[1]
-        topo.initial_flow = transfer_data["process_flow"][ft]
+        topo.initial_flow = transfer_data["process_flow"][ft] / topo.capacity
     end
     return input_data
 end
