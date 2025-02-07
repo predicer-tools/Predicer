@@ -6,17 +6,8 @@ using HiGHS
 using JuMP
 using DataStructures
 
-"""
-
-for example, a one year time horizon is too long for detailed modelling, and could be split into smaller (1-2 week?) parts.
-"""
-
-
-
-
 """ 
     function roll_predicer(input_data_path::String, horizon_length::Number, overlap::Number, roll_start::Number=0, roll_end::Number=8760000)
-
 
 Rolling Predicer:
 
@@ -127,7 +118,6 @@ function roll_predicer(input_data_path::String, horizon_length::Number, overlap:
     slice_end = nothing
     # loop until all hours are done
     while ts_counter < t_len && ts_counter < roll_end
-        # if min/max online/offline limitations are to be considered, need to take more timesteps?
         # calculate new slice start and end (hours from start)
         if is_first_go
             slice_start = ts_counter
@@ -169,33 +159,35 @@ function roll_predicer(input_data_path::String, horizon_length::Number, overlap:
         input_data = Predicer.compile_input_data(system_data, timeseries_data, slice_timesteps);
         if !is_first_go
             # modify new input data with values from the previous model run.
-            # these values include storage state, as well as process states for the last
-            # timestep before the new horizon. 
+            # these values include storage state, as well as process flow, load and online state
+            # for the timestep before the new horizon. 
             input_data = Predicer.change_model_data(input_data, transfer_data);
         end
 
 
         ###
         # set the residual value of a state to be appropriate!
+        # This short segment should be model-specific if needed.
+        # Calculate a reasonable value for the residual value of a state.
+        # It could be based on an externally supplied timeseries, or the prices of the next part-horizon.
+        # The residual value is calculated based on the values of a timeseries in the model (in this case market prices)
 
-        # Assuming a model length of one year, take the n following hours after the end of the horizon to calculate the residual value of the 
+        """
         res_value_calc_n = 3*24 # three days as an example
-        next_slice_start = slice_end + 1
-        next_slice_end = slice_end + res_value_calc_n
-        next_slice_timesteps = filter(x -> next_slice_start <= (convert(Dates.Second, x - t_0) / Dates.Second(3600)) < next_slice_end, temps);
+        next_slice_start = slice_end + 1 # set the starting point for the price calculation to be after the last timestep of the part-horizon
+        next_slice_end = slice_end + res_value_calc_n # define end point of calculation
+        next_slice_timesteps = filter(x -> next_slice_start <= (convert(Dates.Second, x - t_0) / Dates.Second(3600)) < next_slice_end, temps); # find relevant timesteps
 
-        # calculate and set residual value based on user-defined data.
-        #relevant_res_vals = filter(x -> DateTime(x.t) in next_slice_timesteps, timeseries_data["market_prices"])
-        #if !isempty(relevant_res_vals)
-        #    res_val = sum(relevant_res_vals[:, 3]) / res_value_calc_n
-        #    input_data.nodes["pit_heat_sto"].state.residual_value = res_val * 0.24
-        #end
-
-        #
-        ###
+        relevant_res_vals = filter(x -> DateTime(x.t) in next_slice_timesteps, timeseries_data["market_prices"]) # get relevant timeseries from the input data
+        col_nr = 3 # In this case, the relevant timeseries data was in the third column of the dataframe. 
+        if !isempty(relevant_res_vals)
+            res_val = sum(relevant_res_vals[:, 3]) / res_value_calc_n # calculate average of prices for the timeseries
+            input_data.nodes["INSERT_STATE_NODE_NAME"].state.residual_value = res_val # The residual value of the state is set based on the calculated average price.  
+        end
+        """
 
 
-        # Check input_data
+        # Check input_data. end rolling if data not valid. 
         validation_result = Predicer.validate_data(input_data);
         if !validation_result["is_valid"]
             unsucc_dict = Dict()
@@ -218,6 +210,7 @@ function roll_predicer(input_data_path::String, horizon_length::Number, overlap:
         # solve model.
         Predicer.solve_model(mc)
 
+        # check if model solved successfully, and store data based on results.
         if termination_status(mc["model"]) == MOI.TerminationStatusCode(1) # optimal solution, save results
             log_key = length(data_log["model_runs"])+1
             run_info = Dict()
