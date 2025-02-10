@@ -1,8 +1,5 @@
-import Predicer
-
 using DataFrames
 using Dates
-using HiGHS
 using JuMP
 using DataStructures
 
@@ -211,7 +208,7 @@ function roll_predicer(input_data_path::String, horizon_length::Number, overlap:
         Predicer.solve_model(mc)
 
         # check if model solved successfully, and store data based on results.
-        if termination_status(mc["model"]) == MOI.TerminationStatusCode(1) # optimal solution, save results
+        if JuMP.termination_status(mc["model"]) == MOI.OPTIMAL
             log_key = length(data_log["model_runs"])+1
             run_info = Dict()
             run_info["t_start"] = slice_start
@@ -222,10 +219,10 @@ function roll_predicer(input_data_path::String, horizon_length::Number, overlap:
             run_info["costs"] = Predicer.get_costs_dataframe(mc, input_data)
             data_log["runs_info"][log_key] = run_info
             data_log["model_runs"][log_key] = Predicer.get_all_result_dataframes(mc, input_data, "", "")
-            data_log["meta"]["termination_code"] = termination_status(mc["model"])
+            data_log["meta"]["termination_code"] = JuMP.termination_status(mc["model"])
         else
             unsucc_dict = Dict()
-            unsucc_dict["termination_code"] = termination_status(mc["model"])
+            unsucc_dict["termination_code"] = JuMP.termination_status(mc["model"])
             unsucc_dict["model"] = mc
             unsucc_dict["input_data"] = input_data
             unsucc_dict["t_start"] = slice_start

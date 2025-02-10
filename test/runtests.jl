@@ -85,5 +85,6 @@ end
 ## Test sets.  Comment away to skip.
 include("make-graph.jl")
 include("predicer.jl")
+include("roll.jl")
 include("scenarios.jl")
 include("sddp.jl")

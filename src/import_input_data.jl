@@ -3,8 +3,6 @@ using XLSX
 using DataStructures
 using Dates
 
-import Predicer
-
 function import_input_data(input_data_path::String, t_horizon::Vector{DateTime}=DateTime[])
     system_data, timeseries_data, temps = Predicer.read_xlsx(input_data_path, t_horizon)
     return Predicer.compile_input_data(system_data, timeseries_data, temps)
