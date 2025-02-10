@@ -65,7 +65,7 @@ graph can be created from a Predicer `InputData` structure.
 More recent work has aimed at definition of multistage SDDP
 models with Predicer.  The idea is to define each stage with its own
 `InputData` instance.  These must be compatible with each other so the
-stages can be combined: the timespans must fit together, each stage
+stages can be combined: the time spans must fit together, each stage
 starting where the previous ends, and the state variables carried
 across stages must be the same (even at different stage boundaries).
 There is one more stage than there are `InputData` instances; the
@@ -81,7 +81,7 @@ stage boundaries, but not all at every boundary.  The `Staging` data
 structure indicates when each market closes and clears.  `Staging`
 is designed to be read from a YAML file.
 
-If market clearing is reasonably quick, it can be modelled as
+If market clearing is reasonably quick, it can be modeled as
 instantaneous, having the market close at the end of one stage and
 clear just before the next.  However, there may be a long delay
 between the clearing and the start of the auction period.  E.g., the
@@ -104,14 +104,14 @@ Markets with different MTUs are thus supported.
 Markets are not the only state in Predicer that needs multistage
 support.  The node state variable `v_state` is carried between stages
 in the SDDP state variable `v_node_state`.  The initial value for the
-whole model is obtaned from the first `InputData`.  In subsequent
+whole model is obtained from the first `InputData`.  In subsequent
 stages, the `InputData` value is ignored.  No other state is yet
 supported.
 
 ## Implementation considerations
 
 - Functions and data structures specific to SDDP are in `sddp.jl`.
-- For creating scenaro subproblems, `InputData.scenarios` is modified
+- For creating scenario subproblems, `InputData.scenarios` is modified
   to contain a single scenario.  All iteration over scenarios must be
   done using that vector, typically by calling
   `scenarios(input_data)`.  Many components of `InputData` are indexed
@@ -128,7 +128,7 @@ supported.
 - Parts of Predicer model assembly need to be aware if they are
   building an SDDP subproblem or a regular Predicer model.  They check
   for `mc["sddp"]`, which contains a `StageParam` for SDDP and is
-  absent otherwise.  `StageParam` included `StateShape`, `Staging` and
+  absent otherwise.  `StageParam` includes `StateShape`, `Staging` and
   the current stage number.
 - In `StageParam` and `Staging`, stage numbers start from zero: stage
   0 only bids the markets indicated in `Staging`.  Other stage numbers
@@ -150,7 +150,7 @@ supported.
 - More multistage state is likely needed, at least for ramping limits
   and delays.
 - Little attention has been paid at how the sequence of `InputData`
-  for a multistage problem would be constructed.  Having a separete
+  for a multistage problem would be constructed.  Having a separate
   Excel workbook for each seems hardly feasible.  Perhaps a single
   `InputData` could be split into parts for building the stages?
 - The Excel workbook format is unwieldy even for two-stage if one
