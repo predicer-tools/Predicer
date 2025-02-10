@@ -878,9 +878,10 @@ end
 Function to create tuples for inflow blocks. Form (blockname, node, s, t).
 """
 function block_tuples(input_data::InputData)
-    [(bn, b.node, ts.scenario, string(t))
+    [(bn, b.node, s, string(t))
      for (bn, b) in input_data.inflow_blocks
-     for ts in b.data.ts_data for t in keys(ts.series)]
+     for s in keys(input_data.scenarios)
+     for t in keys(b.data(s).series)]
 end
 
 

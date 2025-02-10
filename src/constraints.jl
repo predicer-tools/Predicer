@@ -1,8 +1,10 @@
+using DocStringExtensions
+
 using DataStructures
 using JuMP
 
 """
-    create_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
+$(TYPEDSIGNATURES)
 
 Create all constraints used in the model.
 
@@ -10,7 +12,8 @@ Create all constraints used in the model.
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
 - `input_data::OrderedDict`: Dictionary containing data used to build the model.
 """
-function create_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
+function create_constraints(
+        model_contents::OrderedDict, input_data::Predicer.InputData)
     setup_reserve_realisation(model_contents, input_data)
     setup_node_balance(model_contents, input_data)
     setup_process_online_balance(model_contents, input_data)
@@ -25,8 +28,10 @@ function create_constraints(model_contents::OrderedDict, input_data::Predicer.In
     setup_fixed_values(model_contents, input_data)
     setup_generic_constraints(model_contents, input_data)
     setup_cost_calculations(model_contents, input_data)
-    setup_cvar_element(model_contents, input_data)
-    setup_objective_function(model_contents, input_data)
+    if !haskey(model_contents, "sddp")
+        setup_cvar_element(model_contents, input_data)
+        setup_objective_function(model_contents, input_data)
+    end
     setup_reserve_participation(model_contents, input_data)
     setup_inflow_blocks(model_contents, input_data)
 end
@@ -99,9 +104,18 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
     end
     v_st(n, s, t) = model[:v_state][
         validate_tuple(val_dict, common_ts, (n, s, t), 2)]
-    v_st_prev(n, s, t) =
-        (t != times[1] ? v_st(n, s, prev_times[t])
-                       : input_data.nodes[n].state.initial_state)
+    sddp = haskey(model_contents, "sddp")
+    v_st_prev(n, s, t) = (
+        t != times[1] ? v_st(n, s, prev_times[t])
+        : sddp ? model[:v_node_state][n].in
+        : input_data.nodes[n].state.initial_state
+    )
+    if sddp && input_data.setup.contains_states
+        (scen,) = scenarios(input_data)
+        tend = input_data.temporals.t[end]
+        @constraint(model, c_node_state[n = state_nodes(input_data)],
+                    model[:v_node_state].out == v_st(n, scen, tend))
+    end
     @expressions model begin
         e_node_bal_eq_state_balance[n = states, s = scens, t = times],
         temp_conv(n, v_st(n, s, t) - v_st_prev(n, s, t))
@@ -259,14 +273,14 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
 
     # setup node history expression
     for n in keys(input_data.node_histories)
-        for ts_data in input_data.node_histories[n].steps.ts_data
-            for (t, y) in ts_data.series
+        hist = input_data.node_histories[n].steps
+        for s in keys(input_data.scenarios)
+            for (t, y) in hist(s).series
                 ts = string(t)
+                add_to_expression!(e_node_bal_eq_history[(n, s, ts)], y)
                 add_to_expression!(
-                    e_node_bal_eq_history[(n, ts_data.scenario, ts)], y)
-                add_to_expression!(
-                    e_constraint_node_bal_eq[(n, ts_data.scenario, ts)],
-                    e_node_bal_eq_history[(n, ts_data.scenario, ts)])
+                    e_constraint_node_bal_eq[(n, s, ts)],
+                    e_node_bal_eq_history[(n, s, ts)])
             end
         end
     end
@@ -974,7 +988,15 @@ function setup_reserve_balances(model_contents::OrderedDict, input_data::Predice
         # res_tuple is the tuple use for v_res (market, n, res_dir, s, t)
         # res_eq_updn_tuple (market, s, t)
         # the previously used tuple is res_eq_tuple, of form (ng, rt, s, t)
-        res_eq_updn = @constraint(model, res_eq_updn[tup in res_eq_updn_tuple], v_res[validate_tuple(val_dict, common_ts, (tup[1], markets[tup[1]].node, res_dir[1], tup[2], tup[3]), 4)] - v_res[validate_tuple(val_dict, common_ts, (tup[1], markets[tup[1]].node, res_dir[2], tup[2], tup[3]), 4)] == 0)
+        res_eq_updn = @constraint(
+            model, res_eq_updn[tup in res_eq_updn_tuple],
+            v_res[validate_tuple(
+                val_dict, common_ts,
+                (tup[1], markets[tup[1]].node, res_dir[1], tup[2], tup[3]), 4)]
+            - v_res[validate_tuple(
+                val_dict, common_ts,
+                (tup[1], markets[tup[1]].node, res_dir[2], tup[2], tup[3]), 4)]
+            == 0)
         res_eq_up = @constraint(model, res_eq_up[tup in res_nodegroup], e_res_bal_up[tup] == 0)
         res_eq_dn = @constraint(model, res_eq_dn[tup in res_nodegroup], e_res_bal_dn[tup] == 0)
 
@@ -992,7 +1014,12 @@ function setup_reserve_balances(model_contents::OrderedDict, input_data::Predice
             end
             for s in scenarios(input_data), t in input_data.temporals.t
                 r_tup = map(x -> (x..., s, t), red_r_tup)
-                reserve_final_exp[(tup, s, t)] = @expression(model, sum(v_res[validate_tuples(val_dict, common_ts, r_tup, 4)]) .* (markets[tup].direction == "up_down" ? 0.5 : 1.0) .- v_res_final[validate_tuple(val_dict, common_ts, (tup, s, t), 2)])
+                reserve_final_exp[(tup, s, t)] = @expression(
+                    model,
+                    sum(v_res[validate_tuples(val_dict, common_ts, r_tup, 4)])
+                        * (markets[tup].direction == "up_down" ? 0.5 : 1.0)
+                    - v_res_final[validate_tuple(
+                        val_dict, common_ts, (tup, s, t), 2)])
             end
         end
         reserve_final_eq = @constraint(model, reserve_final_eq[tup in res_final_tuple], reserve_final_exp[tup] == 0)
@@ -1213,7 +1240,7 @@ function setup_fixed_values(model_contents::OrderedDict, input_data::Predicer.In
     val_dict = model_contents["validation_dict"]
     common_ts = model_contents["common_timesteps"]
     fixed_value_tuple = fixed_market_tuples(input_data)
-    v_bid = model_contents["expression"]["v_bid"]
+    v_bid = model[:v_bid]
     markets = input_data.markets
     scenarios = collect(keys(input_data.scenarios))
 
@@ -1247,20 +1274,38 @@ end
 
 
 """
-    setup_bidding_curve_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
+$(TYPEDSIGNATURES)
 
-Setup constraints for market bidding curves.
+Interpolation constraints for bid slots.   Match the market
+prices of the scenario to the bid curves and set the scenario bid volumes
+accordingly.  Creates the expressions `v_bid[m, s, t]` (flow associated
+with market m in scenario s at time t) and `e_bid_slot[m, s, ti]`
+(interpolated volume from bid curve ti), and a constraint named `bid_slot_eq`
+equating the two.  m runs over markets having bid slots.
+
+For SDDP, it is more complicated.  Let the stage timespan be [s0, s1] and
+the bid timespan [b0, b1].
+- If the market does not clear at s0:
+    * `v_bid` is set to `v_cleared_volume.in`.
+    * `v_cleared_volume.out` is set to `v_cleared_volume.in`, shifted
+      by ⌊s1⌋ - ⌊s0⌋, where floor is taken with respect to MTU using
+      BidSlot.time_steps[1] as the origin.
+- If the market clears at s0:
+    * `v_bid` is set to `v_cleared_volume.in` during [s0, min(s1, b0)]
+      and interpolated from bid curves during [min(s1, b0), s1]
+    * `v_cleared_volume.out` is similarly set to `v_cleared_volume.in`
+      or interpolated bid curves, shifting as above.  It extends to b1.
 
 # Arguments
-- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
-- `input_data::OrderedDict`: Dictionary containing data used to build the model.
+- `model_contents`: Constructed model and auxiliary data. 
+- `input_data`: Data used to build the model. 
 """
-function setup_bidding_curve_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
+function setup_bidding_curve_constraints(
+        model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
     val_dict = model_contents["validation_dict"]
     common_ts = model_contents["common_timesteps"]
     markets = input_data.markets
-    b_slots = input_data.bid_slots
     #=XXX Overkill.
     Market processes are created so that there is one
     per market, the same in and out, and its name is derived from the market
@@ -1269,72 +1314,166 @@ function setup_bidding_curve_constraints(model_contents::OrderedDict, input_data
     (proc_tup_in, proc_tup_out) = proc_index(
         n -> haskey(markets, n), input_data)
 
-    v_flow = model.obj_dict[:v_flow]
-    v_flow_bal = model.obj_dict[:v_flow_bal]
-    v_bid_vol = model.obj_dict[:v_bid_volume]
+    v_flow = model[:v_flow]
+    v_flow_bal = model[:v_flow_bal]
 
-    v_bid = model_contents["expression"]["v_bid"] = OrderedDict()
-    e_bid_slot = OrderedDict()
-
-    for m in keys(b_slots)
-        m_cons_flow = proc_tup_out[m][1]
-        m_prod_flow = proc_tup_in[m][1]
-        m_cons_bal_flow = (m, "dw")
-        m_prod_bal_flow = (m, "up")
-        [e_bid_slot[(m, s, string(t))] = AffExpr(0.0) for s in scenarios(input_data), t in input_data.bid_slots[m].time_steps];
-
-        for s in scenarios(input_data), (ts, t) in input_data.temporals.times
-            tup = (m, s, ts)
-            v_bid[tup] = AffExpr(0.0)
-            #e_bid_slot[tup] = AffExpr(0.0)
-            if markets[m].m_type == "energy"
-                add_to_expression!(v_bid[tup],v_flow[validate_tuple(val_dict, common_ts, (m_prod_flow..., s, ts), 4)],1.0) #prod
-                add_to_expression!(v_bid[tup],v_flow_bal[validate_tuple(val_dict, common_ts, (m_prod_bal_flow..., s, ts), 3)],1.0) #prod_bal
-                add_to_expression!(v_bid[tup],v_flow[validate_tuple(val_dict, common_ts, (m_cons_flow..., s, ts), 4)],-1.0) #cons
-                add_to_expression!(v_bid[tup],v_flow_bal[validate_tuple(val_dict, common_ts, (m_cons_bal_flow..., s, ts), 3)],-1.0) #cons_bal
-            else
-                add_to_expression!(v_bid[tup],v_res_final[tup],1.0)
-            end
+    function compute_v_bid(m, s, t)
+        ts = string(t)
+        v = AffExpr(0.0)
+        if markets[m].m_type == "energy"
+            add_to_expression!(
+                v, v_flow[validate_tuple(
+                    val_dict, common_ts, (proc_tup_in[m][1]..., s, ts), 4)])
+            add_to_expression!(
+                v, v_flow_bal[validate_tuple(
+                    val_dict, common_ts, (m, "up", s, ts), 3)])
+            add_to_expression!(
+                v, v_flow[validate_tuple(
+                    val_dict, common_ts, (proc_tup_out[m][1]..., s, ts), 4)],
+                -1.0)
+            add_to_expression!(
+                v, v_flow_bal[validate_tuple(
+                    val_dict, common_ts, (m, "dw", s, ts), 3)],
+                -1.0)
+        else
+            add_to_expression!(
+                v, model[:v_res_final][validate_tuple(
+                    val_dict, common_ts, (m, s, ts), 2)])
         end
+        return v
+    end
+    bid_slots = input_data.bid_slots
+    v_bid_vol = model[:v_bid_volume]
+    sddp_par = get(model_contents, "sddp", nothing)
+    sddp = !isnothing(sddp_par)
+    function interpolate_bid(m, s, ti)
+        bs = bid_slots[m]
+        t = bs.time_steps[ti]
+        bn0, bn1 = bs.market_price_allocation[(s, t)]
+        p0 = bs.prices[(t, bn0)]
+        p1 = bs.prices[(t, bn1)]
+        ps = markets[m].price(s, t)
+        expr = AffExpr(0.0)
+        bid_vol(bn) = (sddp ? v_bid_vol[m, bn, ti].in
+                            : v_bid_vol[(m, bn, string(t))]) 
+        add_to_expression!(expr, bid_vol(bn0), (p1-ps)/(p1-p0))
+        add_to_expression!(expr, bid_vol(bn1), (ps-p0)/(p1-p0))
+        return expr
+    end
+    scens = scenarios(input_data)
+    times = values(input_data.temporals.times)
+    bid_markets = (m.name for m in values(input_data.markets)
+                   if is_balance_market(m) || haskey(bid_slots, m.name))
+    if sddp
+        clears = m -> shall_clear(m, sddp_par)
+        cl_markets = filter(clears, keys(bid_slots))
+        cleared_vol = model[:v_cleared_volume]
+    else
+        clears = m -> true
+        cl_markets = keys(bid_slots)
+    end
+    @expressions model begin
+        v_bid[m = bid_markets, s = scens, t = times],
+            compute_v_bid(m, s, t)
 
-        for s in scenarios(input_data), bidslot_t in input_data.bid_slots[m].time_steps
-            t = string(bidslot_t)
-            tup = (m, s, t)
-            (bn0, bn1) = b_slots[m].market_price_allocation[(s, bidslot_t)]
-            p0 = b_slots[m].prices[(bidslot_t, bn0)]
-            p1 = b_slots[m].prices[(bidslot_t, bn1)]
-            ps = markets[m].price(s, t)
-            add_to_expression!(e_bid_slot[tup],v_bid_vol[(m,bn0,t)],1-(ps-p0)/(p1-p0))
-            add_to_expression!(e_bid_slot[tup],v_bid_vol[(m,bn1,t)],(ps-p0)/(p1-p0))
+        e_bid_slot[m = cl_markets, s = scens,
+                   ti = 1 : length(bid_slots[m].time_steps)],
+            interpolate_bid(m, s, ti)
+    end
+    function e_bid(m, s, t)
+        bs = bid_slots[m]
+        ti = clears(m) ? time_slot_of(bs, t) : 0
+        @assert sddp || ti > 0
+        if ti > 0
+            return e_bid_slot[m, s, ti]
+        else
+            tic = cv_slot_of(m, t, input_data, sddp_par)
+            return cleared_vol[m, tic].in
         end
     end
-    bid_scen_tuple = Predicer.bid_scenario_tuples(input_data)
-    @constraint(model, bid_slot_eq[tup in bid_scen_tuple], v_bid[tup] == e_bid_slot[tup])
+    @constraint(model, bid_slot_eq[m = keys(bid_slots), s = scens, t = times],
+        v_bid[m, s, t] == e_bid(m, s, t))
+    if sddp
+        @assert length(scens) == 1
+        (scen,) = scens
+        len_st(m) = cv_slot_of(m, end_of(input_data.temporals),
+                               input_data, sddp_par)
+        len_cv(m) = len_cleared_vol(sddp_par.shape.bid_shapes[m])
+        function e_bid2(m, ti)
+            if clears(m)
+                bsts = bid_slots[m].time_steps
+                bid_start = cv_slot_of(m, bsts[1], input_data, sddp_par)
+                tb = ti - bid_start + 1
+                if tb > 0
+                    return tb > length(bsts) ? 0 : e_bid_slot[m, scen, tb]
+                end
+            end
+            return ti > len_cv(m) ? 0 : cleared_vol[m, ti].in
+        end
+        @constraint(model,
+                    c_cleared_vol[m = keys(bid_slots), ti = 1 : len_cv(m)],
+                    cleared_vol[m, ti].out == e_bid2(m, ti + len_st(m)))
+    end
 end
 
 """
-    setup_bidding_volume_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
+$(TYPEDSIGNATURES)
 
-Setup constraints for market bidding volumes.
+Constrain bid curves to increase for bid slots.  Creates a constraint named
+`bid_vol`.  For SDDP, do different things depending on staging:
+- In a bidding stage, constrain outgoing bid curves to increase.
+- In a non-bidding clearing stage, fix outgoing bid curves to zero.
+- If neither bidding nor clearing, set outgoing bid curves to incoming.
 
 # Arguments
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
 - `input_data::OrderedDict`: Dictionary containing data used to build the model.
 """
-function setup_bidding_volume_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
+function setup_bidding_volume_constraints(
+        model_contents::OrderedDict, input_data::Predicer.InputData)
     model = model_contents["model"]
-    tups = ((m, bs.slots[i - 1], bs.slots[i], string(t))
-            for (m, bs) in input_data.bid_slots
-            for i in 2 : length(bs.slots) for t in bs.time_steps)
-    v_bid_vol = model.obj_dict[:v_bid_volume]
+    v_bid_vol = model[:v_bid_volume]
+    if haskey(model_contents, "sddp")
+        sddp = model_contents["sddp"]
+        bid_slots = OrderedDict()
+        zero_slots = Dict()
+        carry_slots = OrderedDict()
+        for kv in input_data.bid_slots
+            m = kv.first
+            if shall_bid(m, sddp)
+                push!(bid_slots, kv)
+            elseif shall_clear(m, sddp)
+                push!(zero_slots, kv)
+            else
+                push!(carry_slots, kv)
+            end
+        end
+        times = bs -> 1 : length(bs.time_steps)
+        bid_vol = tup -> v_bid_vol[tup].out
+        fix.(bid_vol.([(m, s, t) for (m, bs) in zero_slots
+                                 for s in bs.slots for t in times(bs)]),
+             0; force=true)
+        ctups = ((m, s, t) for (m, bs) in carry_slots
+                           for s in bs.slots for t in times(bs))
+        @constraint(model, carry_bid[tup = ctups],
+                    v_bid_vol[tup].out == v_bid_vol[tup].in)
+    else
+        bid_slots = input_data.bid_slots
+        times = bs -> string.(bs.time_steps)
+        bid_vol = tup -> v_bid_vol[tup]
+    end
+    tups = ((m, bs.slots[i - 1], bs.slots[i], t)
+            for (m, bs) in bid_slots
+            for i in 2 : length(bs.slots) for t in times(bs))
     @constraint(model, bid_vol[(m, s0, s1, t) = tups],
-                v_bid_vol[(m, s1, t)] ≥ v_bid_vol[(m, s0, t)])
+                bid_vol((m, s1, t)) ≥ bid_vol((m, s0, t)))
 end
 
 """
     setup_bidding_constraints(model_contents::OrderedDict, input_data::Predicer.InputData)
 
-Setup constraints for market bidding.
+Constrain bid curves to increase when bid slots are not used.  Creates a
+constraint named `bidding`.
 
 # Arguments
 - `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model.
@@ -1347,12 +1486,10 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
     markets = input_data.markets
     scens = collect(keys(input_data.scenarios))
     temporals = input_data.temporals
-    (proc_tup_in, proc_tup_out) = proc_index(
-        n -> haskey(markets, n), input_data)
 
     v_flow = model[:v_flow]
     v_flow_bal = model[:v_flow_bal]
-    v_bid = model_contents["expression"]["v_bid"] = OrderedDict()
+    v_bid = model[:v_bid]
     if input_data.setup.contains_reserves
         v_res_final = model[:v_res_final]
     end
@@ -1363,19 +1500,8 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
             pcols = []
             sizehint!(pcols, length(scens))
             if markets[m].m_type == "energy"
-                m_cons_flow = proc_tup_out[m][1] # market consuming flow
-                m_prod_flow = proc_tup_in[m][1] # market producing flow
-                m_cons_bal_flow = (m, "dw") # bal market consuming flow
-                m_prod_bal_flow = (m, "up") # bal market producing flow
                 for s in scens
                     push!(pcols, values(markets[m].price(s).series))
-                    for t in temporals.t
-                        vb = v_bid[(markets[m].name,s,t)] = AffExpr(0.0)
-                        add_to_expression!(vb, v_flow[validate_tuple(val_dict, common_ts, (m_prod_flow..., s, t), 4)],1.0) # producer flow
-                        add_to_expression!(vb, v_flow_bal[validate_tuple(val_dict, common_ts, (m_prod_bal_flow..., s, t), 3)],1.0) #"producer" balance flow
-                        add_to_expression!(vb, v_flow[validate_tuple(val_dict, common_ts, (m_cons_flow..., s, t), 4)],-1.0) # consumer flow
-                        add_to_expression!(vb, v_flow_bal[validate_tuple(val_dict, common_ts, (m_cons_bal_flow..., s, t), 3)],-1.0) # consumer balance flow
-                    end
                 end
             end
             if markets[m].m_type=="reserve"
@@ -1407,7 +1533,7 @@ function setup_bidding_constraints(model_contents::OrderedDict, input_data::Pred
                 #XXX Is this ever different from m?
                 mn = markets[m].name
                 for (sns, eq) in scen_pairs(price_matr[m][i,:])
-                    vars = [v_bid[(mn, s, ts)] for s in sns]
+                    vars = [v_bid[mn, s, t] for s in sns]
                     cons[m, ts, sns...] = (vars[2] - vars[1], eq)
                 end
             elseif markets[m].m_type == "reserve" && input_data.setup.contains_reserves
@@ -1687,7 +1813,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
                              for topo in p.topos)
 
     v_flow = model[:v_flow]
-    v_bid = model_contents["expression"]["v_bid"]
+    v_bid = model[:v_bid]
     v_flow_bal = model[:v_flow_bal]
 
     scenarios = Predicer.scenarios(input_data)
@@ -1722,23 +1848,23 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
             market = markets[n]
             # bidding market with balance market
             if market.is_bid
-                for s in scenarios, t in temporals.t
-                    tup = (node.name,s,t)
-                    tup_up = (node.name,"up",s,t)
-                    tup_dw = (node.name,"dw",s,t)
+                for s in scenarios, (ts, t) in temporals.times
+                    tup_up = (node.name,"up",s,ts)
+                    tup_dw = (node.name,"dw",s,ts)
                     add_to_expression!(
                         market_costs[s],
-                        v_bid[tup], -market.price(s, t) * temporals(t))
+                        v_bid[node.name, s, t],
+                        -market.price(s, ts) * temporals(t))
                     add_to_expression!(
                         market_costs[s],
                         v_flow_bal[
                             validate_tuple(val_dict, common_ts, tup_up, 3)],
-                        market.up_price(s, t) * temporals(t))
+                        market.up_price(s, ts) * temporals(t))
                     add_to_expression!(
                         market_costs[s],
                         v_flow_bal[
                             validate_tuple(val_dict, common_ts, tup_dw, 3)],
-                        -market.down_price(s, t) * temporals(t))
+                        -market.down_price(s, ts) * temporals(t))
                 end
             # non-bidding market
             else

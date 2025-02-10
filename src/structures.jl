@@ -1,6 +1,7 @@
 using DocStringExtensions
 using DataStructures
 using Dates
+using DocStringExtensions
 
 
 """
@@ -77,6 +78,23 @@ Returns the length of the timesteps between t and t+1 compared to one hour.
     tem.is_variable_dt ? tem.variable_dt[t] : tem.dtf
 
 (tem::Temporals)(t::String) = tem(tem.times[t])
+
+"""
+$(TYPEDSIGNATURES)
+
+Return the beginning of the time period represented by `tem`.
+"""
+start(tem::Temporals) :: DateTime = first(tem.times).second
+
+"""
+$(TYPEDSIGNATURES)
+
+Return the end of the time period represented by `tem`.
+"""
+function end_of(tem::Temporals) :: DateTime
+    lt = last(tem.times).second
+    return lt + Hour(tem(lt))
+end
 
 """
     mutable struct State
@@ -940,6 +958,7 @@ struct BidSlot
     market::String
     """Time slots (defined by the market)"""
     time_steps::Vector{DateTime}
+    time_index::SortedDict{DateTime, Int}
     """Price slots"""
     slots::Vector{String}
     """Price points by time slot and price slot name"""
@@ -948,8 +967,22 @@ struct BidSlot
     price slot names of the end points of the matching segment."""
     market_price_allocation::OrderedDict{Tuple{String,DateTime}, Tuple{String,String}}
     function BidSlot(name,time_steps,slots,prices,market_price_allocation)
-        return new(name,time_steps,slots,prices,market_price_allocation)
+        return new(name,time_steps,
+                   SortedDict(t => i for (i, t) in enumerate(time_steps)),
+                   slots,prices,market_price_allocation)
     end
+end
+
+"""
+$(TYPEDSIGNATURES)
+
+Return the index of the greatest element in bs.time_steps that is less than
+or equal to t.  Return zero if there is no such element.
+"""
+function time_slot_of(bs::BidSlot, t::DateTime)
+    st = searchsortedlast(bs.time_index, t)
+    return (st == beforestartsemitoken(bs.time_index)
+            ? 0 : bs.time_index[st])
 end
 
 
