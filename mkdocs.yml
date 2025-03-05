@@ -6,6 +6,7 @@ nav:
   - Overview: introduction.md
   - Getting started: getting_started.md
   - Building your model: input_data.md
+  - Stochastic optimisation: sddp.md
   - Example models: example_models.md
   - References: references.md
 theme: readthedocs

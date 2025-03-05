@@ -1,0 +1,4 @@
+markets:
+  npe:
+    bid: [0]
+    clear: [1]

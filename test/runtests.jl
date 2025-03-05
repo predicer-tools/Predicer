@@ -6,73 +6,85 @@
 using Predicer
 using Test
 using JuMP
+using DataStructures
+using SDDP
 
+## All optimisation tests should use Optimizer, e.g., Model(Optimizer).
+## Uncomment the one you want.
 using HiGHS: Optimizer
-#using Cbc: Optimizer
-#using CPLEX: Optimizer
+# using Cbc: Optimizer
+# using CPLEX: Optimizer
 
-# Model definition files and objective values.  obj = NaN to disable
-# comparison.
-cases = [
-    "input_data.xlsx" => -10985.034456374564
-    "input_data_complete.xlsx" => -5798.38468498
-    "input_data_bidcurve.xlsx" => -4371.579033779262
-    "demo_model.xlsx" => -1095.5118308122817
-    "example_model.xlsx" => -11014.1278942231
-    "input_data_common_start.xlsx" => -1589.80385514
-    "input_data_delays.xlsx" => 62.22222222222222
-    "input_data_temps.xlsx" => 65388.35282275837
-    "simple_building_model.xlsx" => 563.7841038762567
-    "simple_dh_model.xlsx" => 7195.372539092246
-    #"simple_hydropower_river_system.xlsx" => NaN
-    "two_stage_dh_model.xlsx" => 9508.652488524222
-]
+"""Turn off all solver logging"""
+silent = false
+
+"""
+Model definition files and objective values.  obj = NaN to disable
+comparison.
+"""
+cases = OrderedDict(
+    "input_data_complete.xlsx" => -5798.38468498,
+    "input_data.xlsx" => -10985.20345389959,
+    "input_data_bidcurve.xlsx" => -4371.579033779262,
+    "input_data_bidcurve_e.xlsx" => -4501.509824681449,
+    "demo_model.xlsx" => -1095.5118308122817,
+    "example_model.xlsx" => -11014.1278942231,
+    "input_data_common_start.xlsx" => -1589.80385514,
+    "input_data_delays.xlsx" => 62.22222222222222,
+    "input_data_temps.xlsx" => 65388.35282275837,
+    "simple_building_model.xlsx" => 563.7841038762567,
+    "simple_dh_model.xlsx" => 7195.372539092246,
+    #"simple_hydropower_river_system.xlsx" => NaN,
+    "two_stage_dh_model.xlsx" => 9508.652488524222,
+)
+
+"""
+SDDP test cases with lower bounds.
+I think these have to be for the best scenario, at least for multicut.
+A bound for the expected cost may do for single cut.
+"""
+sddp_cases = OrderedDict(
+    "input_data_bidcurve.xlsx" => -12000,
+    "input_data_bidcurve_e.xlsx" => -12000,
+)
 
 inputs = Dict{String, Predicer.InputData}()
 
+"""
+All tests should use this to read `InputData` from files.  `bn` is the
+basename (without directory but with suffix) of the input file.  The inputs
+are cached; each is only read once.
+"""
 get_input(bn) = get!(inputs, bn) do
     inp = Predicer.get_data(joinpath("..", "input_data", bn))
     Predicer.tweak_input!(inp)
 end
 
-include("../make-graph.jl")
-
-@testset "make-graph on $bn" for (bn, _) in cases
-    of = joinpath("..", "input_data",
-                  replace(bn, r"[.][^.]*$" => "") * ".dot")
-    println("$bn |-> $of")
-    @test (write_graph(of, get_input(bn)); true)
+"""
+Workaround for some solvers throwing on JuMP.relative_gap.
+Return Inf instead, as some other solvers do.
+"""
+relative_gap(m) = try
+    JuMP.relative_gap(m)
+catch
+    Inf
 end
 
-@testset "Predicer on $bn" for (bn, known_obj) in cases
-    m = Model(Optimizer)
-    #set_silent(m)
-    inp = get_input(bn)
-    mc = Predicer.generate_model(m, inp)
-    @test m == mc["model"]
-    Predicer.solve_model(mc)
-    @test termination_status(m) == MOI.OPTIMAL
+"""
+Relative tolerance for comparing objective values.
+"""
+function obj_rtol(m)
     rgap = relative_gap(m)
-    # Apparently infinite for LP
     if rgap < 1e-8 || !isfinite(rgap)
-        rgap = 1e-8
+        return 1e-8
+    else
+        return rgap
     end
-    if !isnan(known_obj)
-        @test objective_value(m) ≈ known_obj rtol=rgap
-    end
-    @show objective_value(m) known_obj relative_gap(m)
-    s = scenarios(inp)[1]
-    @test !isempty(Predicer.get_all_result_dataframes(mc, inp))
-    @test !isempty(Predicer.get_costs_dataframe(mc, inp))
-    @test !isempty(Predicer.get_costs_dataframe(mc, inp, "total_costs", s))
-    @test !isempty([Predicer.get_process_balance(mc, inp, p, s) for p in collect(keys(inp.processes))])
-    @test !isempty([Predicer.get_node_balance(mc, inp, n, s) for n in collect(keys(inp.nodes))])
-    
 end
 
-roll_data_log = Predicer.roll_predicer(joinpath("..", "input_data", "rolling_model.xlsx"), 24, 6, 0, 48)
-@test haskey(roll_data_log, "model_runs")
-@test haskey(roll_data_log, "runs_info")
-@test haskey(roll_data_log, "meta")
-@test !haskey(roll_data_log, "failed_last_run")
-@test ≈(sum(sum(eachcol(Predicer.collect_cost_dfs(roll_data_log)[!, 3:11]))), 18311.28, atol=0.01)
+## Test sets.  Comment away to skip.
+include("make-graph.jl")
+include("predicer.jl")
+include("roll.jl")
+include("scenarios.jl")
+include("sddp.jl")
