@@ -3,6 +3,7 @@ using DataFrames
 using Dates
 using DataStructures
 using XLSX
+using JSONTables
 
 """
     get_costs_dataframe(model_contents::OrderedDict, input_data::InputData, costs::Vector{String}, scenario::Vector{String})
@@ -452,28 +453,84 @@ function get_all_result_dataframes(model_contents::OrderedDict, input_data::Inpu
 end
 
 """
+    get_bidding_prices(input_data::InputData, market::String)
+
+Collect bidding matrix volumes for a given market into a DataFrame.
+"""
+function get_bidding_prices(input_data::InputData, market::String)
+    df_pri = DataFrame()
+    if !isempty(input_data.bid_slots)
+        bid_slots = input_data.bid_slots
+        df_pri[!, "t"] = bid_slots[market].time_steps
+        for s in bid_slots[market].slots
+            df_pri[!,s] = collect(values(filter(x->x[1][2]==s,bid_slots[market].prices)))
+        end
+    end
+    return df_pri
+end
+
+"""
+    get_bidding_volumes(model_contents::OrderedDict, input_data::InputData, market::String)
+
+Collect bidding matrix volumes for a given market into a DataFrame.
+"""
+function get_bidding_volumes(model_contents::OrderedDict, input_data::InputData, market::String)
+    df_vol = DataFrame()
+    if !isempty(input_data.bid_slots)
+        vars = model_contents["model"].obj_dict
+        v_bid = vars[Symbol("v_bid_volume")]
+        bid_slot_tuple = filter(x -> x[1] == market, collect(Predicer.bid_slot_tuples(input_data)))
+        bid_slots = input_data.bid_slots
+        df_vol[!, "t"] = bid_slots[market].time_steps
+        for s in bid_slots[market].slots
+            df_vol[!,s] = JuMP.value.(v_bid[filter(x->x[2]==s, bid_slot_tuple)].data)
+        end
+    end
+    return df_vol
+end
+
+
+"""
+    df_to_json(df::DataFrame, j_type::Bool=true)
+
+Convert a given dataframe to JSON format; either as an object table (j_type=true), or array table (j_type=false).
+"""
+function df_to_json(df::DataFrame, j_type::Bool=true)
+    if j_type
+        JSONTables.objecttable(df)
+    else
+        JSONTables.arraytable(df)
+    end
+end
+df_to_json_a(df::DataFrame) = df_to_json(df, false)
+df_to_json_o(df::DataFrame) = df_to_json(df, true)
+
+
+"""
+    dfs_to_json(dfs::Union{Dict, OrderedDict}, j_type::Bool=true)
+
+Convert DataFrames in a given dictionary to JSON format; either as an object table (j_type=true), or array table (j_type=false).
+"""
+function dfs_to_json(dfs::Union{Dict, OrderedDict}, j_type::Bool=true)
+    for k in keys(dfs)
+        dfs[k] = Predicer.df_to_json(dfs[k], j_type)
+    end
+    return dfs
+end
+
+
+"""
     get_bidding_dataframes(model_contents::OrderedDict, input_data::InputData)
 
 Collect bidding matrix results into DataFrames collected in a dictionary. Dictionary[market][volumes/prices]=Dataframe(index=ts,column=bidslot)
 """
 function get_bidding_dataframes(model_contents::OrderedDict, input_data::InputData)
     dfs =  Dict()
-    vars = model_contents["model"].obj_dict
-    v_bid = vars[Symbol("v_bid_volume")]
-    tuples = Predicer.create_tuples(input_data)
     bid_slots = input_data.bid_slots
     for b in keys(bid_slots)
-        df_vol = DataFrame(t = bid_slots[b].time_steps)
-        df_pri = DataFrame(t = bid_slots[b].time_steps)
-        for s in bid_slots[b].slots
-            prices = collect(values(filter(x->x[1][2]==s,bid_slots[b].prices)))
-            volume = value.(v_bid[filter(x->x[2]==s,collect(tuples["bid_slot_tuple"]))].data)
-            df_pri[!,s] = prices
-            df_vol[!,s] = volume
-        end
         dfs[b] = Dict()
-        dfs[b]["prices"] = df_pri
-        dfs[b]["volumes"] = df_vol
+        dfs[b]["prices"] = Predicer.get_bidding_prices(input_data::InputData, b)
+        dfs[b]["volumes"] = Predicer.get_bidding_volumes(model_contents::OrderedDict, input_data::InputData, b)
     end
     return dfs
 end
