@@ -1257,7 +1257,7 @@ function setup_fixed_values(model_contents::OrderedDict, input_data::Predicer.In
             if markets[m].m_type == "energy"
                 for (t, fix_val) in zip(temps, fix_vec)
                     for s in scenarios
-                        fix_expr[(m, s, t)] = @expression(model,v_bid[(m,s,t)]-fix_val)
+                        fix_expr[(m, s, string(t))] = @expression(model,v_bid[m, s, t]-fix_val)
                     end
                 end
             elseif markets[m].m_type == "reserve" && input_data.setup.contains_reserves

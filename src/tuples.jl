@@ -677,7 +677,7 @@ function fixed_market_tuples(input_data::InputData) # original name: create_fixe
     scens = scenarios(input_data)
     for m in values(markets)
         if !isempty(m.fixed) && m.m_type == "energy"
-            temps = map(x->x[1], m.fixed)
+            temps = map(x->string(x[1]), m.fixed)
             for s in scens, t in temps
                 push!(fixed_market_tuples, (m.name, s, t))
             end

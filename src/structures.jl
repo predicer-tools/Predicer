@@ -904,7 +904,7 @@ end
         up_price::TimeSeriesData
         down_price::TimeSeriesData
         reserve_activation_price::TimeSeriesData
-        fixed::Vector{Tuple{AbstractString, Number}}
+        fixed::Vector{Tuple{DateTime, Number}}
         function Market(name, type, node, pgroup, direction, reserve_type, is_bid, is_limited, min_bid, max_bid, fee)
             return new(name, type, node, pgroup, direction, Dict(), reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
         end
@@ -928,7 +928,7 @@ A struct for markets.
 - `up_price::TimeSeriesData`: Vector containing TimeSeries of the balance market price for buying in different scenarios. 
 - `down_price::TimeSeriesData`: Vector containing TimeSeries of the balance market price for selling in different scenarios. 
 - `reserve_activation_price::TimeSeriesData`: Vector containing TimeSeries of the price of activated reserve products. 
-- `fixed::Vector{Tuple{AbstractString, Number}}`: Vector containing information on the market being fixed. 
+- `fixed::Vector{Tuple{DateTime, Number}}`: Vector containing information on the market being fixed. 
 """
 struct Market
     name::String
