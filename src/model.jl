@@ -235,8 +235,7 @@ end
 """
     get_all_result_dataframes_rowbased(model_contents::OrderedDict, scenario="", name="")
 
-Collect most of the available variable results into DataFrames collected in a dictionary. Each DataDrame has the columns (timestep, scenario, variable name, variable value).
-Not that v_block and v_node_delay are not included in this list, and the function get_result_dataframe() or get_all_result_dataframes() should be used for these variable types instead. 
+Collect most of the available variable results into DataFrames collected in a dictionary. Each DataDrame has the columns (timestep, scenario, variable name, variable value). Note that "v_block" and "v_node_delay" are not included in this list, and the functions get_result_dataframe() or get_all_result_dataframes() should be used for these variable types instead. 
 """
 function get_all_result_dataframes_rowbased(model_contents::OrderedDict, scenario="", name="")
     dfs = Dict()
