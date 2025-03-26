@@ -176,11 +176,82 @@ function get_process_balance(model_contents::OrderedDict, input_data::InputData,
     return df
 end
 
+"""
+    get_result_dataframe_rowbased(model_contents::OrderedDict, e_type::String, name::String="",scenario::String="")
+
+Function to retrieve a DataFrame containing the variable values for a given variable type. The DataFrame contains four columns (timestep, scenario, variable name, variable value).
+
+# Arguments
+- `model_contents::OrderedDict`: Model contents dict.
+- `e_type::String`: Name of the variable type.
+- `name::String`: Optional. Name of a specific node or process.
+- `scenario::String`: Optional. Name of a specific scenario.
+"""
+function get_result_dataframe_rowbased(model_contents::OrderedDict, e_type::String, name::Union{String, Vector{String}}="", scenario::Union{String, Vector{String}}="")
+    if !isempty(name) && isa(name, String)
+        name = [name]
+    end
+    if !isempty(scenario) && isa(scenario, String)
+        scenario = [scenario]
+    end
+    model = model_contents["model"]
+    df = DataFrame(t=DateTime[], scenario=String[], var=String[], value=Number[])
+    # TODO special solution for node_delay, inflow_blocks 
+    non_generic = ["v_block", "v_node_diffusion", "v_node_delay"]
+    key_changer = Dict("v_node_diffusion"=>"e_node_bal_eq_diffusion", "v_block"=>"", "v_node_delay"=>"")
+    if e_type in non_generic
+        e_type = key_changer[e_type]
+    end
+    if haskey(model, Symbol(e_type))
+        var_vals = model[Symbol(e_type)]
+        for vk in collect(keys(var_vals))
+            tup = vk.I
+            if isa(tup[1], Tuple)
+                tup = tup[1]
+            end
+            if !isempty(name)
+                if isempty(intersect(name, tup))
+                    continue
+                end
+            end
+            if !isempty(scenario)
+                if isempty(intersect(scenario, tup))
+                    continue
+                end
+            end
+            if !isempty(tup)
+                var_name = ""
+                for e in tup[begin:end-2]
+                    var_name *= e * "_"
+                end
+                var_name = var_name[begin:end-1]
+                df = append!(df, DataFrame(t = DateTime(tup[end]), scenario=tup[end-1], var=var_name, value=JuMP.value.(var_vals[vk])))
+            end
+        end
+    end
+    return df
+end
+
+"""
+    get_all_result_dataframes_rowbased(model_contents::OrderedDict, scenario="", name="")
+
+Collect most of the available variable results into DataFrames collected in a dictionary. Each DataDrame has the columns (timestep, scenario, variable name, variable value).
+Not that v_block and v_node_delay are not included in this list, and the function get_result_dataframe() or get_all_result_dataframes() should be used for these variable types instead. 
+"""
+function get_all_result_dataframes_rowbased(model_contents::OrderedDict, scenario="", name="")
+    dfs = Dict()
+    e_types = ["v_flow", "v_load", "v_reserve", "v_res_final", "v_online", "v_start", "v_stop", "v_state", "vq_state_up", "vq_state_dw", "v_bid", "v_bid_volume",
+        "vq_ramp_up", "vq_ramp_dw", "v_flow_bal", "v_setpoint", "v_set_up", "v_set_down", "v_reserve_online", "v_node_diffusion"]
+    for e_type in e_types
+        dfs[e_type] = Predicer.get_result_dataframe_rowbased(model_contents, e_type, name, scenario)
+    end
+    return dfs
+end
 
 """
     get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.InputData, type::String="", name::String="",scenario::String="")
 
-Returns a dataframe containing specific information for a variable in the model.
+Returns a dataframe containing specific information for a variable in the model. Each row represents a timestep, with the columns being different variable names and scenarios. 
 
 # Arguments
 - `model_contents::OrderedDict`: Model contents dict.
