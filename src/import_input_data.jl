@@ -501,7 +501,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
 
     for i in 1:nrow(system_data["constraints"])
         con = system_data["constraints"][i,1]
-        con_dir = system_data["constraints"][i,2]
+        con_dir = strip(system_data["constraints"][i,2])
         if con_dir in ["gt", ">=", ">", "≥"]
             gc_type = "gt"
         elseif con_dir in ["eq", "=", "=="]
