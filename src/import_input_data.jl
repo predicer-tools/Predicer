@@ -502,9 +502,18 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
     for i in 1:nrow(system_data["constraints"])
         con = system_data["constraints"][i,1]
         con_dir = system_data["constraints"][i,2]
+        if con_dir in ["gt", ">=", ">", "≥"]
+            gc_type = "gt"
+        elseif con_dir in ["eq", "=", "=="]
+            gc_type = "eq"
+        elseif con_dir in ["lt", "st", "<", "<=", "≤"]
+            gc_type = "lt"
+        else
+            gc_type = con_dir
+        end
         is_setpoint = Bool(system_data["constraints"][i,3])
         penalty = Float64(system_data["constraints"][i,4])
-        gen_constraints[con] = Predicer.GenConstraint(con,con_dir, is_setpoint, penalty)
+        gen_constraints[con] = Predicer.GenConstraint(con,gc_type, is_setpoint, penalty)
     end
 
     con_vecs = OrderedDict()

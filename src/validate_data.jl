@@ -415,7 +415,7 @@ function validate_gen_constraints(error_log::OrderedDict, input_data::Predicer.I
 
     for gc in collect(keys(gcs))
         # Check that the given operators are valid.
-        if !(gcs[gc].gc_type in ["gt", "eq", "st"])
+        if !(gcs[gc].gc_type in ["gt", "eq", "lt"])
             push!(error_log["errors"], "The operator '" * gcs[gc].gc_type * "' is not valid for the gen_constraint '" * gc *"'.\n")
             is_valid = false 
         end
