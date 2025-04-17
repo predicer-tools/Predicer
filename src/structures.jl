@@ -418,6 +418,7 @@ end
         state::Union{State, Nothing}
         cost::TimeSeriesData
         inflow::TimeSeriesData
+        flex_inflow::Vector{Tuple}
     end
 
 A struct for nodes.
@@ -432,6 +433,7 @@ A struct for nodes.
 - `state::Union{State, Nothing}`: The state of the node.
 - `cost::TimeSeriesData`: Vector containing TimeSeries with the costs for each scenario.
 - `inflow::TimeSeriesData`: Vector contining TimeSeries with the inflows for each scenario.
+- `flex_inflow::Vector{Tuple}`: Vector contining time period-based inflow blocks.
 """
 mutable struct Node
     name::String
@@ -444,6 +446,7 @@ mutable struct Node
     state::Union{State, Nothing}
     cost::TimeSeriesData
     inflow::TimeSeriesData
+    flex_inflow::Vector{Tuple}
 end
 
 
@@ -472,7 +475,7 @@ function Node(name::String, is_commodity::Bool=false, is_market::Bool=false)
     if is_commodity == true && is_market == true
         error("A Node cannot be a commodity and a market at the same time!")
     else
-        return Node(name, [], is_commodity, is_market, false, false, false, nothing, TimeSeriesData(), TimeSeriesData())
+        return Node(name, [], is_commodity, is_market, false, false, false, nothing, TimeSeriesData(), TimeSeriesData(), [])
     end
 end
 
@@ -1077,7 +1080,6 @@ struct GenConstraint
         return new(name,type,is_setpoint, penalty, [], TimeSeriesData())
     end
 end
-
 
 """
     mutable struct InflowBlock

@@ -34,6 +34,7 @@ function create_constraints(
     end
     setup_reserve_participation(model_contents, input_data)
     setup_inflow_blocks(model_contents, input_data)
+    setup_flex_inflow(model_contents, input_data)
 end
 
 
@@ -61,6 +62,7 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
         e_node_bal_eq_history[tup in constraint_indices], AffExpr(0.0)
         e_node_bal_eq_inflow_expr[tup in constraint_indices], AffExpr(0.0)
         e_node_bal_eq_inflow_block_expr[tup in constraint_indices], AffExpr(0.0)
+        e_node_bal_eq_flex_inflow_expr[tup in constraint_indices], AffExpr(0.0)
         e_node_bal_eq_diffusion[tup in constraint_indices], AffExpr(0.0)
         e_node_bal_eq_delay[tup in constraint_indices], AffExpr(0.0)
         e_node_bal_eq_res_real[tup in constraint_indices], AffExpr(0.0)
@@ -205,6 +207,15 @@ function setup_node_balance(model_contents::OrderedDict, input_data::Predicer.In
                 end
             end
             add_to_expression!(e_constraint_node_bal_eq[(n, s, t)],  e_node_bal_eq_inflow_block_expr[(n, s, t)])
+        end
+    end
+
+    # flex inflow
+    flex_inflow_tups = Predicer.flex_inflow_tuples(input_data)
+    if !isempty(flex_inflow_tups)
+        v_flex_inflow = model.obj_dict[:v_flex_inflow]
+        for fit in flex_inflow_tups
+            add_to_expression!(e_constraint_node_bal_eq[(fit[2], fit[3], fit[4])], v_flex_inflow[validate_tuple(model_contents, fit, 3)])
         end
     end
 
@@ -1586,6 +1597,25 @@ function setup_reserve_participation(model_contents::OrderedDict, input_data::Pr
         res_online_up = @constraint(model, res_online_up[tup in res_lim_tuple], res_online_up_expr[tup] <= 0)
         res_online_lo = @constraint(model, res_online_lo[tup in res_lim_tuple], res_online_lo_expr[tup] >= 0)
     end
+end
+
+function setup_flex_inflow(model_contents::OrderedDict, input_data::Predicer.InputData)
+    model = model_contents["model"]
+    v_flex_inflow = model[:v_flex_inflow]
+    flex_tuples = Predicer.flex_inflow_tuples(input_data::InputData)
+    flex_inflows = unique(map(x -> x[1], flex_tuples))
+    flex_inflow_vars = Dict()
+    flex_inflow_val = Dict()
+    for fi in flex_inflows
+        flex_inflow_vars[fi] = AffExpr(0.0)
+        flex_inflow_val[fi] = AffExpr(0.0)
+    end
+    
+    for fit in Predicer.flex_inflow_tuples(input_data::InputData)
+        flex_inflow_val[fit[1]] = filter(x -> x[1] == fit[1], input_data.nodes[fit[2]].flex_inflow)[1][6]
+        add_to_expression!(flex_inflow_vars[fit[1]], v_flex_inflow[validate_tuple(model_contents, fit, 3)])
+    end
+    @constraint(model, con_flex_inflow[k in flex_inflows], flex_inflow_vars[k] == flex_inflow_val[k])
 end
 
 

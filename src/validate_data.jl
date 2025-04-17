@@ -297,10 +297,35 @@ function validate_node_diffusion(error_log::OrderedDict, input_data::Predicer.In
             end
         end
     end
-    
-
     error_log["is_valid"] = is_valid
 end
+
+function validate_flex_inflow(error_log::OrderedDict, input_data::Predicer.InputData)
+    is_valid = error_log["is_valid"]
+    for n in collect(keys(input_data.nodes))
+        n_fis = input_data.nodes[n].flex_inflow
+        if !isempty(n_fis)
+            if length(map(x -> x[1:3], n_fis)) != length(unique(map(x -> x[1:3], n_fis)))
+                # Check that the names of the flex inflows are unique within the node
+                push!(error_log["errors"], "The flex inflow period names linked to node (" * n * ") must be unique.\n")
+                is_valid = false 
+            end
+            for fi in n_fis
+                if !haskey(input_data.scenarios, fi[3])
+                    # Check that the given scenario exists
+                    push!(error_log["errors"], "The scenarios linked to flex inflow (" * n * ") must be valid.\n")
+                    is_valid = false 
+                end
+                if !in(string(fi[4]), input_data.temporals.t) || !in(string(fi[5]), input_data.temporals.t)
+                    # check that the given period starts and ends are model timesteps. 
+                    push!(error_log["errors"], "The timestep numbers given to flex inflows in node (" * n * ") must be valid timesteps.\n")
+                    is_valid = false 
+                end
+            end
+        end
+    end
+    error_log["is_valid"] = is_valid
+end 
 
 function validate_inflow_blocks(error_log::OrderedDict, input_data::Predicer.InputData)
     is_valid = error_log["is_valid"] 
@@ -781,6 +806,7 @@ function validate_data(input_data)
     validate_unique_names(error_log, input_data)
     validate_gen_constraints(error_log, input_data)
     validate_inflow_blocks(error_log, input_data)
+    validate_flex_inflow(error_log, input_data)
     validate_groups(error_log, input_data)
     validate_node_diffusion(error_log, input_data)
     validate_node_delay(error_log, input_data)

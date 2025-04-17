@@ -24,6 +24,7 @@ function create_variables(
     create_v_balance_market(model_contents, input_data)
     create_v_reserve_online(model_contents,input_data)
     create_v_setpoint(model_contents, input_data)
+    create_v_flex_inflow(model_contents, input_data)
     create_v_block(model_contents, input_data)
     create_v_node_delay(model_contents, input_data)
     if !haskey(model_contents, "sddp")
@@ -276,6 +277,22 @@ function create_v_block(model_contents::OrderedDict, input_data::InputData)
             1)[1]),
         block_tuples))
     v_block = @variable(model, v_block[tup in var_tups], Bin)
+end
+
+
+function create_v_flex_inflow(model_contents::OrderedDict, input_data::InputData)
+    model = model_contents["model"]
+    flex_inflow_tups = unique(Predicer.validate_tuples(model_contents, Predicer.flex_inflow_tuples(input_data), 3))
+    v_flex_inflow = @variable(model, v_flex_inflow[tup in flex_inflow_tups])
+    
+    # set lower/upper limits for the variables depending on the sign of the given inflow (- or +)
+    for fit in flex_inflow_tups
+        if 0 <= filter(x -> x[1] == fit[1], input_data.nodes[fit[2]].flex_inflow)[1][6]
+            JuMP.set_lower_bound(v_flex_inflow[fit], 0)
+        else
+            JuMP.set_upper_bound(v_flex_inflow[fit], 0)
+        end
+    end
 end
 
 

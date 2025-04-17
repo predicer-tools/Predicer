@@ -10,7 +10,7 @@ end
 
 function read_xlsx(input_data_path::String, t_horizon::Vector{DateTime}=DateTime[])
 
-    sheetnames_system = ["setup", "nodes", "processes", "groups", "process_topology", "node_history", "node_delay", "node_diffusion", "inflow_blocks", "markets","scenarios","efficiencies", "reserve_type","risk", "cap_ts", "gen_constraint", "constraints", "bid_slots"]
+    sheetnames_system = ["setup", "nodes", "processes", "groups", "process_topology", "node_history", "node_delay", "node_diffusion", "inflow_blocks", "flex_inflow", "markets","scenarios","efficiencies", "reserve_type","risk", "cap_ts", "gen_constraint", "constraints", "bid_slots"]
     sheetnames_timeseries = ["cf", "inflow", "market_prices", "reserve_realisation", "reserve_activation_price", "price","eff_ts", "fixed_ts", "balance_prices"]
 
     system_data = OrderedDict()
@@ -369,6 +369,30 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
         end
     end
 
+    # flex_inflow
+    for ipr in eachrow(system_data["flex_inflow"])
+        ss = []
+        # node	scenario	t_start	t_end	inflow
+        if "ALL" in ss || "all" in ss || "All" in ss
+            ss = scens
+        else
+            ss = map(x -> strip(x), split(ipr.scenario, ","))
+        end
+        for s in ss
+            if isa(ipr.t_start, Number)
+                t_s = DateTime(temps[ipr.t_start])
+            else
+                t_s = DateTime(ipr.t_start)
+            end
+            if isa(ipr.t_end, Number)
+                t_e = DateTime(temps[ipr.t_end])
+            else
+                t_e = DateTime(ipr.t_end)
+            end
+            push!(nodes[ipr.node].flex_inflow, (string(ipr.period_name), ipr.node, s, string(t_s), string(t_e), ipr.inflow))
+        end
+    end
+    
     # inflow blocks NEW
     if length(names(system_data["inflow_blocks"])) > 1
         ns = names(system_data["inflow_blocks"])[2:end]

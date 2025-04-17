@@ -884,6 +884,17 @@ function block_tuples(input_data::InputData)
      for t in keys(b.data(s).series)]
 end
 
+"""
+    flex_inflow_tuples(input_data::InputData)
+
+Function to create tuples for flex inflows. Form (flex_inflow_name, node, s, t).
+"""
+function flex_inflow_tuples(input_data::InputData)
+    NTuple{4, String}[(id, n, s, t)
+    for n in collect(keys(input_data.nodes))
+    for (id, n, s, t_start, t_end) in input_data.nodes[n].flex_inflow
+    for t in filter(tt -> DateTime(t_start) <= DateTime(tt) && DateTime(tt) <= DateTime(t_end), input_data.temporals.t)]
+end
 
 """
     create_group_tuples(input_data::InputData)
