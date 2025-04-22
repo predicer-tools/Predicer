@@ -240,7 +240,7 @@ Collect most of the available variable results into DataFrames collected in a di
 function get_all_result_dataframes_rowbased(model_contents::OrderedDict, scenario="", name="")
     dfs = Dict()
     e_types = ["v_flow", "v_load", "v_reserve", "v_res_final", "v_online", "v_start", "v_stop", "v_state", "vq_state_up", "vq_state_dw", "v_bid", "v_bid_volume",
-        "vq_ramp_up", "vq_ramp_dw", "v_flow_bal", "v_setpoint", "v_set_up", "v_set_down", "v_reserve_online", "v_node_diffusion"]
+        "vq_ramp_up", "vq_ramp_dw", "v_flow_bal", "v_setpoint", "v_set_up", "v_set_down", "v_reserve_online", "v_node_diffusion", "v_flex_inflow"]
     for e_type in e_types
         dfs[e_type] = Predicer.get_result_dataframe_rowbased(model_contents, e_type, name, scenario)
     end
@@ -435,6 +435,30 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             b_tup = (block..., string(input_data.inflow_blocks[block[1]].start_time))
             df[!, colname] = [JuMP.value.(v_block[validate_tuple(model_contents, b_tup, 3)[begin:3]])]
         end
+    elseif e_type == "v_flex_inflow"
+        df = DataFrame()
+        v_flex_inflow = model[:v_flex_inflow]
+        if !isempty(v_flex_inflow)
+            if !isempty(name)
+                fis = unique(map(y -> y[1:3], filter(x -> x[2] == name, flex_inflow_tuples(input_data))))
+            else
+                fis =  unique(map(y -> y[1:3], flex_inflow_tuples(input_data)))
+            end
+            fi_tups = Dict()
+            for fi in fis
+                colname = fi[1] * "__" * fi[2] * "__" * fi[3]
+                col_tups = JuMP.value.(v_flex_inflow[validate_tuple(model_contents, tup, 3)] for tup in filter(x -> x[1:3] == fi, flex_inflow_tuples(input_data)))
+                fi_tups[colname] = col_tups
+            end
+
+            row_n = maximum([length(tup) for tup in collect(values(fi_tups))])
+            for k in collect(keys(fi_tups))
+                df[!, k] = vcat(fi_tups[k], fill(missing, row_n-1))[1:row_n]
+        end
+    else
+        df = DataFrame()
+    end
+
     elseif e_type == "v_setpoint" || e_type == "v_set_up" || e_type == "v_set_down"
         v_var = model.obj_dict[Symbol(e_type)]
         if !isempty(name)
@@ -515,7 +539,7 @@ Collect all of the available variable results into DataFrames collected in a dic
 function get_all_result_dataframes(model_contents::OrderedDict, input_data::InputData, scenario="", name="")
     dfs = Dict()
     e_types = ["v_flow", "v_load", "v_reserve", "v_res_final", "v_online", "v_start", "v_stop", "v_state", "vq_state_up", "vq_state_dw", "v_bid", "v_bid_volume",
-        "vq_ramp_up", "vq_ramp_dw", "v_flow_bal", "v_block", "v_setpoint", "v_set_up", "v_set_down", "v_reserve_online", "v_node_diffusion", "v_node_delay"]
+        "vq_ramp_up", "vq_ramp_dw", "v_flow_bal", "v_block", "v_flex_inflow", "v_setpoint", "v_set_up", "v_set_down", "v_reserve_online", "v_node_diffusion", "v_node_delay"]
     for e_type in e_types
         dfs[e_type] = Predicer.get_result_dataframe(model_contents, input_data, e_type, name, scenario)
     end
