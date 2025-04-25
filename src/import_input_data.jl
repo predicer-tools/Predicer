@@ -11,7 +11,8 @@ end
 function read_xlsx(input_data_path::String, t_horizon::Vector{DateTime}=DateTime[])
 
     sheetnames_system = ["setup", "nodes", "processes", "groups", "process_topology", "node_history", "node_delay", "node_diffusion", "inflow_blocks", "flex_inflow", "markets","scenarios","efficiencies", "reserve_type","risk", "cap_ts", "gen_constraint", "constraints", "bid_slots"]
-    sheetnames_timeseries = ["cf", "inflow", "market_prices", "reserve_realisation", "reserve_activation_price", "price","eff_ts", "fixed_ts", "balance_prices"]
+    sheetnames_timeseries = ["cf", "inflow", "market_prices", "reserve_realisation", "reserve_activation_price", "price", "eff_ts", "fixed_ts", "balance_prices"]
+    sheetnames_optional = ["node_history", "node_delay", "node_diffusion", "inflow_blocks", "flex_inflow", "cap_ts"]
 
     system_data = OrderedDict()
     timeseries_data = OrderedDict()
@@ -30,11 +31,27 @@ function read_xlsx(input_data_path::String, t_horizon::Vector{DateTime}=DateTime
     end
 
     for sn in sheetnames_system
-        system_data[sn] = DataFrame(XLSX.gettable(xl[sn]))
+        try
+            system_data[sn] = DataFrame(XLSX.gettable(xl[sn]))
+        catch e
+            if sn in sheetnames_optional
+                system_data[sn] = DataFrame()
+            else
+                throw(e)
+            end
+        end
     end
 
     for sn in sheetnames_timeseries
-        timeseries_data[sn] = DataFrame(XLSX.gettable(xl[sn]))
+        try 
+            timeseries_data[sn] = DataFrame(XLSX.gettable(xl[sn]))
+        catch e
+            if sn in sheetnames_optional
+                timeseries_data[sn] = DataFrame()
+            else
+                throw(e)
+            end
+        end
     end
     
     return system_data, timeseries_data, orderedtemps
@@ -389,7 +406,7 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
             else
                 t_e = DateTime(ipr.t_end)
             end
-            push!(nodes[ipr.node].flex_inflow, (string(ipr.period_name), ipr.node, s, string(t_s), string(t_e), ipr.inflow))
+            push!(nodes[ipr.node].flex_inflow, (string(ipr.period_name), ipr.node, s, string(t_s), string(t_e), ipr.inflow, ipr.deviation_penalty))
         end
     end
     

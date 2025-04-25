@@ -897,6 +897,18 @@ function flex_inflow_tuples(input_data::InputData)
 end
 
 """
+    flex_inflow_blocks(input_data::InputData)
+
+Function to create tuples for flex inflows. Form (flex_inflow_name, node, s).
+"""
+function flex_inflow_blocks(input_data::InputData)
+    NTuple{3, String}[(id, n, s)
+    for n in collect(keys(input_data.nodes))
+    for (id, n, s, t_start, t_end) in input_data.nodes[n].flex_inflow]
+end
+
+
+"""
     create_group_tuples(input_data::InputData)
 
 Function to create tuples for groups and their members. Form (group_type, groupname, member_name)

@@ -280,6 +280,15 @@ function create_v_block(model_contents::OrderedDict, input_data::InputData)
 end
 
 
+""" 
+    create_v_flex_inflow(model_contents::OrderedDict, input_data::InputData)
+
+Function to setup variables needed for flex inflows.
+
+# Arguments
+- `model_contents::OrderedDict`: Dictionary containing all data and structures used in the model. 
+- `input_data::InputData`: struct containing user input.
+"""
 function create_v_flex_inflow(model_contents::OrderedDict, input_data::InputData)
     model = model_contents["model"]
     flex_inflow_tups = unique(Predicer.validate_tuples(model_contents, Predicer.flex_inflow_tuples(input_data), 3))
@@ -291,6 +300,16 @@ function create_v_flex_inflow(model_contents::OrderedDict, input_data::InputData
             JuMP.set_lower_bound(v_flex_inflow[fit], 0)
         else
             JuMP.set_upper_bound(v_flex_inflow[fit], 0)
+        end
+    end
+
+    flex_inflow_names = Predicer.flex_inflow_blocks(input_data)
+    vq_flex_inflow = @variable(model, vq_flex_inflow[tup in flex_inflow_names])
+    for fib in flex_inflow_names
+        if 0 <= filter(x -> x[1] == fib[1], input_data.nodes[fib[2]].flex_inflow)[1][6]
+            JuMP.set_lower_bound(vq_flex_inflow[fib], 0)
+        else
+            JuMP.set_upper_bound(vq_flex_inflow[fib], 0)
         end
     end
 end
