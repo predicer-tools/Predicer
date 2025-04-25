@@ -197,8 +197,8 @@ function get_result_dataframe_rowbased(model_contents::OrderedDict, e_type::Stri
     model = model_contents["model"]
     df = DataFrame(t=DateTime[], scenario=String[], var=String[], value=Number[])
     # TODO special solution for node_delay, inflow_blocks 
-    non_generic = ["v_block", "v_node_diffusion", "v_node_delay"]
-    key_changer = Dict("v_node_diffusion"=>"e_node_bal_eq_diffusion", "v_block"=>"", "v_node_delay"=>"")
+    non_generic = ["v_block", "v_node_diffusion", "v_node_delay", "vq_flex_inflow"]
+    key_changer = Dict("v_node_diffusion"=>"e_node_bal_eq_diffusion", "v_block"=>"", "v_node_delay"=>"", "vq_flex_inflow"=>"")
     if e_type in non_generic
         e_type = key_changer[e_type]
     end
@@ -240,7 +240,7 @@ Collect most of the available variable results into DataFrames collected in a di
 function get_all_result_dataframes_rowbased(model_contents::OrderedDict, scenario="", name="")
     dfs = Dict()
     e_types = ["v_flow", "v_load", "v_reserve", "v_res_final", "v_online", "v_start", "v_stop", "v_state", "vq_state_up", "vq_state_dw", "v_bid", "v_bid_volume",
-        "vq_ramp_up", "vq_ramp_dw", "v_flow_bal", "v_setpoint", "v_set_up", "v_set_down", "v_reserve_online", "v_node_diffusion", "v_flex_inflow"]
+        "vq_ramp_up", "vq_ramp_dw", "v_flow_bal", "v_setpoint", "v_set_up", "v_set_down", "v_reserve_online", "v_node_diffusion", "v_flex_inflow", "vq_flex_inflow"]
     for e_type in e_types
         dfs[e_type] = Predicer.get_result_dataframe_rowbased(model_contents, e_type, name, scenario)
     end
@@ -454,11 +454,20 @@ function get_result_dataframe(model_contents::OrderedDict, input_data::Predicer.
             row_n = maximum([length(tup) for tup in collect(values(fi_tups))])
             for k in collect(keys(fi_tups))
                 df[!, k] = vcat(fi_tups[k], fill(missing, row_n-1))[1:row_n]
+            end
+        else
+            df = DataFrame()
         end
-    else
-        df = DataFrame()
-    end
-
+    elseif e_type == "vq_flex_inflow"
+        var_vq_flex_inflow = model[:vq_flex_inflow]
+        if !isempty(var_vq_flex_inflow)
+            fibs = Predicer.flex_inflow_blocks(input_data)
+            fib_vals = JuMP.value.(var_vq_flex_inflow[fibs]).data
+            fib_names = map(x -> x[1] * "__" * x[2]  * "__" * x[3], fibs)
+            df = DataFrame(vq_flex_inflow=fib_names, var_val=fib_vals)
+        else    
+            df = DataFrame()
+        end
     elseif e_type == "v_setpoint" || e_type == "v_set_up" || e_type == "v_set_down"
         v_var = model.obj_dict[Symbol(e_type)]
         if !isempty(name)
@@ -539,7 +548,7 @@ Collect all of the available variable results into DataFrames collected in a dic
 function get_all_result_dataframes(model_contents::OrderedDict, input_data::InputData, scenario="", name="")
     dfs = Dict()
     e_types = ["v_flow", "v_load", "v_reserve", "v_res_final", "v_online", "v_start", "v_stop", "v_state", "vq_state_up", "vq_state_dw", "v_bid", "v_bid_volume",
-        "vq_ramp_up", "vq_ramp_dw", "v_flow_bal", "v_block", "v_flex_inflow", "v_setpoint", "v_set_up", "v_set_down", "v_reserve_online", "v_node_diffusion", "v_node_delay"]
+        "vq_ramp_up", "vq_ramp_dw", "v_flow_bal", "v_block", "v_flex_inflow", "vq_flex_inflow", "v_setpoint", "v_set_up", "v_set_down", "v_reserve_online", "v_node_diffusion", "v_node_delay"]
     for e_type in e_types
         dfs[e_type] = Predicer.get_result_dataframe(model_contents, input_data, e_type, name, scenario)
     end
