@@ -516,6 +516,16 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                 push!(markets[mm.market].reserve_activation_price, ts)
             end
         end
+        # Add market limits
+        for s in keys(scens)
+            if haskey(timeseries_data["scenarios"][s], "market_limits")
+                if mm.market in names(timeseries_data["scenarios"][s]["market_limits"])
+                    timesteps = timeseries_data["scenarios"][s]["market_limits"].t
+                    market_cap = timeseries_data["scenarios"][s]["market_limits"][!, mm.market]
+                    push!(markets[mm.market].upper_limit, Predicer.TimeSeries(s, timesteps, market_cap))
+                end
+            end
+        end
     end
 
     #---market bid slot----------------------------------
