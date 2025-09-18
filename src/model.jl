@@ -8,7 +8,7 @@ using JSONTables
 """
     get_costs_dataframe(model_contents::OrderedDict, input_data::InputData, costs::Vector{String}, scenario::Vector{String})
 
-Returns a dataframe containing all the costs related to the model. 
+Returns a dataframe containing all the costs related to the model. The costs are provided for the whole model horizon, per scenario.
 
 # Arguments
 - `model_contents::OrderedDict`: Model contents dict.
@@ -18,7 +18,7 @@ Returns a dataframe containing all the costs related to the model.
 """
 function get_costs_dataframe(model_contents::OrderedDict, input_data::InputData, costs::Vector{String}=String[], scenario::Vector{String}=String[])
     if isempty(costs)
-        costs = ["commodity_costs", "dummy_costs", "market_costs", "reserve_costs", "total_costs", "setpoint_deviation_costs", "start_costs", "state_residue_costs", "vom_costs"]
+        costs = ["commodity_costs", "dummy_costs", "market_costs", "reserve_costs", "total_costs", "setpoint_deviation_costs", "start_costs", "state_residue_costs", "vom_costs", "reserve_activation_costs", "reserve_fee_costs", ]
     end
     t_start = input_data.temporals.t[begin]
     t_end = input_data.temporals.t[end]
@@ -32,11 +32,44 @@ function get_costs_dataframe(model_contents::OrderedDict, input_data::InputData,
     for cost in costs
         for s in scens
             colname = cost * "_" * s
-            df[!, colname] = [JuMP.value(es[cost][s])]
+            df[!, colname] = [JuMP.value(sum(es[cost][s, :]))]
         end
     end
     return df
 end
+
+"""
+    get_ts_cost_dataframe(model_contents::OrderedDict, input_data::InputData, costs::Vector{String}, scenario::Vector{String})
+
+Returns a dataframe containing all the costs related to the model, given as a timeseries with values for each timestep. 
+
+# Arguments
+- `model_contents::OrderedDict`: Model contents dict.
+- `input_data::Predicer.InputData`: Input data used in model.
+- `costs::Vector{String}`: Type of cost(s) to show, such as 'commodity_costs' or 'total_costs'. If empty, return all relevant costs. 
+- `scenario::Vector{String}`: The name of the scenario for which the value is to be shown. If left empty, return all relevant values. 
+"""
+function get_ts_cost_dataframe(model_contents::OrderedDict, input_data::InputData, costs::Vector{String}=String[], scenario::Vector{String}=String[])
+    if isempty(costs)
+        costs = ["commodity_costs", "dummy_costs", "market_costs", "reserve_costs", "total_costs", "setpoint_deviation_costs", "start_costs", "state_residue_costs", "vom_costs", "reserve_activation_costs", "reserve_fee_costs", ]
+    end
+    df = DataFrame(t = input_data.temporals.t)
+    es = model_contents["expression"]
+    if isempty(scenario)
+        scens = Predicer.scenarios(input_data)
+    else
+        scens = scenario
+    end
+    for cost in costs
+        for s in scens
+            colname = cost * "_" * s
+            df[!, colname] = [JuMP.value(sum(es[cost][s, t])) for t in input_data.temporals.t]
+        end
+    end
+    return df
+end
+
+
 
 
 """
