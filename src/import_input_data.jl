@@ -11,8 +11,8 @@ end
 function read_xlsx(input_data_path::String, t_horizon::Vector{DateTime}=DateTime[])
 
     sheetnames_system = ["setup", "nodes", "processes", "groups", "process_topology", "node_history", "node_delay", "node_diffusion", "inflow_blocks", "flex_inflow", "markets","scenarios","efficiencies", "reserve_type","risk", "cap_ts", "gen_constraint", "constraints", "bid_slots"]
-    sheetnames_timeseries = ["cf", "inflow", "market_prices", "reserve_realisation", "reserve_activation_price", "price", "eff_ts", "fixed_ts", "balance_prices"]
-    sheetnames_optional = ["node_history", "node_delay", "node_diffusion", "inflow_blocks", "flex_inflow", "cap_ts"]
+    sheetnames_timeseries = ["cf", "inflow", "market_prices", "reserve_realisation", "reserve_activation_price", "price", "eff_ts", "fixed_ts", "balance_prices", "market_limits"]
+    sheetnames_optional = ["node_history", "node_delay", "node_diffusion", "inflow_blocks", "flex_inflow", "cap_ts", "market_limits"]
 
     system_data = OrderedDict()
     timeseries_data = OrderedDict()
@@ -136,9 +136,23 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
                             end
                             sub_df = timeseries_data[k]
                             if isempty(temps)
-                                timeseries_data["scenarios"][scenario][k][!, series] = sub_df[!, n]
+                                try
+                                    timeseries_data["scenarios"][scenario][k][!, series] = sub_df[!, n]
+                                catch e
+                                    if isa(e, ArgumentError)
+                                        println("Sheet: " * k * ". New columns must have the same length as old columns")
+                                        println(e)
+                                    end
+                                end
                             else
-                                timeseries_data["scenarios"][scenario][k][!, series] = filter(:t => x -> DateTime(x) in temps, sub_df)[!, n]
+                                try
+                                    timeseries_data["scenarios"][scenario][k][!, series] = filter(:t => x -> DateTime(x) in temps, sub_df)[!, n]
+                                catch e
+                                    if isa(e, ArgumentError)
+                                        println("Sheet: " * k * ". New columns must have the same length as old columns")
+                                        println(e)
+                                    end
+                                end
                             end
                         end
                     end
