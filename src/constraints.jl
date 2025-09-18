@@ -1581,12 +1581,16 @@ function setup_reserve_participation(model_contents::OrderedDict, input_data::Pr
         res_online_up_expr = model_contents["expression"]["res_online_up_expr"] = OrderedDict()
         res_online_lo_expr = model_contents["expression"]["res_online_lo_expr"] = OrderedDict()
         for tup in res_lim_tuple
-            max_bid = markets[tup[1]].max_bid
-            min_bid = markets[tup[1]].min_bid
-            if max_bid > 0
-                res_online_up_expr[tup] = @expression(model,v_res_final[validate_tuple(val_dict, common_ts, tup, 2)]-max_bid*v_res_online[validate_tuple(val_dict, common_ts, tup, 2)])
+            if isempty(markets[tup[1]].upper_limit)
+                max_bid = markets[tup[1]].max_bid
             else
-                res_online_up_expr[tup] = AffExpr(0.0)
+                max_bid = markets[tup[1]].upper_limit(tup[2], tup[3])
+            end
+            res_online_up_expr[tup] = @expression(model,v_res_final[validate_tuple(val_dict, common_ts, tup, 2)]-max_bid*v_res_online[validate_tuple(val_dict, common_ts, tup, 2)])
+            if isempty(markets[tup[1]].lower_limit)
+                min_bid = markets[tup[1]].min_bid
+            else
+                min_bid = markets[tup[1]].lower_limit(tup[2], tup[3])
             end
             if min_bid > 0
                 res_online_lo_expr[tup] = @expression(model,v_res_final[validate_tuple(val_dict, common_ts, tup, 2)]-min_bid*v_res_online[validate_tuple(val_dict, common_ts, tup, 2)])
