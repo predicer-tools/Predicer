@@ -1859,8 +1859,8 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
 
     # Commodity costs and market costs
     @expressions model begin
-        commodity_costs[s = scenarios], AffExpr(0.0)
-        market_costs[s = scenarios], AffExpr(0.0)
+        commodity_costs[s = scenarios, t = temporals.t], AffExpr(0.0)
+        market_costs[s = scenarios, t = temporals.t], AffExpr(0.0)
     end
     model_contents["expression"]["commodity_costs"] = commodity_costs
     model_contents["expression"]["market_costs"] = market_costs
@@ -1873,7 +1873,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
                 flow_tups = [(tup..., s, t) for tup in flow_out]
                 for tup in unique(validate_tuples(val_dict, common_ts, flow_tups, 4))
                     add_to_expression!(
-                        commodity_costs[s],
+                        commodity_costs[s, t],
                         v_flow[tup], node.cost(s, t) * temporals(tup[5]))
                 end
             end
@@ -1887,16 +1887,16 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
                     tup_up = (node.name,"up",s,ts)
                     tup_dw = (node.name,"dw",s,ts)
                     add_to_expression!(
-                        market_costs[s],
+                        market_costs[s, ts],
                         v_bid[node.name, s, t],
                         -market.price(s, ts) * temporals(t))
                     add_to_expression!(
-                        market_costs[s],
+                        market_costs[s, ts],
                         v_flow_bal[
                             validate_tuple(val_dict, common_ts, tup_up, 3)],
                         market.up_price(s, ts) * temporals(t))
                     add_to_expression!(
-                        market_costs[s],
+                        market_costs[s, ts],
                         v_flow_bal[
                             validate_tuple(val_dict, common_ts, tup_dw, 3)],
                         -market.down_price(s, ts) * temporals(t))
@@ -1907,7 +1907,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
                 for s in scenarios, t in temporals.t
                     for tup in flow_out
                         add_to_expression!(
-                            market_costs[s],
+                            market_costs[s, t],
                             v_flow[validate_tuple(
                                 val_dict, common_ts, (tup..., s, t), 4)],
                             market.price(s, t) * temporals(t))
@@ -1915,7 +1915,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
                     # Assuming what goes into the node is sold and has a negatuive cost
                     for tup in flow_in
                         add_to_expression!(
-                            market_costs[s],
+                            market_costs[s, t],
                             v_flow[
                                 validate_tuple(val_dict, common_ts, (tup..., s, t), 4)],
                             -market.price(s, t) * temporals(t))
@@ -1927,14 +1927,14 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
 
     # VOM_costs
     model_contents["expression"]["vom_costs"] = @expression(
-        model, vom_costs[s = scenarios], AffExpr(0.0))
+        model, vom_costs[s = scenarios, t = temporals.t], AffExpr(0.0))
     for tup in reduced_process_tuple
         vom = filter(x->x.source == tup[2] && x.sink == tup[3], processes[tup[1]].topos)[1].vom_cost
         if vom != 0
             for s in scenarios, t in temporals.t
                 f = (tup..., s, t)
                 add_to_expression!(
-                    vom_costs[s],
+                    vom_costs[s, t],
                     v_flow[validate_tuple(val_dict, common_ts, f, 4)],
                     vom * temporals(f[5]))
             end
@@ -1943,7 +1943,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
 
     # Start costs
     model_contents["expression"]["start_costs"] = @expression(
-        model, start_costs[s = scenarios], AffExpr(0.0))
+        model, start_costs[s = scenarios, t = temporals.t], AffExpr(0.0))
     if input_data.setup.contains_online
         proc_online_tuple = online_process_tuples(input_data)
         for s in scenarios
@@ -1952,7 +1952,10 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
                 if !isempty(start_tup)
                     v_start = model.obj_dict[:v_start]
                     cost = processes[p].start_cost
-                    add_to_expression!(start_costs[s], sum(v_start[validate_tuples(val_dict, common_ts, start_tup, 2)]), cost)
+                    for st in start_tup
+                        add_to_expression!(start_costs[s, st[3]], sum(v_start[validate_tuple(val_dict, common_ts, st, 2)]), cost)
+                    end
+                    #add_to_expression!(start_costs[s, t], sum(v_start[validate_tuples(val_dict, common_ts, start_tup, 2)]), cost)
                 end
             end
         end
@@ -1960,21 +1963,21 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
 
     # Reserve profits:
     model_contents["expression"]["reserve_costs"] = @expression(
-        model, reserve_costs[s = scenarios], AffExpr(0.0))
+        model, reserve_costs[s = scenarios, t = temporals.t], AffExpr(0.0))
     if input_data.setup.contains_reserves
         v_res_final = model[:v_res_final]
         res_final_tuple = reserve_market_tuples(input_data)
         for s in scenarios
             for tup in filter(x -> x[2] == s, res_final_tuple)
                 price = markets[tup[1]].price(s, tup[3])
-                add_to_expression!(reserve_costs[s], v_res_final[validate_tuple(val_dict, common_ts, tup, 2)], -price)
+                add_to_expression!(reserve_costs[s, tup[3]], v_res_final[validate_tuple(val_dict, common_ts, tup, 2)], -price)
             end
         end
     end
 
     # reserve activation profits
     model_contents["expression"]["reserve_activation_costs"] = @expression(
-        model, reserve_activation_costs[s = scenarios], AffExpr(0.0))
+        model, reserve_activation_costs[s = scenarios, t = temporals.t], AffExpr(0.0))
     if input_data.setup.contains_reserves
         v_res_final = model[:v_res_final]
         res_final_tup = reserve_market_tuples(input_data)
@@ -1982,27 +1985,27 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
             for tup in filter(x -> x[2] == s, res_final_tup)
                 real_p = input_data.markets[tup[1]].realisation(tup[2], tup[3])
                 act_p = input_data.markets[tup[1]].reserve_activation_price(tup[2], tup[3])
-                add_to_expression!(reserve_activation_costs[s], v_res_final[validate_tuple(val_dict, common_ts, tup, 2)],  real_p * act_p)
+                add_to_expression!(reserve_activation_costs[s, tup[3]], v_res_final[validate_tuple(val_dict, common_ts, tup, 2)],  real_p * act_p)
             end
         end
     end
 
     # Reserve fee costs:
     model_contents["expression"]["reserve_fee_costs"] = @expression(
-        model, reserve_fees[s = scenarios], AffExpr(0.0))
+        model, reserve_fees[s = scenarios, t = temporals.t], AffExpr(0.0))
     if input_data.setup.contains_reserves
         v_reserve_online = model[:v_reserve_online]
         res_online_tuple = create_reserve_limits(input_data)
         for s in scenarios
             for tup in filter(x->x[2] == s, res_online_tuple)
-                add_to_expression!(reserve_fees[s], v_reserve_online[validate_tuple(val_dict, common_ts, tup, 2)], markets[tup[1]].fee)
+                add_to_expression!(reserve_fees[s, tup[3]], v_reserve_online[validate_tuple(val_dict, common_ts, tup, 2)], markets[tup[1]].fee)
             end
         end
     end
 
     # Setpoint deviation costs
     model_contents["expression"]["setpoint_deviation_costs"] = @expression(
-        model, setpoint_deviation_costs[s = scenarios], AffExpr(0.0))
+        model, setpoint_deviation_costs[s = scenarios, t = temporals.t], AffExpr(0.0))
     v_set_up = model[:v_set_up]
     v_set_down = model[:v_set_down]
     for c in keys(input_data.gen_constraints)
@@ -2011,8 +2014,8 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
             for s in scenarios
                 c_tups = filter(tup -> tup[1] == c && tup[2] == s, setpoint_tuples(input_data))
                 for c_tup in c_tups
-                    add_to_expression!(setpoint_deviation_costs[s], sum(v_set_up[validate_tuple(val_dict, common_ts, c_tup, 2)]),  penalty * input_data.temporals(c_tup[3]))
-                    add_to_expression!(setpoint_deviation_costs[s], sum(v_set_down[validate_tuple(val_dict, common_ts, c_tup, 2)]),  penalty * input_data.temporals(c_tup[3]))
+                    add_to_expression!(setpoint_deviation_costs[s, c_tup[3]], sum(v_set_up[validate_tuple(val_dict, common_ts, c_tup, 2)]),  penalty * input_data.temporals(c_tup[3]))
+                    add_to_expression!(setpoint_deviation_costs[s, c_tup[3]], sum(v_set_down[validate_tuple(val_dict, common_ts, c_tup, 2)]),  penalty * input_data.temporals(c_tup[3]))
                 end
             end
         end
@@ -2020,20 +2023,20 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
 
     # State residue costs
     model_contents["expression"]["state_residue_costs"] = @expression(
-        model, state_residue_costs[s = scenarios], AffExpr(0.0))
+        model, state_residue_costs[s = scenarios, t = temporals.t], AffExpr(0.0))
     if input_data.setup.contains_states
         v_state = model.obj_dict[:v_state]
         state_node_tuple = state_node_tuples(input_data)
         for s in scenarios
             for tup in filter(x -> x[3] == temporals.t[end] && x[2] == s, state_node_tuple)
-                add_to_expression!(state_residue_costs[s], v_state[validate_tuple(val_dict, common_ts, tup, 2)], -1 * nodes[tup[1]].state.residual_value)
+                add_to_expression!(state_residue_costs[s, tup[3]], v_state[validate_tuple(val_dict, common_ts, tup, 2)], -1 * nodes[tup[1]].state.residual_value)
             end
         end
     end
 
     # Dummy variable costs
     model_contents["expression"]["dummy_costs"] = @expression(
-        model, dummy_costs[s = scenarios], AffExpr(0.0))
+        model, dummy_costs[s = scenarios, t = temporals.t], AffExpr(0.0))
     p_node = input_data.setup.node_dummy_variable_cost
     p_ramp = input_data.setup.ramp_dummy_variable_cost
 
@@ -2044,8 +2047,8 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
             is_balance_node(n) || continue
             for s in scenarios, t in temporals.t
                 vtup = validate_tuple(val_dict, common_ts, (n.name, s, t), 2)
-                add_to_expression!(dummy_costs[s], vq_state_up[vtup], p_node)
-                add_to_expression!(dummy_costs[s], vq_state_dw[vtup], p_node)
+                add_to_expression!(dummy_costs[s, t], vq_state_up[vtup], p_node)
+                add_to_expression!(dummy_costs[s, t], vq_state_dw[vtup], p_node)
             end
         end
     end
@@ -2054,12 +2057,13 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
         vq_ramp_dw = model[:vq_ramp_dw]
         for tup in process_topology_ramp_times_tuples(input_data)
             s = tup[4]
+            t = tup[5]
             add_to_expression!(
-                dummy_costs[s],
+                dummy_costs[s, t],
                 vq_ramp_up[validate_tuple(val_dict, common_ts, tup, 4)],
                 p_ramp)
             add_to_expression!(
-                dummy_costs[s],
+                dummy_costs[s, t],
                 vq_ramp_dw[validate_tuple(val_dict, common_ts, tup, 4)],
                 p_ramp)
         end
@@ -2083,12 +2087,12 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
 
     # Total model costs
     model_contents["expression"]["total_costs"] = @expression(
-        model, total_costs[s = scenarios],
-        commodity_costs[s] + market_costs[s] + vom_costs[s]
-        + reserve_costs[s] + start_costs[s] + state_residue_costs[s]
-        + reserve_fees[s] + setpoint_deviation_costs[s]
-        + dummy_costs[s] + flex_inflow_deviation_costs[s]
-        + reserve_activation_costs[s])
+        model, total_costs[s = scenarios, t = temporals.t],
+        commodity_costs[s, t] + market_costs[s, t] + vom_costs[s, t]
+        + reserve_costs[s, t] + start_costs[s, t] + state_residue_costs[s, t]
+        + reserve_fees[s, t] + setpoint_deviation_costs[s, t]
+        + dummy_costs[s, t] + flex_inflow_deviation_costs[s]
+        + reserve_activation_costs[s, t])
 end
 
 
@@ -2109,7 +2113,7 @@ function setup_cvar_element(model_contents::OrderedDict, input_data::Predicer.In
         v_cvar_z = model[:v_cvar_z]
         alfa = input_data.risk["alfa"]
         @constraint(model, cvar_constraint[s = scenarios(input_data)],
-                    v_cvar_z[s] >= total_costs[s] - v_var)
+                    v_cvar_z[s] >= sum(total_costs[s, :]) - v_var)
         model_contents["expression"]["cvar"] = @expression(
             model, v_var + sum(
                 (p/(1-alfa)) * v_cvar_z[s] for (s, p) in input_data.scenarios))
@@ -2126,7 +2130,7 @@ function setup_objective_function(model_contents::OrderedDict, input_data::Predi
     model = model_contents["model"]
     total_costs = model_contents["expression"]["total_costs"]
     @expression(model, exp_cost,
-                sum(p * total_costs[s] for (s, p) in input_data.scenarios))
+                sum(p * sum(total_costs[s, :]) for (s, p) in input_data.scenarios))
     if input_data.setup.contains_risk
         beta = input_data.risk["beta"]
         cvar = model_contents["expression"]["cvar"]
