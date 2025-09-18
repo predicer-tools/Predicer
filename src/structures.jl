@@ -908,8 +908,10 @@ end
         down_price::TimeSeriesData
         reserve_activation_price::TimeSeriesData
         fixed::Vector{Tuple{DateTime, Number}}
+        lower_limit::TimeSeriesData
+        upper_limit::TimeSeriesData
         function Market(name, type, node, pgroup, direction, reserve_type, is_bid, is_limited, min_bid, max_bid, fee)
-            return new(name, type, node, pgroup, direction, Dict(), reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
+            return new(name, type, node, pgroup, direction, Dict(), reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [], TimeSeriesData(), TimeSeriesData())
         end
     end
 
@@ -951,8 +953,11 @@ struct Market
     down_price::TimeSeriesData
     reserve_activation_price::TimeSeriesData
     fixed::Vector{Tuple{DateTime, Number}}
+    lower_limit::TimeSeriesData
+    upper_limit::TimeSeriesData
     function Market(name, m_type, node, pgroup, direction, reserve_type, is_bid, is_limited, min_bid, max_bid, fee)
-        return new(name, m_type, node, pgroup, direction, TimeSeriesData(), reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [])
+        return new(name, m_type, node, pgroup, direction, TimeSeriesData(), reserve_type, is_bid,  is_limited, min_bid, max_bid, fee, 
+            TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), TimeSeriesData(), [], TimeSeriesData(), TimeSeriesData())
     end
 end
 
