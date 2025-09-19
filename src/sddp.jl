@@ -290,7 +290,7 @@ function sddp_policy_graph(
         else
             create_variables(mc, inp)
             create_constraints(mc, inp)
-            @stageobjective(sp, mc["expression"]["total_costs"][scen])
+            @stageobjective(sp, sum(mc["expression"]["total_costs"][scen, :]))
         end
     end
 end
