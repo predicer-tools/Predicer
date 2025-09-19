@@ -893,6 +893,7 @@ function flex_inflow_tuples(input_data::InputData)
     NTuple{4, String}[(id, n, s, t)
     for n in collect(keys(input_data.nodes))
     for (id, n, s, t_start, t_end) in input_data.nodes[n].flex_inflow
+    if haskey(input_data.scenarios, s)
     for t in filter(tt -> DateTime(t_start) <= DateTime(tt) && DateTime(tt) <= DateTime(t_end), input_data.temporals.t)]
 end
 

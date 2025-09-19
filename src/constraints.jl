@@ -1616,11 +1616,11 @@ function setup_flex_inflow(model_contents::OrderedDict, input_data::Predicer.Inp
         flex_inflow_val[fi] = AffExpr(0.0)
     end
     
-    for fib in Predicer.flex_inflow_blocks(input_data)
+    for fib in filter(x -> haskey(input_data.scenarios, x[3]), Predicer.flex_inflow_blocks(input_data))
         add_to_expression!(flex_inflow_vars[fib[1]], vq_flex_inflow[fib])
     end
 
-    for fit in Predicer.flex_inflow_tuples(input_data::InputData)
+    for fit in Predicer.flex_inflow_tuples(input_data)
         flex_inflow_val[fit[1]] = filter(x -> x[1] == fit[1], input_data.nodes[fit[2]].flex_inflow)[1][6]
         add_to_expression!(flex_inflow_vars[fit[1]], v_flex_inflow[validate_tuple(model_contents, fit, 3)])
     end
@@ -2078,7 +2078,7 @@ function setup_cost_calculations(model_contents::OrderedDict, input_data::Predic
     model_contents["expression"]["flex_inflow_deviation_costs"] = @expression(
         model, flex_inflow_deviation_costs[s = scenarios], AffExpr(0.0))
     if !isempty(vq_flex_inflow)
-        fibs = Predicer.flex_inflow_blocks(input_data)
+        fibs = filter(x -> haskey(input_data.scenarios, x[3]), Predicer.flex_inflow_blocks(input_data))
         for fib in fibs
             penalty_cost = filter(x -> x[1] == fib[1], input_data.nodes[fib[2]].flex_inflow)[1][7]
             if filter(x -> x[1] == fib[1], input_data.nodes[fib[2]].flex_inflow)[1][6] <= 0 # flex_inflow is negative, dummy is positive?
