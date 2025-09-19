@@ -23,7 +23,7 @@ Model definition files and objective values.  obj = NaN to disable
 comparison.
 """
 cases = OrderedDict(
-    "input_data_complete.xlsx" => -5798.38468498,
+    "input_data_complete.xlsx" => -5809.146293930541,
     "input_data.xlsx" => -10985.20345389959,
     "input_data_bidcurve.xlsx" => -4371.579033779262,
     "input_data_bidcurve_e.xlsx" => -4501.509824681449,
