@@ -526,18 +526,20 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
         end
         # Add market limits
         for s in keys(scens)
-            if haskey(timeseries_data["scenarios"][s]["market_limits"], "up")
-                if mm.market in names(timeseries_data["scenarios"][s]["market_limits"]["up"])
-                    up_ts = timeseries_data["scenarios"][s]["market_limits"]["up"].t
-                    up_data = timeseries_data["scenarios"][s]["market_limits"]["up"][!, mm.market]
-                    push!(markets[mm.market].upper_limit, Predicer.TimeSeries(s, up_ts, up_data))
+            if haskey(timeseries_data["scenarios"][s], "market_limits")
+                if haskey(timeseries_data["scenarios"][s]["market_limits"], "up")
+                    if mm.market in names(timeseries_data["scenarios"][s]["market_limits"]["up"])
+                        up_ts = timeseries_data["scenarios"][s]["market_limits"]["up"].t
+                        up_data = timeseries_data["scenarios"][s]["market_limits"]["up"][!, mm.market]
+                        push!(markets[mm.market].upper_limit, Predicer.TimeSeries(s, up_ts, up_data))
+                    end
                 end
-            end
-            if haskey(timeseries_data["scenarios"][s]["market_limits"], "down")
-                if mm.market in names(timeseries_data["scenarios"][s]["market_limits"]["down"])
-                    down_ts = timeseries_data["scenarios"][s]["market_limits"]["down"].t
-                    down_data = timeseries_data["scenarios"][s]["market_limits"]["down"][!, mm.market]
-                    push!(markets[mm.market].lower_limit, Predicer.TimeSeries(s, down_ts, down_data))
+                if haskey(timeseries_data["scenarios"][s]["market_limits"], "down")
+                    if mm.market in names(timeseries_data["scenarios"][s]["market_limits"]["down"])
+                        down_ts = timeseries_data["scenarios"][s]["market_limits"]["down"].t
+                        down_data = timeseries_data["scenarios"][s]["market_limits"]["down"][!, mm.market]
+                        push!(markets[mm.market].lower_limit, Predicer.TimeSeries(s, down_ts, down_data))
+                    end
                 end
             end
         end
