@@ -158,7 +158,7 @@ struct TimeSeries
 end
 
 TimeSeries(scenario, keys, values) = TimeSeries(
-    scenario, SortedDict(keys .=> values))
+    scenario, (isempty(keys) && isempty(values)) ? SortedDict() : SortedDict(keys .=> values))
 TimeSeries(scenario="") = TimeSeries(scenario, [], [])
 
 """
