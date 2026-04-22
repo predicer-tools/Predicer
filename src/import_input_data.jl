@@ -209,10 +209,17 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
             else 
                 nds = node_diffs[1]
             end
-            scen = col[3]
             data = system_data["node_diffusion"][!, n]
-            ts = Predicer.TimeSeries(scen, timesteps, data)
-            push!(nds.coefficient, ts)
+            scen = col[3]
+            if scen == "ALL" || scen == "all" || scen == "All"
+                scen = collect(keys(scens))
+            else
+                scen = [scen]
+            end
+            for s in scen
+                ts = Predicer.TimeSeries(s, timesteps, data)
+                push!(nds.coefficient, ts)
+            end
             if isempty(node_diffs)
                 push!(node_diffusion, nds)
             end
@@ -604,31 +611,38 @@ function compile_input_data(system_data::OrderedDict, timeseries_data::OrderedDi
         if n != "t"
             col = map(substr -> strip(substr), split(n,","))
             constr = col[1]
-            scen = col[end]
             data = system_data["gen_constraint"][!,n]
-            ts = Predicer.TimeSeries(scen, timesteps, data)
-            if length(col) == 4 # This means it is a flow variable
-                tup = ("flow", col[1],col[2],col[3])
-                if tup in keys(con_vecs)
-                    push!(con_vecs[tup],ts)
-                else
-                    con_vecs[tup] = []
-                    push!(con_vecs[tup],ts)
-                end
-            elseif length(col) == 3 # This means it is either an online variable or a state variable
-                if col[2] in collect(keys(nodes))
-                    tup = ("state", col[1],col[2])
-                elseif col[2] in collect(keys(processes))
-                    tup = ("online", col[1],col[2])
-                end
-                if tup in keys(con_vecs)
-                    push!(con_vecs[tup],ts)
-                else
-                    con_vecs[tup] = []
-                    push!(con_vecs[tup],ts)
-                end
+            scen = col[end]
+            if scen == "ALL" || scen == "all" || scen == "All"
+                scen = collect(keys(scens))
             else
-                push!(gen_constraints[constr].constant,ts)
+                scen = [scen]
+            end
+            for s in scen
+                ts = Predicer.TimeSeries(s, timesteps, data)
+                if length(col) == 4 # This means it is a flow variable
+                    tup = ("flow", col[1],col[2],col[3])
+                    if tup in keys(con_vecs)
+                        push!(con_vecs[tup],ts)
+                    else
+                        con_vecs[tup] = []
+                        push!(con_vecs[tup],ts)
+                    end
+                elseif length(col) == 3 # This means it is either an online variable or a state variable
+                    if col[2] in collect(keys(nodes))
+                        tup = ("state", col[1],col[2])
+                    elseif col[2] in collect(keys(processes))
+                        tup = ("online", col[1],col[2])
+                    end
+                    if tup in keys(con_vecs)
+                        push!(con_vecs[tup],ts)
+                    else
+                        con_vecs[tup] = []
+                        push!(con_vecs[tup],ts)
+                    end
+                else
+                    push!(gen_constraints[constr].constant,ts)
+                end
             end
         end
     end
