@@ -3,6 +3,7 @@
 log/
 logs/
 results/*
+all_results_*.xlsx
 *.log
 *.pyc
 *.bak
